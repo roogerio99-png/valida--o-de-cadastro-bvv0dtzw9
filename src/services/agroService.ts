@@ -34,14 +34,22 @@ export async function executarSincronizacaoProdutos(params?: {
   if (!response.ok) {
     let msg = `Erro no servidor (HTTP ${response.status})`
     try {
-      const data = await response.json()
+      const clone = response.clone()
+      const data = await clone.json()
       if (data?.error || data?.message) {
         msg = data.error || data.message
       }
     } catch (_) {
       try {
         const text = await response.text()
-        if (text) msg = text.slice(0, 150)
+        if (text) {
+          try {
+            const parsed = JSON.parse(text)
+            msg = parsed?.error || parsed?.message || text.slice(0, 300)
+          } catch {
+            msg = text.slice(0, 300)
+          }
+        }
       } catch {
         /* intentionally ignored */
       }

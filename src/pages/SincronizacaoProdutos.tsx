@@ -253,7 +253,12 @@ export default function SincronizacaoProdutos() {
       clearInterval(timer)
       setProgressoEstimado(0)
       setEtapaAtual('')
-      const msg = err instanceof Error ? err.message : 'Falha na requisição de sincronização.'
+      const msg =
+        err instanceof Error
+          ? err.message
+          : typeof err === 'object' && err !== null && 'message' in err
+            ? String((err as { message: unknown }).message)
+            : 'Falha na requisição de sincronização.'
       toast({
         title: 'Falha na Sincronização',
         description: msg,
