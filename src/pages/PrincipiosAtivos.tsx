@@ -1,10 +1,20 @@
 import { useEffect, useState, useTransition } from 'react'
-import { FlaskConical, Search, ChevronRight, Loader2, X, Sliders, CheckCircle2 } from 'lucide-react'
-import { Card, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
+import {
+  FlaskConical,
+  Search,
+  ChevronRight,
+  Loader2,
+  X,
+  Sliders,
+  CheckCircle2,
+  Trash2,
+} from 'lucide-react'
+import { Card } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Badge } from '@/components/ui/badge'
 import { listarPrincipiosAtivos } from '@/services/agroService'
+import { ModalLimparBase } from '@/components/ModalLimparBase'
 import type { DicionarioPrincipioAtivo } from '@/types/agro'
 
 export default function PrincipiosAtivos() {
@@ -16,6 +26,9 @@ export default function PrincipiosAtivos() {
   // Drawer lateral de detalhes
   const [selectedItem, setSelectedItem] = useState<DicionarioPrincipioAtivo | null>(null)
   const [drawerOpen, setDrawerOpen] = useState(false)
+
+  // Modal Limpeza Total
+  const [modalLimparOpen, setModalLimparOpen] = useState(false)
 
   // Paginação
   const [page, setPage] = useState(1)
@@ -61,6 +74,19 @@ export default function PrincipiosAtivos() {
             Base toxicológica e regulatória de ingredientes ativos, faixas de concentração e
             classificação agronômica.
           </p>
+        </div>
+
+        <div className="flex items-center gap-2">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setModalLimparOpen(true)}
+            className="text-xs h-9 border-red-200 text-red-700 hover:bg-red-50 hover:text-red-800"
+            title="Apaga permanentemente todos os registros do Dicionário de Princípios Ativos"
+          >
+            <Trash2 className="w-3.5 h-3.5 mr-1.5 text-red-600" />
+            Limpar Base
+          </Button>
         </div>
       </div>
 
@@ -181,6 +207,21 @@ export default function PrincipiosAtivos() {
           </div>
         )}
       </Card>
+
+      {/* ------------------------------------------------------------------ */}
+      {/* MODAL DE LIMPEZA DO DICIONÁRIO DE PRINCÍPIOS ATIVOS */}
+      {/* ------------------------------------------------------------------ */}
+      <ModalLimparBase
+        open={modalLimparOpen}
+        onOpenChange={setModalLimparOpen}
+        alvo="dicionario_principios_ativos"
+        tituloAlvo="Dicionário de Princípios Ativos"
+        onSucesso={() => {
+          setSelectedItem(null)
+          setDrawerOpen(false)
+          carregarDados()
+        }}
+      />
 
       {/* ------------------------------------------------------------------ */}
       {/* DRAWER LATERAL DE DETALHES */}

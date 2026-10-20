@@ -42,6 +42,8 @@ import {
   listarHistoricoSincronizacao,
   obterHistoricoSincronizacaoPorId,
 } from '@/services/agroService'
+import { Trash2 } from 'lucide-react'
+import { ModalLimparBase } from '@/components/ModalLimparBase'
 import { PainelRelatorioIntegracao } from '@/components/PainelRelatorioIntegracao'
 import type {
   RespostaSincronizacao,
@@ -103,6 +105,9 @@ export default function SincronizacaoProdutos() {
   ])
   const [autoInclusao, setAutoInclusao] = useState<boolean>(true)
   const [limitePorFonte, setLimitePorFonte] = useState<number>(120)
+
+  // Modal Limpar Bases
+  const [modalLimparOpen, setModalLimparOpen] = useState(false)
 
   // Estados de execução
   const [sincronizando, setSincronizando] = useState<boolean>(false)
@@ -370,6 +375,17 @@ export default function SincronizacaoProdutos() {
         </div>
 
         <div className="flex items-center gap-3">
+          <Button
+            variant="outline"
+            onClick={() => setModalLimparOpen(true)}
+            disabled={sincronizando}
+            className="border-red-200 text-red-700 hover:bg-red-50 hover:text-red-800 flex items-center gap-2 h-10 px-4 text-xs font-semibold"
+            title="Apaga permanentemente os registros da Base Mestre e do Dicionário de Princípios Ativos para reiniciar a sincronização do zero"
+          >
+            <Trash2 className="w-4 h-4 text-red-600" />
+            Limpar Bases
+          </Button>
+
           <Button
             onClick={handleSincronizar}
             disabled={sincronizando}
@@ -645,6 +661,21 @@ export default function SincronizacaoProdutos() {
           </div>
         </div>
       )}
+
+      {/* ------------------------------------------------------------------ */}
+      {/* MODAL DE LIMPEZA GERAL DE BASES */}
+      {/* ------------------------------------------------------------------ */}
+      <ModalLimparBase
+        open={modalLimparOpen}
+        onOpenChange={setModalLimparOpen}
+        alvo="todas"
+        tituloAlvo="Bases de Produtos e Princípios Ativos"
+        onSucesso={() => {
+          setResultadoAtual(null)
+          setRelatorioAtivo(null)
+          carregarHistorico()
+        }}
+      />
 
       {/* ------------------------------------------------------------------ */}
       {/* HISTÓRICO DE SINCRONIZAÇÕES PERSISTIDO NO BANCO */}

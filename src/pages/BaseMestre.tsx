@@ -44,6 +44,7 @@ import {
   excluirProdutoBaseMestre,
   obterRelatorioDuplicidades,
 } from '@/services/agroService'
+import { ModalLimparBase } from '@/components/ModalLimparBase'
 import { useRealtime } from '@/hooks/use-realtime'
 import type {
   BaseMestreProduto,
@@ -74,6 +75,9 @@ export default function BaseMestre() {
   const [page, setPage] = useState(1)
   const [totalPages, setTotalPages] = useState(1)
   const [totalCount, setTotalCount] = useState(0)
+
+  // Modal Limpeza Total da Base
+  const [modalLimparOpen, setModalLimparOpen] = useState(false)
 
   // Painel de Duplicidades
   const [duplicidadesOpen, setDuplicidadesOpen] = useState(false)
@@ -434,6 +438,17 @@ export default function BaseMestre() {
             {selectedIds.length > 0
               ? `Exportar Selecionados (${selectedIds.length})`
               : 'Exportar CSV'}
+          </Button>
+
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setModalLimparOpen(true)}
+            className="text-xs h-9 border-red-200 text-red-700 hover:bg-red-50 hover:text-red-800"
+            title="Apaga permanentemente todos os registros da Base Mestre para recomeçar do zero"
+          >
+            <Trash2 className="w-3.5 h-3.5 mr-1.5 text-red-600" />
+            Limpar Base
           </Button>
         </div>
       </div>
@@ -850,6 +865,23 @@ export default function BaseMestre() {
           </div>
         )}
       </Card>
+
+      {/* ------------------------------------------------------------------ */}
+      {/* MODAL DE LIMPEZA DA BASE MESTRE */}
+      {/* ------------------------------------------------------------------ */}
+      <ModalLimparBase
+        open={modalLimparOpen}
+        onOpenChange={setModalLimparOpen}
+        alvo="base_mestre"
+        tituloAlvo="Base Mestre de Produtos"
+        onSucesso={() => {
+          setSelectedIds([])
+          carregarProdutos()
+          if (duplicidadesOpen) {
+            carregarDuplicidades()
+          }
+        }}
+      />
 
       {/* ------------------------------------------------------------------ */}
       {/* MODAL DE EDIÇÃO DE PRODUTO */}
