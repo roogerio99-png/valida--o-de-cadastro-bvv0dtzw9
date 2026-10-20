@@ -1,8 +1,8 @@
 /**
  * Endpoints do Consultor Tributário Agro (Skip Cloud Agent: consultor-tributario-agro)
  *
- * 1. POST /backend/v1/tributacao/chat-stream - Streaming de chat com SSE
- * 2. POST /backend/v1/tributacao/chat - Chat síncrono
+ * 1. POST /backend/v1/tributacao/chat-stream - Streaming de chat com SSE e enriquecimento fiscal
+ * 2. POST /backend/v1/tributacao/chat - Chat síncrono com enriquecimento fiscal
  * 3. GET  /backend/v1/tributacao/conversas - Lista de conversas anteriores do usuário
  * 4. GET  /backend/v1/tributacao/conversas/{conversationId}/mensagens - Mensagens de uma conversa
  *
@@ -46,10 +46,92 @@ routerAdd(
         title: convTitle,
       })
 
+      // Enriquecimento contextual inteligente:
+      // Se a mensagem contiver menção a NCM (ex: 2520.20.00 ou 8 dígitos) ou produto + consulta fiscal,
+      // pesquisar nas collections internas (parametrizacao_fiscal, regras_ncm_embalagem, etc.)
+      // e anexar fontes oficiais de consulta pública.
+      let enrichedMessage = message
+
+      const ncmMatch =
+        message.match(/\b\d{4}[.\s]?\d{2}[.\s]?\d{2}\b/) || message.match(/\b\d{8}\b/)
+      let foundNcm = null
+      if (ncmMatch) {
+        foundNcm = ncmMatch[0].replace(/\D/g, '')
+      }
+
+      // Detecção de produtos agrícolas comuns se NCM não estiver explícito
+      const isProductMention =
+        /gesso|calc[aá]rio|adubo|fertilizante|defensivo|glifosato|herbicida|fungicida|inseticida|semente|mudas|inoculante/i.test(
+          message,
+        )
+      const isTaxQuestion =
+        /al[ií]quota|benef[ií]cio|zero|redu[cç][aã]o|tributad|pis|cofins|ibs|cbs|imposto|isento|isen[cç][aã]o/i.test(
+          message,
+        )
+
+      if (foundNcm) {
+        let internalContext = ''
+        try {
+          // Busca em parametrizacao_fiscal
+          const paramRecs = $app.findRecordsByFilter(
+            'parametrizacao_fiscal',
+            `ncm ~ '${foundNcm.slice(0, 4)}'`,
+            '-created',
+            5,
+            0,
+          )
+          if (paramRecs && paramRecs.length > 0) {
+            internalContext += `\n[Base Interna - Parametrização Fiscal para NCM ${foundNcm} ou família]:\n`
+            for (let i = 0; i < paramRecs.length; i++) {
+              const r = paramRecs[i]
+              internalContext += `- NCM ${r.getString('ncm')}: PIS ${r.getFloat('aliquota_pis')}%, COFINS ${r.getFloat('aliquota_cofins')}%, IBS ${r.getFloat('aliquota_ibs')}%, CBS ${r.getFloat('aliquota_cbs')}%. Classificação: ${r.getString('classificacao')}. Regra: ${r.getString('tributacao')}\n`
+            }
+          }
+        } catch (_) {}
+
+        try {
+          // Busca em regras_ncm_embalagem
+          const regrasRecs = $app.findRecordsByFilter(
+            'regras_ncm_embalagem',
+            `ncm ~ '${foundNcm.slice(0, 4)}'`,
+            '-created',
+            3,
+            0,
+          )
+          if (regrasRecs && regrasRecs.length > 0) {
+            internalContext += `\n[Base Interna - Regras TIPI/Embalagem NCM ${foundNcm}]:\n`
+            for (let i = 0; i < regrasRecs.length; i++) {
+              const r = regrasRecs[i]
+              internalContext += `- NCM ${r.getString('ncm')}: Descrição "${r.getString('descricao')}". Regra Especial: "${r.getString('regra_especial')}"\n`
+            }
+          }
+        } catch (_) {}
+
+        const officialSourcesContext = `
+[FONTES OFICIAIS DE LEGISLAÇÃO E PORTAIS PÚBLICOS VINCULADOS AO NCM ${foundNcm}]:
+1. Presidência da República / Casa Civil - Lei nº 10.925/2004 (Alíquota zero de PIS/Pasep e COFINS na importação e venda de insumos agropecuários):
+   URL: https://www.planalto.gov.br/ccivil_03/_ato2004-2006/2004/lei/l10.925.htm
+2. Presidência da República / Casa Civil - Lei Complementar nº 224/2025 (Reoneração linear de 10% dos incentivos e alíquota residual):
+   URL: https://www.planalto.gov.br/ccivil_03/leis/lcp/lcp224.htm
+3. Presidência da República / Casa Civil - Lei Complementar nº 214/2025 (Reforma Tributária - Art. 138 e Anexo IX para insumos agropecuários no IBS/CBS):
+   URL: https://www.planalto.gov.br/ccivil_03/leis/lcp/lcp214.htm
+4. Secretaria Especial da Receita Federal do Brasil - Sistema Classif / Nomenclatura Comum do Mercosul (NCM e TIPI):
+   URL: https://portalunico.siscomex.gov.br/classif/
+5. Instrução Normativa RFB nº 2.305/2025 e Decreto nº 5.630/2005 (Regulamentação de PIS/COFINS Agropecuário):
+   URL: https://www.gov.br/receitafederal/pt-br
+`
+
+        enrichedMessage = `${message}\n\n[CONTEXTO DE DADOS ENRIQUECIDO PELO SISTEMA PARA NCM ${foundNcm}]:${internalContext}\n${officialSourcesContext}\n\nInstrução: utilize estes dados e fontes para fundamentar sua resposta com citação explícita dos dispositivos e links.`
+      } else if (isProductMention && isTaxQuestion) {
+        // Quando o usuário perguntou sobre o produto mas NÃO informou o NCM:
+        // Reforçar o direcionamento para o agente cumprir a Regra de Ouro (perguntar o NCM de volta)
+        enrichedMessage = `${message}\n\n[DIRETRIZ DO SISTEMA]: O usuário está perguntando sobre tributação/benefício fiscal de produto agropecuário mas não especificou a NCM exata. Lembre-se da REGRA DE OURO: não responda de forma genérica ou fechada; PERGUNTE DE VOLTA qual é o código NCM do produto (e se é nacional ou importado), explicando que o benefício na legislação brasileira (como Lei 10.925/2004 e LC 214/2025) depende estritamente do NCM e destinação. Dê sugestões de NCMs habituais para este produto.`
+      }
+
       const iter = $ai.agent(agentSlug).chat({
         user_id: userId,
         conversation_id: conv.id,
-        message: message,
+        message: enrichedMessage,
         stream: true,
       })
 
@@ -124,10 +206,82 @@ routerAdd(
 
       const convId = body.conversation_id ? String(body.conversation_id).trim() : null
 
+      // Enriquecimento contextual no modo síncrono
+      let enrichedMessage = message
+      const ncmMatch =
+        message.match(/\b\d{4}[.\s]?\d{2}[.\s]?\d{2}\b/) || message.match(/\b\d{8}\b/)
+      let foundNcm = null
+      if (ncmMatch) {
+        foundNcm = ncmMatch[0].replace(/\D/g, '')
+      }
+
+      const isProductMention =
+        /gesso|calc[aá]rio|adubo|fertilizante|defensivo|glifosato|herbicida|fungicida|inseticida|semente|mudas|inoculante/i.test(
+          message,
+        )
+      const isTaxQuestion =
+        /al[ií]quota|benef[ií]cio|zero|redu[cç][aã]o|tributad|pis|cofins|ibs|cbs|imposto|isento|isen[cç][aã]o/i.test(
+          message,
+        )
+
+      if (foundNcm) {
+        let internalContext = ''
+        try {
+          const paramRecs = $app.findRecordsByFilter(
+            'parametrizacao_fiscal',
+            `ncm ~ '${foundNcm.slice(0, 4)}'`,
+            '-created',
+            5,
+            0,
+          )
+          if (paramRecs && paramRecs.length > 0) {
+            internalContext += `\n[Base Interna - Parametrização Fiscal para NCM ${foundNcm}]:\n`
+            for (let i = 0; i < paramRecs.length; i++) {
+              const r = paramRecs[i]
+              internalContext += `- NCM ${r.getString('ncm')}: PIS ${r.getFloat('aliquota_pis')}%, COFINS ${r.getFloat('aliquota_cofins')}%, IBS ${r.getFloat('aliquota_ibs')}%, CBS ${r.getFloat('aliquota_cbs')}%. Classificação: ${r.getString('classificacao')}. Regra: ${r.getString('tributacao')}\n`
+            }
+          }
+        } catch (_) {}
+
+        try {
+          const regrasRecs = $app.findRecordsByFilter(
+            'regras_ncm_embalagem',
+            `ncm ~ '${foundNcm.slice(0, 4)}'`,
+            '-created',
+            3,
+            0,
+          )
+          if (regrasRecs && regrasRecs.length > 0) {
+            internalContext += `\n[Base Interna - Regras TIPI/Embalagem NCM ${foundNcm}]:\n`
+            for (let i = 0; i < regrasRecs.length; i++) {
+              const r = regrasRecs[i]
+              internalContext += `- NCM ${r.getString('ncm')}: Descrição "${r.getString('descricao')}". Regra Especial: "${r.getString('regra_especial')}"\n`
+            }
+          }
+        } catch (_) {}
+
+        const officialSourcesContext = `
+[FONTES OFICIAIS DE LEGISLAÇÃO E PORTAIS PÚBLICOS VINCULADOS AO NCM ${foundNcm}]:
+1. Presidência da República / Casa Civil - Lei nº 10.925/2004 (Alíquota zero de PIS/Pasep e COFINS na importação e venda de insumos agropecuários):
+   URL: https://www.planalto.gov.br/ccivil_03/_ato2004-2006/2004/lei/l10.925.htm
+2. Presidência da República / Casa Civil - Lei Complementar nº 224/2025 (Reoneração linear de 10% dos incentivos e alíquota residual):
+   URL: https://www.planalto.gov.br/ccivil_03/leis/lcp/lcp224.htm
+3. Presidência da República / Casa Civil - Lei Complementar nº 214/2025 (Reforma Tributária - Art. 138 e Anexo IX para insumos agropecuários no IBS/CBS):
+   URL: https://www.planalto.gov.br/ccivil_03/leis/lcp/lcp214.htm
+4. Secretaria Especial da Receita Federal do Brasil - Sistema Classif / Nomenclatura Comum do Mercosul (NCM e TIPI):
+   URL: https://portalunico.siscomex.gov.br/classif/
+5. Instrução Normativa RFB nº 2.305/2025 e Decreto nº 5.630/2005 (Regulamentação de PIS/COFINS Agropecuário):
+   URL: https://www.gov.br/receitafederal/pt-br
+`
+        enrichedMessage = `${message}\n\n[CONTEXTO DE DADOS ENRIQUECIDO PELO SISTEMA PARA NCM ${foundNcm}]:${internalContext}\n${officialSourcesContext}\n\nInstrução: utilize estes dados e fontes para fundamentar sua resposta com citação explícita dos dispositivos e links.`
+      } else if (isProductMention && isTaxQuestion) {
+        enrichedMessage = `${message}\n\n[DIRETRIZ DO SISTEMA]: O usuário está perguntando sobre tributação/benefício fiscal de produto agropecuário mas não especificou a NCM exata. Lembre-se da REGRA DE OURO: não responda de forma genérica ou fechada; PERGUNTE DE VOLTA qual é o código NCM do produto (e se é nacional ou importado), explicando que o benefício na legislação brasileira (como Lei 10.925/2004 e LC 214/2025) depende estritamente do NCM e destinação. Dê sugestões de NCMs habituais para este produto.`
+      }
+
       const result = $ai.agent(agentSlug).chat({
         user_id: userId,
         conversation_id: convId || null,
-        message: message,
+        message: enrichedMessage,
       })
 
       return e.json(200, {

@@ -36,6 +36,11 @@ import { type DisplayMessage, type AgentCitation } from '@/lib/skipAi'
 
 const SUGGESTED_QUESTIONS = [
   {
+    title: 'Gesso Agrícola (Benefício & NCM)',
+    question: 'O produto gesso agrícola tem benefício de alíquota zero ou é tributado?',
+    tag: 'Consulta de Produto',
+  },
+  {
     title: 'Importação de Defensivos em 2026',
     question: 'Qual a alíquota de PIS/COFINS na importação de defensivos agrícolas em 2026?',
     tag: 'Importação',
@@ -668,7 +673,7 @@ export default function Tributacao() {
                 value={inputMessage}
                 onChange={(e) => setInputMessage(e.target.value)}
                 onKeyDown={handleKeyDown}
-                placeholder="Pergunte sobre PIS/COFINS, alíquota zero, LC 224/2025, fretes, Súmulas CARF ou IBS/CBS..."
+                placeholder="Consulte um produto (ex: gesso agrícola), NCM (ex: 2520.20.90), alíquota zero, LC 224/2025 ou IBS/CBS..."
                 rows={1}
                 disabled={isLoading}
                 className="resize-none border-0 shadow-none bg-transparent text-xs sm:text-sm focus-visible:ring-0 min-h-[40px] max-h-[140px] py-2 px-2 text-[#1C2B1C] placeholder:text-[#5A6D5A]"
