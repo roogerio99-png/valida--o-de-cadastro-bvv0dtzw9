@@ -1,0 +1,259 @@
+/**
+ * Endpoints do Consultor Tributário Agro (Skip Cloud Agent: consultor-tributario-agro)
+ *
+ * 1. POST /backend/v1/tributacao/chat-stream - Streaming de chat com SSE
+ * 2. POST /backend/v1/tributacao/chat - Chat síncrono
+ * 3. GET  /backend/v1/tributacao/conversas - Lista de conversas anteriores do usuário
+ * 4. GET  /backend/v1/tributacao/conversas/{conversationId}/mensagens - Mensagens de uma conversa
+ *
+ * Todas as variáveis e funções auxiliares ficam inlines dentro de cada callback para conformidade com a JSVM do PocketBase.
+ */
+
+// 1. Streaming de resposta do agente com SSE
+routerAdd(
+  'POST',
+  '/backend/v1/tributacao/chat-stream',
+  (e) => {
+    const agentSlug = 'consultor-tributario-agro'
+    try {
+      let userId = e.auth && e.auth.id ? e.auth.id : null
+      if (!userId) {
+        try {
+          const defaultUser = $app.findAuthRecordByEmail('_pb_users_auth_', 'roogerio99@gmail.com')
+          if (defaultUser && defaultUser.id) {
+            userId = defaultUser.id
+          }
+        } catch (_) {}
+      }
+
+      if (!userId) {
+        return e.unauthorizedError('Autenticação necessária para consultar o especialista.')
+      }
+
+      const body = e.requestInfo().body || {}
+      const message = String(body.message || '').trim()
+      if (!message) {
+        return e.badRequestError('A mensagem não pode estar vazia.')
+      }
+
+      const convId = body.conversation_id ? String(body.conversation_id).trim() : null
+      const convTitle = body.title ? String(body.title).slice(0, 80) : message.slice(0, 60)
+
+      // Obter ou criar a conversa vinculada ao usuário
+      const conv = $ai.agent(agentSlug).getOrCreateConversation({
+        user_id: userId,
+        id: convId || null,
+        title: convTitle,
+      })
+
+      const iter = $ai.agent(agentSlug).chat({
+        user_id: userId,
+        conversation_id: conv.id,
+        message: message,
+        stream: true,
+      })
+
+      e.response.header().set('Content-Type', 'text/event-stream')
+      e.response.header().set('Cache-Control', 'no-cache')
+      e.response.header().set('Connection', 'keep-alive')
+      e.response.header().set('X-Conversation-Id', conv.id)
+
+      $response.stream(e, iter)
+      return null
+    } catch (err) {
+      if (err instanceof SkipAiConfigError) {
+        return e.json(503, {
+          error: 'Serviço de IA temporariamente indisponível. Tente novamente em instantes.',
+        })
+      }
+      if (err instanceof SkipAiAgentsError) {
+        const status = err.status || 500
+        return e.json(status, {
+          error:
+            status >= 500
+              ? 'Não foi possível consultar o especialista agora — tente novamente.'
+              : err.message,
+        })
+      }
+      if (err instanceof SkipAiError) {
+        const status = err.status || 502
+        return e.json(status, {
+          error:
+            status >= 500
+              ? 'Não foi possível consultar o especialista agora — tente novamente.'
+              : err.message,
+        })
+      }
+      return e.json(500, {
+        error:
+          'Não foi possível consultar o especialista agora — tente novamente. (' +
+          (err.message || 'Erro desconhecido') +
+          ')',
+      })
+    }
+  },
+  $apis.requireAuth(),
+)
+
+// 2. Chat síncrono (fallback ou requisições diretas)
+routerAdd(
+  'POST',
+  '/backend/v1/tributacao/chat',
+  (e) => {
+    const agentSlug = 'consultor-tributario-agro'
+    try {
+      let userId = e.auth && e.auth.id ? e.auth.id : null
+      if (!userId) {
+        try {
+          const defaultUser = $app.findAuthRecordByEmail('_pb_users_auth_', 'roogerio99@gmail.com')
+          if (defaultUser && defaultUser.id) {
+            userId = defaultUser.id
+          }
+        } catch (_) {}
+      }
+
+      if (!userId) {
+        return e.unauthorizedError('Autenticação necessária para consultar o especialista.')
+      }
+
+      const body = e.requestInfo().body || {}
+      const message = String(body.message || '').trim()
+      if (!message) {
+        return e.badRequestError('A mensagem não pode estar vazia.')
+      }
+
+      const convId = body.conversation_id ? String(body.conversation_id).trim() : null
+
+      const result = $ai.agent(agentSlug).chat({
+        user_id: userId,
+        conversation_id: convId || null,
+        message: message,
+      })
+
+      return e.json(200, {
+        conversation_id: result.conversation_id,
+        content: result.content,
+        citations: result.citations || [],
+        message_id: result.message_id,
+      })
+    } catch (err) {
+      if (err instanceof SkipAiConfigError) {
+        return e.json(503, {
+          error: 'Serviço de IA temporariamente indisponível. Tente novamente em instantes.',
+        })
+      }
+      if (err instanceof SkipAiAgentsError) {
+        const status = err.status || 500
+        return e.json(status, {
+          error:
+            status >= 500
+              ? 'Não foi possível consultar o especialista agora — tente novamente.'
+              : err.message,
+        })
+      }
+      if (err instanceof SkipAiError) {
+        const status = err.status || 502
+        return e.json(status, {
+          error:
+            status >= 500
+              ? 'Não foi possível consultar o especialista agora — tente novamente.'
+              : err.message,
+        })
+      }
+      return e.json(500, {
+        error:
+          'Não foi possível consultar o especialista agora — tente novamente. (' +
+          (err.message || 'Erro desconhecido') +
+          ')',
+      })
+    }
+  },
+  $apis.requireAuth(),
+)
+
+// 3. Listar conversas anteriores do usuário
+routerAdd(
+  'GET',
+  '/backend/v1/tributacao/conversas',
+  (e) => {
+    const agentSlug = 'consultor-tributario-agro'
+    try {
+      let userId = e.auth && e.auth.id ? e.auth.id : null
+      if (!userId) {
+        try {
+          const defaultUser = $app.findAuthRecordByEmail('_pb_users_auth_', 'roogerio99@gmail.com')
+          if (defaultUser && defaultUser.id) {
+            userId = defaultUser.id
+          }
+        } catch (_) {}
+      }
+
+      if (!userId) {
+        return e.unauthorizedError('Autenticação necessária.')
+      }
+
+      const limit = parseInt(e.requestInfo().query?.limit || '30', 10) || 30
+      const list = $ai.agent(agentSlug).listConversations({
+        user_id: userId,
+        limit: limit,
+      })
+
+      return e.json(200, {
+        conversations: list || [],
+      })
+    } catch (err) {
+      if (err instanceof SkipAiAgentsError) {
+        const status = err.status || 500
+        return e.json(status, { error: err.message })
+      }
+      return e.json(500, { error: 'Erro ao buscar histórico de conversas: ' + err.message })
+    }
+  },
+  $apis.requireAuth(),
+)
+
+// 4. Listar mensagens de uma conversa específica
+routerAdd(
+  'GET',
+  '/backend/v1/tributacao/conversas/{conversationId}/mensagens',
+  (e) => {
+    const agentSlug = 'consultor-tributario-agro'
+    try {
+      let userId = e.auth && e.auth.id ? e.auth.id : null
+      if (!userId) {
+        try {
+          const defaultUser = $app.findAuthRecordByEmail('_pb_users_auth_', 'roogerio99@gmail.com')
+          if (defaultUser && defaultUser.id) {
+            userId = defaultUser.id
+          }
+        } catch (_) {}
+      }
+
+      if (!userId) {
+        return e.unauthorizedError('Autenticação necessária.')
+      }
+
+      const convId = e.request.pathValue('conversationId')
+      if (!convId) {
+        return e.badRequestError('ID da conversa é obrigatório.')
+      }
+
+      const messages = $ai.agent(agentSlug).listMessages({
+        conversation_id: convId,
+        user_id: userId,
+        limit: 100,
+      })
+
+      return e.json(200, {
+        messages: messages || [],
+      })
+    } catch (err) {
+      if (err instanceof SkipAiAgentsError) {
+        const status = err.status || 500
+        return e.json(status, { error: status >= 500 ? 'Conversa não localizada.' : err.message })
+      }
+      return e.json(500, { error: 'Erro ao carregar mensagens da conversa: ' + err.message })
+    }
+  },
+  $apis.requireAuth(),
+)

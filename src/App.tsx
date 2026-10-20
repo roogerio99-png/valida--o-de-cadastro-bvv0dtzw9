@@ -20,6 +20,7 @@ import PrincipiosAtivos from '@/pages/PrincipiosAtivos'
 import BaseMestre from '@/pages/BaseMestre'
 import Travas from '@/pages/Travas'
 import Parametrizacao from '@/pages/Parametrizacao'
+import Tributacao from '@/pages/Tributacao'
 import Importar from '@/pages/Importar'
 import Configuracoes from '@/pages/Configuracoes'
 import NotFound from '@/pages/NotFound'
@@ -52,6 +53,7 @@ const App = () => (
             <Route path="/base-mestre" element={<BaseMestre />} />
             <Route path="/travas" element={<Travas />} />
             <Route path="/parametrizacao" element={<Parametrizacao />} />
+            <Route path="/tributacao" element={<Tributacao />} />
             <Route path="/importar" element={<Importar />} />
             <Route path="/configuracoes" element={<Configuracoes />} />
           </Route>

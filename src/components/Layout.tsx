@@ -8,6 +8,7 @@ import {
   Database,
   ShieldAlert,
   Percent,
+  Scale,
   UploadCloud,
   LogOut,
   Menu,
@@ -40,6 +41,7 @@ const navItems = [
   { path: '/base-mestre', label: 'Base Mestre', icon: Database },
   { path: '/travas', label: 'Travas de Auditoria', icon: ShieldAlert },
   { path: '/parametrizacao', label: 'Parametrização Fiscal', icon: Percent },
+  { path: '/tributacao', label: 'Tributação Agro', icon: Scale },
   { path: '/importar', label: 'Importar Planilhas', icon: UploadCloud },
 ]
 
