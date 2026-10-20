@@ -257,18 +257,83 @@ routerAdd('POST', '/backend/v1/validar-produto', (e) => {
         tipoProduto = 'Produto Formulado Comercial'
         macroGrupo = 'Defensivos'
         const subL = `${inputSub} ${paUpper} ${nomeUpper}`
+
+        // Reconhecimento químico determinístico das principais moléculas de fungicidas
+        const isFungicidaMolecula =
+          paUpper.includes('CIPROCONAZOL') ||
+          paUpper.includes('PICOXISTROBINA') ||
+          paUpper.includes('TEBUCONAZOL') ||
+          paUpper.includes('AZOXISTROBINA') ||
+          paUpper.includes('DIFENOCONAZOL') ||
+          paUpper.includes('EPOXICONAZOL') ||
+          paUpper.includes('PROTIOCONAZOL') ||
+          paUpper.includes('MANCOZEB') ||
+          paUpper.includes('CLOROTALONIL') ||
+          paUpper.includes('TRIFLOXISTROBINA') ||
+          paUpper.includes('PIRACLOSTROBINA') ||
+          paUpper.includes('CARBENDAZIM') ||
+          paUpper.includes('BOSCALIDA') ||
+          paUpper.includes('FLUXAPIROXADE') ||
+          paUpper.includes('FOLPET') ||
+          paUpper.includes('CAPTANA') ||
+          paUpper.includes('CUPRICO') ||
+          paUpper.includes('COBRE') ||
+          nomeUpper.includes('FOLICRON') ||
+          nomeUpper.includes('PRIORI') ||
+          nomeUpper.includes('SPHERE') ||
+          nomeUpper.includes('NATIVO') ||
+          nomeUpper.includes('ELATUS') ||
+          nomeUpper.includes('OPERA') ||
+          nomeUpper.includes('FOX')
+
+        // Reconhecimento químico determinístico de inseticidas
+        const isInseticidaMolecula =
+          paUpper.includes('TIAMETOXAM') ||
+          paUpper.includes('IMIDACLOPRID') ||
+          paUpper.includes('CLORANTRANILIPROLE') ||
+          paUpper.includes('ACEFATO') ||
+          paUpper.includes('CIPERMETRINA') ||
+          paUpper.includes('BIFENTRINA') ||
+          paUpper.includes('FIPRONIL') ||
+          paUpper.includes('LAMBDA-CIALOTRINA') ||
+          paUpper.includes('LUFENURON') ||
+          paUpper.includes('ESPINOSADE') ||
+          paUpper.includes('THURINGIENSIS')
+
+        // Reconhecimento químico determinístico de herbicidas
+        const isHerbicidaMolecula =
+          paUpper.includes('GLIFOSATO') ||
+          paUpper.includes('GLYPHOSATE') ||
+          paUpper.includes('2,4-D') ||
+          paUpper.includes('2-4 D') ||
+          paUpper.includes('ATRAZINA') ||
+          paUpper.includes('DIURON') ||
+          paUpper.includes('CLETODIM') ||
+          paUpper.includes('HALOXIFOPE') ||
+          paUpper.includes('MESOTRIONA') ||
+          paUpper.includes('NICOSULFURON') ||
+          paUpper.includes('PARAQUAT') ||
+          paUpper.includes('DICAMBA') ||
+          paUpper.includes('S-METOLACLORO')
+
         if (subL.includes('INSETICIDA') && subL.includes('ACARICIDA')) {
           subGrupo = 'Inseticida / Acaricida'
-        } else if (subL.includes('INSETICIDA')) {
-          subGrupo = 'Inseticida'
-        } else if (subL.includes('FUNGICIDA')) {
+        } else if (subL.includes('FUNGICIDA') || isFungicidaMolecula) {
           subGrupo = 'Fungicida'
+        } else if (subL.includes('INSETICIDA') || isInseticidaMolecula) {
+          subGrupo = 'Inseticida'
         } else if (subL.includes('NEMATICIDA')) {
           subGrupo = 'Nematicida'
-        } else if (subL.includes('REGULADOR')) {
+        } else if (
+          subL.includes('REGULADOR') ||
+          paUpper.includes('ETEFOM') ||
+          paUpper.includes('PACLOBUTRAZOL')
+        ) {
           subGrupo = 'Regulador de Crescimento'
         } else if (subL.includes('ACARICIDA')) {
           subGrupo = 'Acaricida'
+        } else if (subL.includes('HERBICIDA') || isHerbicidaMolecula) {
+          subGrupo = 'Herbicida'
         } else {
           subGrupo = 'Herbicida'
         }
@@ -407,19 +472,8 @@ routerAdd('POST', '/backend/v1/validar-produto', (e) => {
           'Posição 38.08 TIPI: Embalagem comercial agrícola usa subitens .2x ou .9x, vedada subposição domissanitária (.1x)'
       }
 
-      if (input.ncm || input.ncm_padrao) {
-        const rawDigits = String(input.ncm || input.ncm_padrao).replace(/\D/g, '')
-        if (rawDigits.length === 8) {
-          const formatado = fallbackFormatarNcmMascara(rawDigits)
-          if (!pertenceNotaSubpos2 && tipoProduto !== 'Fertilizante Mineral / Organomineral') {
-            ncmPadrao = formatado
-            ncmFaixa1 = formatado
-            ncmFaixa2 = formatado
-            ncmFaixa3 = formatado
-            ncmFaixa4 = formatado
-          }
-        }
-      }
+      // NOTA FISCAL CRÍTICA: O input.ncm informado pelo usuário NUNCA deve sobrescrever
+      // a determinação canônica do motor químico-aduaneiro.
 
       ncmPadrao = fallbackFormatarNcmMascara(ncmPadrao)
       ncmFaixa1 = fallbackFormatarNcmMascara(ncmFaixa1)
@@ -818,6 +872,22 @@ Consulte a base pública oficial do AGROFIT e a BULA oficial registrada no MAPA 
         ? produtoBaseMestreEncontrado.getString('embalagem')
         : 'Bombona 20 L')
 
+    // Determinar classe de uso com prioridade: bula > dicionário de PA > base mestre (se coerente) > dedução
+    let classeUsoFinal = ''
+    if (
+      bulaExtraida?.classe_uso &&
+      !bulaExtraida.classe_uso.toLowerCase().includes('defensivo fitossanit')
+    ) {
+      classeUsoFinal = bulaExtraida.classe_uso
+    } else if (paDicionarioEncontrado) {
+      classeUsoFinal =
+        paDicionarioEncontrado.getString('macro_grupo_subgrupo_padrao') ||
+        paDicionarioEncontrado.getString('classe') ||
+        ''
+    } else if (produtoBaseMestreEncontrado) {
+      classeUsoFinal = produtoBaseMestreEncontrado.getString('sub_grupo') || ''
+    }
+
     const dadosMotorInput = {
       nome_completo: nomeComercial,
       ncm: ncmFormatado,
@@ -825,7 +895,7 @@ Consulte a base pública oficial do AGROFIT e a BULA oficial registrada no MAPA 
       embalagem: embalagemFinal,
       fabricante: fabricanteFinal,
       registro_mapa: registroMapaFinal,
-      sub_grupo: bulaExtraida?.classe_uso || '',
+      sub_grupo: classeUsoFinal,
       origem_base: 'VALIDADOR_CADASTRO_PORTAL',
     }
 
@@ -900,6 +970,20 @@ Consulte a base pública oficial do AGROFIT e a BULA oficial registrada no MAPA 
     // TRAVAS DE AUDITORIA (Trava 1 a 4)
     // -------------------------------------------------------------------------
     const travas = []
+
+    // Trava 0/Coerência: Coerência de Classificação Fiscal (Classe Agronômica × Subposição NCM)
+    const travaCoerenciaPassou = !divergenciaCoerenciaClasseNcm
+    const descInfGrupo = descreverGrupoNcm(ncmCleanInf)
+    const descCanonicoGrupo = descreverGrupoNcm(ncmCleanCanonico)
+
+    travas.push({
+      id_trava: 0,
+      trava_nome: 'Coerência Classe × Subposição NCM (TIPI)',
+      aprovado: travaCoerenciaPassou,
+      mensagem: travaCoerenciaPassou
+        ? `NCM ${ncmFormatado} perfeitamente compatível com a classe do produto ("${motorCanonico.sub_grupo}").`
+        : `Divergência de Enquadramento: NCM informada (${descInfGrupo}) diverge da classe agronômica do produto ("${motorCanonico.sub_grupo}"). NCM correta: ${descCanonicoGrupo}.`,
+    })
 
     // Trava 1: NCM Obrigatório e Válido (com Fallback Dinâmico BrasilAPI / Siscomex)
     let regraNcmRecord = null
@@ -1265,20 +1349,71 @@ Consulte a base pública oficial do AGROFIT e a BULA oficial registrada no MAPA 
       explicacao: explPa,
     })
 
-    // 2.3 NCM (Obrigatório) — A linha "NCM" da validação cruzada deve refletir OBRIGATORIAMENTE o resultado da Trava 1:
-    // Se a Trava 1 reprovar, status "DIVERGENTE" com a mesma observação da Trava 1;
-    // Se a NCM divergir da canônica do motor, também "DIVERGENTE"; só então "OK" (CORRETO).
+    // -------------------------------------------------------------------------
+    // 2.3 NCM (Obrigatório) — Validação Cruzada de NCM & Coerência Classe × Subposição TIPI
+    // -------------------------------------------------------------------------
+    // Helper para obter a descrição da subposição/família da NCM
+    function descreverGrupoNcm(codigo8) {
+      const c = String(codigo8 || '').replace(/\D/g, '')
+      if (c.startsWith('380861') || c.startsWith('380862') || c.startsWith('380869')) {
+        return `${motor.formatarNcmMascara(c)} — Mercadorias da Nota de Subposições 2 do Cap. 38 (por Faixa de Embalagem)`
+      }
+      if (c.startsWith('380891')) {
+        return `${motor.formatarNcmMascara(c)} — Inseticidas, Acaricidas e afins`
+      }
+      if (c.startsWith('380892')) {
+        return `${motor.formatarNcmMascara(c)} — Fungicidas`
+      }
+      if (c.startsWith('380893')) {
+        if (c === '38089359' || c.startsWith('3808935')) {
+          return `${motor.formatarNcmMascara(c)} — Reguladores de Crescimento de Plantas`
+        }
+        return `${motor.formatarNcmMascara(c)} — Herbicidas e Inibidores de Germinação`
+      }
+      if (c.startsWith('380894')) {
+        return `${motor.formatarNcmMascara(c)} — Desinfetantes`
+      }
+      if (c.startsWith('380899')) {
+        return `${motor.formatarNcmMascara(c)} — Nematicidas, Rodenticidas e Outros`
+      }
+      if (
+        c.startsWith('3105') ||
+        c.startsWith('3101') ||
+        c.startsWith('3102') ||
+        c.startsWith('3103') ||
+        c.startsWith('3104')
+      ) {
+        return `${motor.formatarNcmMascara(c)} — Fertilizantes e Adubos (Capítulo 31)`
+      }
+      if (c.startsWith('2520') || c.startsWith('2521') || c.startsWith('2503')) {
+        return `${motor.formatarNcmMascara(c)} — Corretivos e Condicionadores de Solo (Capítulo 25)`
+      }
+      if (c.startsWith('3002')) {
+        return `${motor.formatarNcmMascara(c)} — Inoculantes e Culturas de Microrganismos (Capítulo 30)`
+      }
+      if (c.startsWith('3824')) {
+        return `${motor.formatarNcmMascara(c)} — Adjuvantes e Preparações Químicas Diversas (Capítulo 38)`
+      }
+      return `${motor.formatarNcmMascara(c)} — Classificação Aduaneira Oficial`
+    }
+
     let statusNcm = 'OK'
     let explNcm = ''
+    let divergenciaCoerenciaClasseNcm = false
     const ncmCleanInf = ncmDigitos
     const ncmCleanCanonico = ncmCanonicoDeterminado.replace(/\D/g, '')
+
+    // Determinar coerência de subposição
+    const subposInformada = ncmCleanInf.slice(0, 6)
+    const subposCanonica = ncmCleanCanonico.slice(0, 6)
+    const ehNotaSubpos2 = motorCanonico.nota_subpos_2 === 'SIM'
 
     if (!trava1Passou) {
       statusNcm = 'DIVERGENTE'
       explNcm = `Trava 1 Reprovada: ${trava1Mensagem}`
     } else if (ncmCleanInf === ncmCleanCanonico) {
       statusNcm = 'OK'
-      explNcm = `NCM informada (${ncmFormatado}) confere com a classificação química e aduaneira recomendada pelo motor canônico e está homologada.`
+      explNcm = `NCM informada (${ncmFormatado}) confere com a classificação química e aduaneira recomendada pelo motor canônico para a classe "${motorCanonico.sub_grupo}" e está homologada.`
     } else {
       // Verificar se a NCM informada bate com alguma das faixas de embalagem do motor
       const ncmF1 = motorCanonico.ncm_faixa1_ate_300g.replace(/\D/g, '')
@@ -1286,12 +1421,23 @@ Consulte a base pública oficial do AGROFIT e a BULA oficial registrada no MAPA 
       const ncmF3 = motorCanonico.ncm_faixa3_7_5kg_a_10kg.replace(/\D/g, '')
       const ncmF4 = motorCanonico.ncm_faixa4_acima_10kg.replace(/\D/g, '')
 
-      if ([ncmF1, ncmF2, ncmF3, ncmF4].includes(ncmCleanInf)) {
+      const bateFaixaEmbalagem = [ncmF1, ncmF2, ncmF3, ncmF4].includes(ncmCleanInf)
+
+      if (bateFaixaEmbalagem) {
         statusNcm = 'OK'
         explNcm = `NCM informada (${ncmFormatado}) confere com uma das faixas específicas de embalagem do produto conforme tabela TIPI.`
       } else {
         statusNcm = 'DIVERGENTE'
-        explNcm = `Divergência: NCM informada foi ${ncmFormatado}, mas o motor químico determinou ${ncmCanonicoDeterminado} (Regra: ${motorCanonico.regra_tipi || 'Classificação TIPI'}).`
+        divergenciaCoerenciaClasseNcm = true
+
+        const descInf = descreverGrupoNcm(ncmCleanInf)
+        const descCanonica = descreverGrupoNcm(ncmCleanCanonico)
+
+        if (subposInformada !== subposCanonica) {
+          explNcm = `Divergência de Classificação Fiscal: A NCM informada (${descInf}) pertence a uma subposição incompatível com a classe agronômica do produto ("${motorCanonico.sub_grupo}"). A NCM correta determinada é ${descCanonica}.`
+        } else {
+          explNcm = `Divergência de Subitem TIPI: NCM informada foi ${ncmFormatado}, mas a classificação canônica para este produto/embalagem é ${ncmCanonicoDeterminado} (${descCanonica}).`
+        }
       }
     }
 
@@ -1390,11 +1536,20 @@ Consulte a base pública oficial do AGROFIT e a BULA oficial registrada no MAPA 
     let vereditoGeral = 'APROVADO'
     let vereditoMotivo = 'Produto validado com sucesso e em plena conformidade regulatória.'
 
-    if (!trava1Passou || (modoValidacao !== 'existente' && !trava4Passou)) {
+    if (
+      !trava1Passou ||
+      (modoValidacao !== 'existente' && !trava4Passou) ||
+      divergenciaCoerenciaClasseNcm
+    ) {
       vereditoGeral = 'REPROVADO'
-      vereditoMotivo = !trava1Passou
-        ? 'NCM informado inválido ou inexistente nas tabelas oficiais Siscomex/TIPI.'
-        : 'Produto com marca ou registro idêntico já cadastrado na Base Mestre (duplicidade).'
+      if (!trava1Passou) {
+        vereditoMotivo = 'NCM informado inválido ou inexistente nas tabelas oficiais Siscomex/TIPI.'
+      } else if (divergenciaCoerenciaClasseNcm) {
+        vereditoMotivo = `Divergência Crítica de Classificação Fiscal: NCM informada (${ncmFormatado}) pertence a grupo/classe diferente da classe agronômica do produto (${motorCanonico.sub_grupo}). NCM canônica correta: ${ncmCanonicoDeterminado}.`
+      } else {
+        vereditoMotivo =
+          'Produto com marca ou registro idêntico já cadastrado na Base Mestre (duplicidade).'
+      }
     } else if (algumaTravaReprovada) {
       // Se qualquer outra trava estiver reprovada (ex: Trava 2 Embalagem vs NCM ou Trava 3 PA), nunca APROVADO
       vereditoGeral = 'APROVADO COM RESSALVAS'

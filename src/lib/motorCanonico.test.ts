@@ -64,4 +64,18 @@ describe('Testes de Conformidade do Motor Canônico (Especificação v2.4.0)', (
     expect(formatado2).toBe('Nº 0315')
     expect(formatado3).toBe('Nº 0315')
   })
+
+  it('determina corretamente Fungicida e NCM 3808.92.99 para FOLICRON mesmo se inserido NCM 38089399', () => {
+    const res = executarMotorCanonicoFrontend({
+      nome_completo: 'FOLICRON 4X5L (IMP) RR',
+      ncm: '3808.93.99', // NCM errada inserida (Herbicida)
+      principio_ativo: 'CIPROCONAZOL 80 + PICOXISTROBINA 200',
+      embalagem: '4X5L (5 L)',
+      fabricante: 'Rainbow Defensivos',
+    })
+
+    expect(res.sub_grupo).toBe('Fungicida')
+    expect(res.ncm_padrao).toBe('3808.92.99')
+    expect(res.ncm_faixa2_300g_a_7_5kg).toBe('3808.92.99')
+  })
 })

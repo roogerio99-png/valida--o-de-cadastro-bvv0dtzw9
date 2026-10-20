@@ -275,18 +275,83 @@ export function executarMotorCanonicoFrontend(
     macroGrupo = 'Defensivos'
 
     const subL = `${inputSub} ${paUpper} ${nomeUpper}`
+
+    // Reconhecimento químico determinístico das principais moléculas de fungicidas
+    const isFungicidaMolecula =
+      paUpper.includes('CIPROCONAZOL') ||
+      paUpper.includes('PICOXISTROBINA') ||
+      paUpper.includes('TEBUCONAZOL') ||
+      paUpper.includes('AZOXISTROBINA') ||
+      paUpper.includes('DIFENOCONAZOL') ||
+      paUpper.includes('EPOXICONAZOL') ||
+      paUpper.includes('PROTIOCONAZOL') ||
+      paUpper.includes('MANCOZEB') ||
+      paUpper.includes('CLOROTALONIL') ||
+      paUpper.includes('TRIFLOXISTROBINA') ||
+      paUpper.includes('PIRACLOSTROBINA') ||
+      paUpper.includes('CARBENDAZIM') ||
+      paUpper.includes('BOSCALIDA') ||
+      paUpper.includes('FLUXAPIROXADE') ||
+      paUpper.includes('FOLPET') ||
+      paUpper.includes('CAPTANA') ||
+      paUpper.includes('CUPRICO') ||
+      paUpper.includes('COBRE') ||
+      nomeUpper.includes('FOLICRON') ||
+      nomeUpper.includes('PRIORI') ||
+      nomeUpper.includes('SPHERE') ||
+      nomeUpper.includes('NATIVO') ||
+      nomeUpper.includes('ELATUS') ||
+      nomeUpper.includes('OPERA') ||
+      nomeUpper.includes('FOX')
+
+    // Reconhecimento químico determinístico de inseticidas
+    const isInseticidaMolecula =
+      paUpper.includes('TIAMETOXAM') ||
+      paUpper.includes('IMIDACLOPRID') ||
+      paUpper.includes('CLORANTRANILIPROLE') ||
+      paUpper.includes('ACEFATO') ||
+      paUpper.includes('CIPERMETRINA') ||
+      paUpper.includes('BIFENTRINA') ||
+      paUpper.includes('FIPRONIL') ||
+      paUpper.includes('LAMBDA-CIALOTRINA') ||
+      paUpper.includes('LUFENURON') ||
+      paUpper.includes('ESPINOSADE') ||
+      paUpper.includes('THURINGIENSIS')
+
+    // Reconhecimento químico determinístico de herbicidas
+    const isHerbicidaMolecula =
+      paUpper.includes('GLIFOSATO') ||
+      paUpper.includes('GLYPHOSATE') ||
+      paUpper.includes('2,4-D') ||
+      paUpper.includes('2-4 D') ||
+      paUpper.includes('ATRAZINA') ||
+      paUpper.includes('DIURON') ||
+      paUpper.includes('CLETODIM') ||
+      paUpper.includes('HALOXIFOPE') ||
+      paUpper.includes('MESOTRIONA') ||
+      paUpper.includes('NICOSULFURON') ||
+      paUpper.includes('PARAQUAT') ||
+      paUpper.includes('DICAMBA') ||
+      paUpper.includes('S-METOLACLORO')
+
     if (subL.includes('INSETICIDA') && subL.includes('ACARICIDA')) {
       subGrupo = 'Inseticida / Acaricida'
-    } else if (subL.includes('INSETICIDA')) {
-      subGrupo = 'Inseticida'
-    } else if (subL.includes('FUNGICIDA')) {
+    } else if (subL.includes('FUNGICIDA') || isFungicidaMolecula) {
       subGrupo = 'Fungicida'
+    } else if (subL.includes('INSETICIDA') || isInseticidaMolecula) {
+      subGrupo = 'Inseticida'
     } else if (subL.includes('NEMATICIDA')) {
       subGrupo = 'Nematicida'
-    } else if (subL.includes('REGULADOR')) {
+    } else if (
+      subL.includes('REGULADOR') ||
+      paUpper.includes('ETEFOM') ||
+      paUpper.includes('PACLOBUTRAZOL')
+    ) {
       subGrupo = 'Regulador de Crescimento'
     } else if (subL.includes('ACARICIDA')) {
       subGrupo = 'Acaricida'
+    } else if (subL.includes('HERBICIDA') || isHerbicidaMolecula) {
+      subGrupo = 'Herbicida'
     } else {
       subGrupo = 'Herbicida'
     }
@@ -429,19 +494,9 @@ export function executarMotorCanonicoFrontend(
       'Posição 38.08 TIPI: Embalagem comercial agrícola usa subitens .2x ou .9x, vedada subposição domissanitária (.1x)'
   }
 
-  if (input.ncm || input.ncm_padrao) {
-    const rawDigits = String(input.ncm || input.ncm_padrao).replace(/\D/g, '')
-    if (rawDigits.length === 8) {
-      const formatado = formatarNcmMascara(rawDigits)
-      if (!pertenceNotaSubpos2 && tipoProduto !== 'Fertilizante Mineral / Organomineral') {
-        ncmPadrao = formatado
-        ncmFaixa1 = formatado
-        ncmFaixa2 = formatado
-        ncmFaixa3 = formatado
-        ncmFaixa4 = formatado
-      }
-    }
-  }
+  // NOTA FISCAL CRÍTICA: O input.ncm informado pelo usuário NUNCA deve sobrescrever
+  // a determinação canônica do motor químico-aduaneiro. A NCM padrão calculada reflete
+  // a molécula/princípio ativo, classe agronômica e faixas da TIPI.
 
   ncmPadrao = formatarNcmMascara(ncmPadrao)
   ncmFaixa1 = formatarNcmMascara(ncmFaixa1)

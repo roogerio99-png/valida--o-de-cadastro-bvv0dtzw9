@@ -22,6 +22,9 @@ import {
   ArrowRight,
   RefreshCw,
   HelpCircle,
+  Download,
+  FileSpreadsheet,
+  FileCode,
 } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -300,6 +303,113 @@ export default function Validar() {
     } finally {
       setSavingBaseMestre(false)
     }
+  }
+
+  // Exportação CSV do Parecer Unificado de Validação
+  const handleExportarCsv = () => {
+    if (!resultado) return
+
+    const linhas: string[] = []
+    linhas.push('RELATÓRIO DE AUDITORIA E VALIDAÇÃO FISCAL CADASTRAL')
+    linhas.push(`Data/Hora;${new Date(resultado.timestamp).toLocaleString('pt-BR')}`)
+    linhas.push(`Veredito Geral;${resultado.veredito_geral}`)
+    linhas.push(`Score de Conformidade;${resultado.score}%`)
+    linhas.push(`Motivo do Veredito;"${(resultado.veredito_motivo || '').replace(/"/g, '""')}"`)
+    linhas.push('')
+    linhas.push('VALIDAÇÃO CRUZADA CAMPO A CAMPO (INFORMADO VS BULA OFICIAL)')
+    linhas.push(
+      'Campo;Obrigatório;Valor Informado;Encontrado na Bula / Base;Status Validação;Análise e Explicação Técnica',
+    )
+
+    resultado.campos_validacao.forEach((c) => {
+      linhas.push(
+        `"${c.campo}";"${c.obrigatorio ? 'SIM' : 'NÃO'}";"${(c.informado || '').replace(/"/g, '""')}";"${(c.encontrado_bula || '').replace(/"/g, '""')}";"${c.status}";"${(c.explicacao || '').replace(/"/g, '""')}"`,
+      )
+    })
+
+    linhas.push('')
+    linhas.push('TRAVAS DE AUDITORIA E CONFORMIDADE ADUANEIRA / REGULATÓRIA')
+    linhas.push('ID Trava;Nome da Trava;Status;Mensagem da Auditoria')
+    resultado.travas.forEach((t) => {
+      linhas.push(
+        `"${t.id_trava}";"${t.trava_nome}";"${t.aprovado ? 'CONFORME' : 'NÃO CONFORME'}";"${(t.mensagem || '').replace(/"/g, '""')}"`,
+      )
+    })
+
+    if (resultado.linhas_ncm_embalagem && resultado.linhas_ncm_embalagem.length > 0) {
+      linhas.push('')
+      linhas.push('ENQUADRAMENTO TIPI POR FAIXA DE EMBALAGEM')
+      linhas.push(
+        'Faixa;Rótulo;Exemplo / Capacidade;NCM Correta TIPI;NCM Informada;Aplica-se à Informada',
+      )
+      resultado.linhas_ncm_embalagem.forEach((l) => {
+        linhas.push(
+          `"${l.faixa_nome}";"${l.faixa_rotulo}";"${l.exemplo_embalagem}";"${l.ncm_correta}";"${ncm}";"${l.ncm_informada_se_aplica ? 'SIM' : 'NÃO'}"`,
+        )
+      })
+    }
+
+    const csvContent = '\uFEFF' + linhas.join('\r\n')
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' })
+    const url = URL.createObjectURL(blob)
+    const link = document.createElement('a')
+    link.href = url
+    link.download = `validacao_${(nomeComercial || 'produto').replace(/[^a-zA-Z0-9]/g, '_')}_${Date.now()}.csv`
+    document.body.appendChild(link)
+    link.click()
+    document.body.removeChild(link)
+    URL.revokeObjectURL(url)
+
+    toast({
+      title: 'CSV Exportado',
+      description: 'O parecer unificado de validação foi exportado em formato CSV.',
+    })
+  }
+
+  // Exportação JSON completo do Parecer Unificado
+  const handleExportarJson = () => {
+    if (!resultado) return
+
+    const exportData = {
+      tipo_relatorio: 'PARECER_UNIFICADO_VALIDACAO_FISCAL',
+      gerado_em: new Date().toISOString(),
+      produto_consultado: {
+        nome_comercial: nomeComercial,
+        ncm_informada: ncm,
+        principio_ativo_informado: principioAtivo,
+        codigo_mapa_informado: codigoMapa,
+        embalagem_informada: embalagem,
+        modo_validacao: modo,
+      },
+      parecer_unificado: {
+        veredito_geral: resultado.veredito_geral,
+        score_conformidade: resultado.score,
+        veredito_motivo: resultado.veredito_motivo,
+        timestamp: resultado.timestamp,
+      },
+      validacao_cruzada_campos: resultado.campos_validacao,
+      travas_auditoria: resultado.travas,
+      enquadramento_ncm_embalagem: resultado.linhas_ncm_embalagem,
+      produto_canonico_determinado: resultado.produto_canonico,
+      bula_extraida: resultado.bula_extraida,
+      fontes_consultadas: resultado.fontes_consultadas,
+    }
+
+    const jsonStr = JSON.stringify(exportData, null, 2)
+    const blob = new Blob([jsonStr], { type: 'application/json;charset=utf-8;' })
+    const url = URL.createObjectURL(blob)
+    const link = document.createElement('a')
+    link.href = url
+    link.download = `validacao_${(nomeComercial || 'produto').replace(/[^a-zA-Z0-9]/g, '_')}_${Date.now()}.json`
+    document.body.appendChild(link)
+    link.click()
+    document.body.removeChild(link)
+    URL.revokeObjectURL(url)
+
+    toast({
+      title: 'JSON Exportado',
+      description: 'Estrutura técnica e parecer oficial exportados em formato JSON.',
+    })
   }
 
   const handleLimpar = () => {
@@ -830,34 +940,60 @@ export default function Validar() {
                       </div>
                     </div>
 
-                    {/* Ação de Gravar / Salvar na Base Mestre */}
-                    {resultado.veredito_geral !== 'REPROVADO' && (
-                      <div className="flex-shrink-0">
-                        {salvoComSucesso || resultado.gravacao_base_mestre?.executada ? (
-                          <Badge className="bg-emerald-700 text-white px-3 py-2 text-xs flex items-center gap-1.5 shadow-sm">
-                            <Check className="w-4 h-4" />
-                            <span>Gravado na Base Mestre</span>
-                          </Badge>
-                        ) : (
-                          <Button
-                            onClick={handleGravarBaseMestre}
-                            disabled={savingBaseMestre}
-                            className="bg-[#1B5E20] hover:bg-[#2E7D32] text-white rounded-xl shadow-md flex items-center gap-2 text-xs font-semibold h-10 px-4"
-                          >
-                            {savingBaseMestre ? (
-                              <Loader2 className="w-4 h-4 animate-spin" />
-                            ) : (
-                              <Save className="w-4 h-4" />
-                            )}
-                            <span>
-                              {modo === 'existente'
-                                ? 'Atualizar na Base Mestre'
-                                : 'Gravar na Base Mestre'}
-                            </span>
-                          </Button>
-                        )}
-                      </div>
-                    )}
+                    {/* Botões de Ação: Exportar Parecer (CSV/JSON) e Gravar */}
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={handleExportarCsv}
+                        className="text-xs h-9 text-[#1B5E20] border-[#DCE5DC] hover:bg-emerald-50 rounded-xl"
+                        title="Exportar Parecer Unificado em planilha CSV"
+                      >
+                        <FileSpreadsheet className="w-3.5 h-3.5 mr-1 text-[#1B5E20]" />
+                        <span>Exportar CSV</span>
+                      </Button>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={handleExportarJson}
+                        className="text-xs h-9 text-[#1B5E20] border-[#DCE5DC] hover:bg-emerald-50 rounded-xl"
+                        title="Exportar Estrutura Técnica em JSON"
+                      >
+                        <FileCode className="w-3.5 h-3.5 mr-1 text-[#1B5E20]" />
+                        <span>Exportar JSON</span>
+                      </Button>
+
+                      {/* Ação de Gravar / Salvar na Base Mestre */}
+                      {resultado.veredito_geral !== 'REPROVADO' && (
+                        <div className="flex-shrink-0">
+                          {salvoComSucesso || resultado.gravacao_base_mestre?.executada ? (
+                            <Badge className="bg-emerald-700 text-white px-3 py-2 text-xs flex items-center gap-1.5 shadow-sm">
+                              <Check className="w-4 h-4" />
+                              <span>Gravado na Base Mestre</span>
+                            </Badge>
+                          ) : (
+                            <Button
+                              onClick={handleGravarBaseMestre}
+                              disabled={savingBaseMestre}
+                              className="bg-[#1B5E20] hover:bg-[#2E7D32] text-white rounded-xl shadow-md flex items-center gap-2 text-xs font-semibold h-9 px-4"
+                            >
+                              {savingBaseMestre ? (
+                                <Loader2 className="w-4 h-4 animate-spin" />
+                              ) : (
+                                <Save className="w-4 h-4" />
+                              )}
+                              <span>
+                                {modo === 'existente'
+                                  ? 'Atualizar na Base Mestre'
+                                  : 'Gravar na Base Mestre'}
+                              </span>
+                            </Button>
+                          )}
+                        </div>
+                      )}
+                    </div>
                   </div>
 
                   {/* Resumo Bula Extraída */}
@@ -918,23 +1054,32 @@ export default function Validar() {
                     <tbody className="divide-y divide-[#DCE5DC]">
                       {resultado.campos_validacao.map((item: CampoValidadoResultado) => {
                         let badgeBg = 'bg-gray-100 text-gray-800'
+                        let trBg = 'hover:bg-emerald-50/20'
+
                         if (item.status === 'OK') {
                           badgeBg = 'bg-emerald-100 text-emerald-800'
                         } else if (item.status === 'DIVERGENTE') {
-                          badgeBg = 'bg-red-100 text-red-800'
+                          badgeBg = 'bg-red-600 text-white'
+                          trBg = 'bg-red-50/40 hover:bg-red-50/60'
                         } else if (item.status === 'NÃO INFORMADO') {
                           badgeBg = 'bg-blue-50 text-blue-700'
                         } else if (item.status === 'NÃO LOCALIZADO') {
                           badgeBg = 'bg-amber-100 text-amber-800'
                         }
 
+                        const ehDivergente = item.status === 'DIVERGENTE'
+
                         return (
-                          <tr key={item.chave} className="hover:bg-emerald-50/20 transition-colors">
+                          <tr key={item.chave} className={`transition-colors ${trBg}`}>
                             <td className="py-2.5 px-3 font-semibold text-[#1C2B1C] whitespace-nowrap">
                               {item.campo}
                               {item.obrigatorio && <span className="text-red-500 ml-0.5">*</span>}
                             </td>
-                            <td className="py-2.5 px-3 font-mono text-[11px] text-[#1C2B1C]">
+                            <td
+                              className={`py-2.5 px-3 font-mono text-[11px] ${
+                                ehDivergente ? 'text-red-700 font-bold' : 'text-[#1C2B1C]'
+                              }`}
+                            >
                               {item.informado}
                             </td>
                             <td className="py-2.5 px-3 font-mono text-[11px] text-[#1B5E20] font-semibold">
@@ -945,7 +1090,11 @@ export default function Validar() {
                                 {item.status}
                               </Badge>
                             </td>
-                            <td className="py-2.5 px-3 text-[#5A6D5A] text-[11px] leading-relaxed max-w-xs">
+                            <td
+                              className={`py-2.5 px-3 text-[11px] leading-relaxed max-w-xs ${
+                                ehDivergente ? 'text-red-900 font-medium' : 'text-[#5A6D5A]'
+                              }`}
+                            >
                               {item.explicacao}
                             </td>
                           </tr>
