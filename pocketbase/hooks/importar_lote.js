@@ -226,6 +226,34 @@ routerAdd('POST', '/backend/v1/importar-lote', (e) => {
     const erros = []
     const resumoCategorias = {}
 
+    function extrairDetalhesErroDb(err) {
+      let msg = err && err.message ? String(err.message) : String(err || 'Erro desconhecido')
+      let campoIdentificado = ''
+      let motivoDetalhado = msg
+
+      // Se o PocketBase anexou detalhes de validação (err.data ou objeto com campos)
+      if (err && err.data && typeof err.data === 'object') {
+        const chaves = Object.keys(err.data)
+        if (chaves.length > 0) {
+          const partes = []
+          for (let k = 0; k < chaves.length; k++) {
+            const fKey = chaves[k]
+            const fVal = err.data[fKey]
+            const fMsg =
+              typeof fVal === 'object' && fVal && fVal.message ? fVal.message : String(fVal || '')
+            partes.push(`Campo "${fKey}": ${fMsg}`)
+            if (!campoIdentificado) campoIdentificado = fKey
+          }
+          motivoDetalhado = partes.join('; ')
+        }
+      } else if (msg.includes('validation_')) {
+        // Formato comum do Goja/PocketBase quando lança erro de validação
+        motivoDetalhado = msg
+      }
+
+      return { campo: campoIdentificado, motivo: motivoDetalhado }
+    }
+
     function registrarErro(linhaOriginal, linhaLote, categoria, motivo, campo, valor, dados) {
       const errItem = {
         linhaOriginal: Number(linhaOriginal) || linhaLote,
@@ -233,7 +261,7 @@ routerAdd('POST', '/backend/v1/importar-lote', (e) => {
         categoria: String(categoria || 'Erro de Validação'),
         motivo: String(motivo || 'Dado inválido para o banco de dados'),
         campo: campo ? String(campo) : undefined,
-        valor: valor !== undefined && valor !== null ? String(valor).slice(0, 150) : undefined,
+        valor: valor !== undefined && valor !== null ? String(valor).slice(0, 200) : undefined,
         dados: dados || {},
       }
       erros.push(errItem)
@@ -310,25 +338,45 @@ routerAdd('POST', '/backend/v1/importar-lote', (e) => {
             fmtNcmMascara(data.ncm_granel_tecnico) ||
             (nota2 === 'SIM' ? '3808.69.90' : '3808.93.19')
 
-          const macroSub =
+          // Higienização e truncamento defensivo para os limites do schema da matriz
+          let macroSub =
             String(data.macro_grupo_subgrupo_padrao || '').trim() || 'Defensivos — Herbicida'
+          if (macroSub.length > 255) macroSub = macroSub.slice(0, 255)
+
           const regraTipi =
             String(data.regra_tipi_embalagem || '').trim() ||
             (nota2 === 'SIM'
               ? 'Nota de Subposições 2 Cap. 38 TIPI (SC COSIT 98.042/2022)'
               : 'Posição 38.08 TIPI')
-          const sisMapa =
+
+          let sisMapa =
             String(data.sistema_registro_mapa || '').trim() ||
             'AGROFIT/MAPA — Produto Formulado (Lei nº 14.785/2023)'
-          const pisCofins =
+          if (sisMapa.length > 255) sisMapa = sisMapa.slice(0, 255)
+
+          let pisCofins =
             String(data.enquadramento_pis_cofins || '').trim() ||
             'Beneficiado (Lei 10.925/04): 0% até Mar/26 | 0,925% Real pós-Abr/26'
-          const cstRec =
+          if (pisCofins.length > 255) pisCofins = pisCofins.slice(0, 255)
+
+          let cstRec =
             String(data.cst_recomendado || '').trim() ||
             'Saída: CST 06 (c/ Ajuste M220/M620) | Entrada: CST 73'
+          if (cstRec.length > 255) cstRec = cstRec.slice(0, 255)
+
+          // Chave do P.A. (máx 255)
+          const chaveTruncada = chaveUpper.length > 255 ? chaveUpper.slice(0, 255) : chaveUpper
+
+          // NCMs (máx 10)
+          const ncmRefTrunc = ncmRef.length > 10 ? ncmRef.slice(0, 10) : ncmRef
+          const ncmF1Trunc = ncmF1.length > 10 ? ncmF1.slice(0, 10) : ncmF1
+          const ncmF2Trunc = ncmF2.length > 10 ? ncmF2.slice(0, 10) : ncmF2
+          const ncmF3Trunc = ncmF3.length > 10 ? ncmF3.slice(0, 10) : ncmF3
+          const ncmF4Trunc = ncmF4.length > 10 ? ncmF4.slice(0, 10) : ncmF4
+          const ncmGranelTrunc = ncmGranel.length > 10 ? ncmGranel.slice(0, 10) : ncmGranel
 
           // Localizar se já existe para fazer Upsert idempotente
-          const escChave = chaveUpper.replace(/'/g, "\\'")
+          const escChave = chaveTruncada.replace(/'/g, "\\'")
           const existentes =
             txApp.findRecordsByFilter(
               'dicionario_principios_ativos',
@@ -348,16 +396,16 @@ routerAdd('POST', '/backend/v1/importar-lote', (e) => {
             record = new Record(colTarget)
           }
 
-          record.set('principio_ativo_chave', chaveUpper)
-          record.set('principio_ativo', chaveUpper)
+          record.set('principio_ativo_chave', chaveTruncada)
+          record.set('principio_ativo', chaveTruncada)
           record.set('macro_grupo_subgrupo_padrao', macroSub)
           record.set('nota_subpos_2', nota2)
-          record.set('ncm_padrao_referencia', ncmRef)
-          record.set('ncm_faixa1_ate_300g', ncmF1)
-          record.set('ncm_faixa2_300g_a_7_5kg', ncmF2)
-          record.set('ncm_faixa3_7_5kg_a_10kg', ncmF3)
-          record.set('ncm_faixa4_acima_10kg', ncmF4)
-          record.set('ncm_granel_tecnico', ncmGranel)
+          record.set('ncm_padrao_referencia', ncmRefTrunc)
+          record.set('ncm_faixa1_ate_300g', ncmF1Trunc)
+          record.set('ncm_faixa2_300g_a_7_5kg', ncmF2Trunc)
+          record.set('ncm_faixa3_7_5kg_a_10kg', ncmF3Trunc)
+          record.set('ncm_faixa4_acima_10kg', ncmF4Trunc)
+          record.set('ncm_granel_tecnico', ncmGranelTrunc)
           record.set('regra_tipi_embalagem', regraTipi)
           record.set('sistema_registro_mapa', sisMapa)
           record.set('enquadramento_pis_cofins', pisCofins)
@@ -385,12 +433,13 @@ routerAdd('POST', '/backend/v1/importar-lote', (e) => {
               inseridos++
             }
           } catch (err) {
+            const detalhe = extrairDetalhesErroDb(err)
             registrarErro(
               rowNum,
               i + 1,
               'Erro no Banco de Dados',
-              `Falha ao salvar registro: ${err.message}`,
-              'principio_ativo_chave',
+              `Falha ao salvar registro: ${detalhe.motivo}`,
+              detalhe.campo || 'principio_ativo_chave',
               chaveUpper,
               data,
             )
@@ -671,12 +720,13 @@ routerAdd('POST', '/backend/v1/importar-lote', (e) => {
               inseridos++
             }
           } catch (err) {
+            const detalhe = extrairDetalhesErroDb(err)
             registrarErro(
               rowNum,
               i + 1,
               'Erro no Banco de Dados',
-              `Falha ao salvar produto na Base Mestre: ${err.message}`,
-              'nome_produto',
+              `Falha ao salvar produto na Base Mestre: ${detalhe.motivo}`,
+              detalhe.campo || 'nome_produto',
               nomeCompleto,
               data,
             )
@@ -749,12 +799,13 @@ routerAdd('POST', '/backend/v1/importar-lote', (e) => {
               inseridos++
             }
           } catch (err) {
+            const detalhe = extrairDetalhesErroDb(err)
             registrarErro(
               rowNum,
               i + 1,
               'Erro no Banco de Dados',
-              `Falha ao salvar regra de NCM: ${err.message}`,
-              'ncm',
+              `Falha ao salvar regra de NCM: ${detalhe.motivo}`,
+              detalhe.campo || 'ncm',
               digits,
               data,
             )

@@ -732,14 +732,27 @@ export default function Importar() {
         const pisCofins = getFieldValue(row, [
           'enquadramento_pis_cofins',
           'enquadramento pis/cofins',
+          'enquadramento pis / cofins',
           'status_pis_cofins',
           'pis_cofins',
         ])
         const cstRec = getFieldValue(row, [
           'cst_recomendado',
           'cst recomendado (saída / entrada)',
+          'cst recomendado (saida / entrada)',
+          'cst recomendado',
           'cst',
         ])
+        const classeVal = getFieldValue(row, [
+          'classe',
+          'classe_agronomica',
+          'classe agronomica',
+          'sub_grupo',
+          'subgrupo',
+        ])
+        const statusVal = getFieldValue(row, ['status', 'situacao', 'ativo'])
+        const unidadeVal = getFieldValue(row, ['unidade', 'und', 'uom'])
+        const grupoQuimicoVal = getFieldValue(row, ['grupo_quimico', 'grupo quimico'])
 
         // Checar linhas de cabeçalho explicativo ou instrução no corpo da planilha
         const allText = Object.values(row).join(' ').trim()
@@ -854,16 +867,18 @@ export default function Importar() {
             cst_recomendado: cstRec || 'Saída: CST 06 (c/ Ajuste M220/M620) | Entrada: CST 73',
             // Legado
             principio_ativo: chaveUpper,
-            classe: macroSub.includes('—')
-              ? macroSub.split('—')[1].trim()
-              : macroSub.includes('-')
-                ? macroSub.split('-')[1].trim()
-                : 'Defensivos',
-            grupo_quimico: 'Importação Aba 3 Matriz',
+            classe:
+              classeVal ||
+              (macroSub.includes('—')
+                ? macroSub.split('—')[1].trim()
+                : macroSub.includes('-')
+                  ? macroSub.split('-')[1].trim()
+                  : 'Defensivos'),
+            grupo_quimico: grupoQuimicoVal || 'Importação Aba 3 Matriz',
             concentracao_min: 0,
             concentracao_max: 0,
-            unidade: '%',
-            status: 'Ativo',
+            unidade: unidadeVal || '%',
+            status: statusVal || 'Ativo',
           },
         })
       }
@@ -1334,25 +1349,33 @@ export default function Importar() {
                                   </td>
                                   <td className="py-2 px-3 text-red-800">{item.motivo}</td>
                                   <td
-                                    className="py-2 px-3 text-red-700 truncate max-w-[240px]"
+                                    className="py-2 px-3 text-red-700 max-w-[260px]"
                                     title={
                                       item.campo
                                         ? `${item.campo}: ${item.valor || 'vazio'}`
                                         : item.motivo
                                     }
                                   >
-                                    {item.campo ? (
-                                      <span>
-                                        <strong className="font-semibold">{item.campo}:</strong>{' '}
-                                        <span className="font-mono text-[10px]">
-                                          {item.valor || 'vazio'}
-                                        </span>
+                                    {item.campo && (
+                                      <div className="mb-0.5">
+                                        <Badge
+                                          variant="outline"
+                                          className="text-[9px] px-1.5 py-0 border-red-300 text-red-800 bg-red-50/50 font-mono"
+                                        >
+                                          {item.campo}
+                                        </Badge>
+                                      </div>
+                                    )}
+                                    {item.valor ? (
+                                      <span
+                                        className="font-mono text-[10px] text-red-600 block truncate"
+                                        title={item.valor}
+                                      >
+                                        {item.valor}
                                       </span>
                                     ) : (
-                                      <span className="text-red-500/80 italic text-[10px]">
-                                        {item.motivo.length > 25
-                                          ? `${item.motivo.slice(0, 25)}...`
-                                          : item.motivo}
+                                      <span className="text-red-400 italic text-[10px]">
+                                        {item.campo ? 'valor não especificado' : '—'}
                                       </span>
                                     )}
                                   </td>
