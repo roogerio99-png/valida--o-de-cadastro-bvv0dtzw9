@@ -361,56 +361,113 @@ export default function Importar() {
       // ZONA 2: regras_ncm_embalagem
       // ------------------------------------------------------------------
       else if (targetCol === 'regras_ncm_embalagem') {
-        const ncmLimpo = cleanNcm(
-          getFieldValue(row, ['ncm_obrigatoria', 'ncm', 'codigo_ncm', 'classificacao']),
-        )
+        // Obter valores brutos das colunas da aba 2
+        const rawNcm = getFieldValue(row, [
+          'ncm_obrigatoria',
+          'ncm obrigatoria',
+          'ncm_oficial',
+          'codigo_ncm',
+          'ncm',
+          'classificacao_fiscal',
+          'classificacao',
+        ])
+        const rawRegraId = getFieldValue(row, ['regra_id', 'regra', 'id_regra', 'item', 'codigo'])
         const desc = getFieldValue(row, [
-          'descricao',
           'escopo_quimico_agronomico',
+          'escopo quimico',
+          'descricao_fiscal',
+          'descricao',
           'escopo',
-          'dispositivo_legal',
           'especificacao',
         ])
         const condicaoEmb = getFieldValue(row, [
           'condicao_da_embalagem_unitaria_descrita',
+          'condicao_embalagem',
           'embalagens_permitidas',
           'embalagens permitidas',
+          'embalagem_permitida',
+          'embalagens',
           'embalagem',
         ])
-        const regraEsp = getFieldValue(row, [
+        const dispositivo = getFieldValue(row, [
           'dispositivo_legal_tipi_rfb',
+          'dispositivo_legal',
+          'dispositivo',
+          'fundamentacao_legal',
+          'base_legal',
           'regra_especial',
-          'impacto_fiscal',
+          'observacao',
           'obs',
         ])
 
-        if (!ncmLimpo) {
+        // Checar se a linha é cabeçalho de seção (ex: "1. REGRAS OFICIAIS...", "2. RESUMO...") ou instrução
+        const allText = Object.values(row).join(' ').trim()
+        const isSectionHeader =
+          allText.length > 50 &&
+          (allText.includes('REGRAS OFICIAIS DA TIPI') ||
+            allText.includes('RESUMO QUANTITATIVO') ||
+            allText.includes('RELAÇÃO NOMINAL') ||
+            allText.includes('RELACAO NOMINAL') ||
+            allText.includes('Fundamentação Legal') ||
+            allText.includes('Fundamentacao Legal') ||
+            allText.includes('Nota de Subposições'))
+
+        if (isSectionHeader) {
           rejeitados.push({
             linhaOriginal: originalLineNum,
             linhaLote: idx + 1,
-            motivo: 'NCM obrigatório ausente para criação da regra.',
-            categoria: 'NCM Ausente',
-            campo: 'NCM',
-            valor: '',
+            motivo: 'Linha de cabeçalho de seção ou notas explicativas ignorada.',
+            categoria: 'Cabeçalho / Seção Informativa',
+            campo: 'Seção',
+            valor: allText.slice(0, 80),
             dados: row,
           })
           return
         }
 
-        const embArr = condicaoEmb
-          ? condicaoEmb
-              .split(/[,;/|]/)
-              .map((s) => s.trim())
-              .filter(Boolean)
-          : []
+        // Tentar extrair NCM limpo
+        const ncmLimpo = cleanNcm(rawNcm)
+
+        // Se o NCM não for válido (deve ter 8 dígitos na TIPI)
+        if (!ncmLimpo || ncmLimpo.length !== 8) {
+          // Se na verdade for uma linha sem NCM útil (ex: notas, contadores de divergência)
+          rejeitados.push({
+            linhaOriginal: originalLineNum,
+            linhaLote: idx + 1,
+            motivo: ncmLimpo
+              ? `Código NCM "${ncmLimpo}" possui ${ncmLimpo.length} dígitos. O padrão TIPI exige 8 dígitos.`
+              : 'NCM obrigatório ausente ou inválido.',
+            categoria: 'NCM Inválido ou Ausente',
+            campo: 'NCM',
+            valor: rawNcm || 'vazio',
+            dados: row,
+          })
+          return
+        }
+
+        // Processar embalagens permitidas: pode vir como "Saco, Tambor", "Bombona / Frasco"
+        // ou como texto de condição "Até 5L; 10L; 20L"
+        let embArr: string[] = []
+        if (condicaoEmb) {
+          embArr = condicaoEmb
+            .split(/[,;/|\n]/)
+            .map((s) => s.trim())
+            .filter((s) => s.length > 0)
+        }
+
+        // Se não houver lista explícita, mas houver regra, tentar manter regra especial clara
+        const regraCompleta = [rawRegraId ? `[${rawRegraId}]` : '', dispositivo || '']
+          .filter(Boolean)
+          .join(' ')
+          .trim()
 
         validos.push({
           originalLine: originalLineNum,
           data: {
             ncm: ncmLimpo,
-            descricao: desc || `Regra NCM ${ncmLimpo}`,
+            descricao: desc || `NCM ${ncmLimpo}`,
             embalagens_permitidas: embArr,
-            regra_especial: regraEsp,
+            regra_especial: regraCompleta || undefined,
           },
         })
       }

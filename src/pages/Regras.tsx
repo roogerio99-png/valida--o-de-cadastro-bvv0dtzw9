@@ -44,7 +44,41 @@ const OPCOES_EMBALAGEM = [
   'Granel',
   'Container',
   'Big Bag',
+  '1X20L',
+  '4X5L',
+  '1X10KG',
+  '4X5KG',
+  '1X25KG',
+  '10X2KG',
+  '5X1KG',
+  '8X3KG',
 ]
+
+function formatNcm(ncm: string): string {
+  if (!ncm) return '—'
+  const digits = ncm.replace(/\D/g, '')
+  if (digits.length === 8) {
+    // 3808.93.22
+    return `${digits.slice(0, 4)}.${digits.slice(4, 6)}.${digits.slice(6, 8)}`
+  }
+  return ncm
+}
+
+function parseEmbalagens(raw: unknown): string[] {
+  if (Array.isArray(raw)) return raw.map(String).filter(Boolean)
+  if (typeof raw === 'string') {
+    try {
+      const parsed = JSON.parse(raw)
+      if (Array.isArray(parsed)) return parsed.map(String).filter(Boolean)
+    } catch {
+      return raw
+        .split(/[,;/|]/)
+        .map((s) => s.trim())
+        .filter(Boolean)
+    }
+  }
+  return []
+}
 
 export default function Regras() {
   const [regras, setRegras] = useState<RegraNcmEmbalagem[]>([])
@@ -102,16 +136,7 @@ export default function Regras() {
     setEditingId(regra.id)
     setFormNcm(regra.ncm)
     setFormDescricao(regra.descricao || '')
-    let emb: string[] = []
-    if (Array.isArray(regra.embalagens_permitidas)) {
-      emb = regra.embalagens_permitidas
-    } else if (typeof regra.embalagens_permitidas === 'string') {
-      try {
-        emb = JSON.parse(regra.embalagens_permitidas)
-      } catch (_) {
-        emb = []
-      }
-    }
+    const emb = parseEmbalagens(regra.embalagens_permitidas)
     setFormEmbalagens(emb)
     setFormRegraEspecial(regra.regra_especial || '')
     setIsModalOpen(true)
@@ -128,8 +153,19 @@ export default function Regras() {
     if (!formNcm.trim()) return
     setSaving(true)
 
+    const ncmClean = formNcm.replace(/\D/g, '')
+    if (ncmClean.length !== 8) {
+      toast({
+        variant: 'destructive',
+        title: 'NCM Inválido',
+        description: 'O código NCM deve possuir exatamente 8 dígitos numéricos conforme a TIPI.',
+      })
+      setSaving(false)
+      return
+    }
+
     const payload = {
-      ncm: formNcm.replace(/\D/g, ''),
+      ncm: ncmClean,
       descricao: formDescricao,
       embalagens_permitidas: formEmbalagens,
       regra_especial: formRegraEspecial,
@@ -172,16 +208,21 @@ export default function Regras() {
       return
     }
 
-    const headers = ['NCM', 'Descrição', 'Embalagens Permitidas', 'Regra Especial']
-    const rows = regras.map((r) => [
-      `"${r.ncm}"`,
-      `"${(r.descricao || '').replace(/"/g, '""')}"`,
-      `"${(Array.isArray(r.embalagens_permitidas) ? r.embalagens_permitidas.join('; ') : '').replace(/"/g, '""')}"`,
-      `"${(r.regra_especial || '').replace(/"/g, '""')}"`,
-    ])
+    const headers = ['NCM', 'Descrição', 'Embalagens Permitidas', 'Regra Especial', 'Status']
+    const rows = regras.map((r) => {
+      const embalagens = parseEmbalagens(r.embalagens_permitidas).join('; ')
+      const status = r.ncm && r.ncm.replace(/\D/g, '').length === 8 ? 'Ativa' : 'Incompleta'
+      return [
+        `"${r.ncm}"`,
+        `"${(r.descricao || '').replace(/"/g, '""')}"`,
+        `"${embalagens.replace(/"/g, '""')}"`,
+        `"${(r.regra_especial || '').replace(/"/g, '""')}"`,
+        `"${status}"`,
+      ]
+    })
 
     const csvContent = [headers.join(','), ...rows.map((e) => e.join(','))].join('\n')
-    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' })
+    const blob = new Blob(['\uFEFF' + csvContent], { type: 'text/csv;charset=utf-8;' })
     const url = URL.createObjectURL(blob)
     const link = document.createElement('a')
     link.href = url
@@ -254,67 +295,93 @@ export default function Regras() {
           <table className="w-full text-xs">
             <thead>
               <tr className="bg-[#F5F7F1] border-b border-[#DCE5DC] text-left text-[#5A6D5A]">
-                <th className="py-3 px-4 font-semibold">NCM</th>
-                <th className="py-3 px-4 font-semibold">Descrição Fiscal</th>
-                <th className="py-3 px-4 font-semibold">Embalagens Permitidas</th>
-                <th className="py-3 px-4 font-semibold">Regra Especial / Embargo</th>
-                <th className="py-3 px-4 font-semibold text-right">Ações</th>
+                <th className="py-3 px-4 font-semibold w-36">NCM (TIPI)</th>
+                <th className="py-3 px-4 font-semibold min-w-[220px]">Descrição Fiscal</th>
+                <th className="py-3 px-4 font-semibold min-w-[260px]">Embalagens Autorizadas</th>
+                <th className="py-3 px-4 font-semibold min-w-[220px]">
+                  Dispositivo Legal / Embargo
+                </th>
+                <th className="py-3 px-4 font-semibold text-center w-24">Status</th>
+                <th className="py-3 px-4 font-semibold text-right w-20">Ações</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-[#F0F4F0]">
               {loading ? (
                 <tr>
-                  <td colSpan={5} className="py-12 text-center text-xs text-[#5A6D5A]">
+                  <td colSpan={6} className="py-12 text-center text-xs text-[#5A6D5A]">
                     <Loader2 className="w-6 h-6 animate-spin mx-auto text-[#1B5E20] mb-2" />
-                    Carregando matriz de regras...
+                    Carregando matriz de regras regulamentares...
                   </td>
                 </tr>
               ) : regras.length === 0 ? (
                 <tr>
-                  <td colSpan={5} className="py-12 text-center text-xs text-[#5A6D5A]">
+                  <td colSpan={6} className="py-12 text-center text-xs text-[#5A6D5A]">
                     Nenhuma regra cadastrada ou encontrada para o filtro.
                   </td>
                 </tr>
               ) : (
                 regras.map((r) => {
-                  let embalagensArray: string[] = []
-                  if (Array.isArray(r.embalagens_permitidas)) {
-                    embalagensArray = r.embalagens_permitidas
-                  } else if (typeof r.embalagens_permitidas === 'string') {
-                    try {
-                      embalagensArray = JSON.parse(r.embalagens_permitidas)
-                    } catch {
-                      /* intentionally ignored */
-                    }
-                  }
+                  const embalagensArray = parseEmbalagens(r.embalagens_permitidas)
+                  const ncmValido = r.ncm && r.ncm.replace(/\D/g, '').length === 8
 
                   return (
                     <tr key={r.id} className="hover:bg-[#F5F7F1]/50 transition-colors">
-                      <td className="py-3 px-4 font-mono font-bold text-[#1B5E20] whitespace-nowrap">
-                        {r.ncm}
+                      <td className="py-3 px-4 whitespace-nowrap">
+                        <div className="font-mono font-bold text-[#1B5E20] text-xs">
+                          {formatNcm(r.ncm)}
+                        </div>
+                        {r.ncm && r.ncm.length === 8 && (
+                          <div className="text-[10px] text-[#5A6D5A] font-mono">
+                            Código: {r.ncm}
+                          </div>
+                        )}
                       </td>
-                      <td className="py-3 px-4 font-medium text-[#1C2B1C] max-w-[280px]">
-                        {r.descricao || '—'}
+                      <td className="py-3 px-4">
+                        <div className="font-medium text-[#1C2B1C] line-clamp-2">
+                          {r.descricao || '—'}
+                        </div>
                       </td>
-                      <td className="py-3 px-4 max-w-[320px]">
-                        <div className="flex flex-wrap gap-1">
+                      <td className="py-3 px-4">
+                        <div className="flex flex-wrap gap-1.5 max-w-[380px]">
                           {embalagensArray.length > 0 ? (
-                            embalagensArray.map((emb) => (
+                            embalagensArray.map((emb, idx) => (
                               <Badge
-                                key={emb}
+                                key={idx}
                                 variant="outline"
-                                className="bg-emerald-50 text-emerald-900 border-emerald-200 text-[10px] py-0 px-2 font-normal"
+                                className="bg-emerald-50 text-emerald-900 border-emerald-200 text-[11px] py-0.5 px-2 font-medium"
                               >
                                 {emb}
                               </Badge>
                             ))
                           ) : (
-                            <span className="text-[#5A6D5A] italic">Sem restrições</span>
+                            <span className="text-amber-700 bg-amber-50 border border-amber-200 rounded px-2 py-0.5 text-[10px]">
+                              Sem restrição cadastrada
+                            </span>
                           )}
                         </div>
                       </td>
-                      <td className="py-3 px-4 text-[#5A6D5A] max-w-[200px] truncate">
-                        {r.regra_especial || '—'}
+                      <td className="py-3 px-4 text-[#5A6D5A]">
+                        {r.regra_especial ? (
+                          <span
+                            className="line-clamp-2 text-[11px] leading-relaxed"
+                            title={r.regra_especial}
+                          >
+                            {r.regra_especial}
+                          </span>
+                        ) : (
+                          <span className="text-[#5A6D5A] italic text-[11px]">—</span>
+                        )}
+                      </td>
+                      <td className="py-3 px-4 text-center whitespace-nowrap">
+                        {ncmValido ? (
+                          <Badge className="bg-emerald-100 text-emerald-800 border-emerald-300 text-[10px] py-0 px-2 hover:bg-emerald-100">
+                            Ativa
+                          </Badge>
+                        ) : (
+                          <Badge className="bg-amber-100 text-amber-800 border-amber-300 text-[10px] py-0 px-2 hover:bg-amber-100">
+                            Incompleta
+                          </Badge>
+                        )}
                       </td>
                       <td className="py-3 px-4 text-right whitespace-nowrap">
                         <Button
@@ -322,6 +389,7 @@ export default function Regras() {
                           size="icon"
                           onClick={() => handleOpenEdit(r)}
                           className="h-7 w-7 text-[#5A6D5A] hover:text-[#1B5E20] hover:bg-emerald-50 mr-1"
+                          title="Editar regra"
                         >
                           <Edit2 className="w-3.5 h-3.5" />
                         </Button>
@@ -330,6 +398,7 @@ export default function Regras() {
                           size="icon"
                           onClick={() => handleDelete(r.id, r.ncm)}
                           className="h-7 w-7 text-[#5A6D5A] hover:text-red-600 hover:bg-red-50"
+                          title="Excluir regra"
                         >
                           <Trash2 className="w-3.5 h-3.5" />
                         </Button>

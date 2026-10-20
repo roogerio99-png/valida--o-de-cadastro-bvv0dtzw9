@@ -155,6 +155,11 @@ function findHeaderRowIndex(grid: (string | number | undefined)[][]): number {
       'classe',
       'grupo',
       'aliquota',
+      'dispositivo',
+      'condicao',
+      'escopo',
+      'tipi',
+      'subposicao',
     ]
     const matchCount = headerKeywords.filter((k) => rowText.includes(k)).length
     score += matchCount * 3

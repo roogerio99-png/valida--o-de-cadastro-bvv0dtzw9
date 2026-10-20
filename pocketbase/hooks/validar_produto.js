@@ -82,32 +82,57 @@ routerAdd('POST', '/backend/v1/validar-produto', (e) => {
       let permitidas = []
       if (rawJson) {
         try {
-          permitidas = JSON.parse(rawJson) || []
+          const parsed = JSON.parse(rawJson)
+          if (Array.isArray(parsed)) {
+            permitidas = parsed
+          } else if (typeof parsed === 'string') {
+            permitidas = parsed.split(/[,;/|]/).map((s) => s.trim())
+          }
         } catch (_) {
-          permitidas = []
+          permitidas = rawJson.split(/[,;/|]/).map((s) => s.trim())
         }
       }
+
+      permitidas = permitidas.map((s) => String(s).trim()).filter(Boolean)
 
       if (!Array.isArray(permitidas) || permitidas.length === 0) {
         // Se a regra não lista restrições específicas, aceita com ressalva ou aprova
         trava2Passou = true
         trava2Msg = `Nenhuma restrição específica de embalagem cadastrada para o NCM ${ncm}. Embalagem "${embalagem}" aceita.`
       } else {
-        const embalagemNormalizada = embalagem.toLowerCase()
+        // Normalização agressiva para bater embalagens como "4X5L", "5L", "Bombona", "Saco"
+        const cleanStr = (s) =>
+          String(s || '')
+            .toLowerCase()
+            .replace(/[\s\-_]/g, '')
+
+        const embNorm = cleanStr(embalagem)
+
         const match = permitidas.some((p) => {
-          const item = String(p).trim().toLowerCase()
-          return (
-            item === embalagemNormalizada ||
-            embalagemNormalizada.includes(item) ||
-            item.includes(embalagemNormalizada)
-          )
+          const pNorm = cleanStr(p)
+          if (!pNorm) return false
+          if (embNorm === pNorm) return true
+          if (embNorm.includes(pNorm) || pNorm.includes(embNorm)) return true
+
+          // Se a embalagem contiver o volume unitário (ex.: 5L contido em 4X5L)
+          const embOnlyNumberUnit = embNorm.replace(/[^0-9a-z]/g, '')
+          const pOnlyNumberUnit = pNorm.replace(/[^0-9a-z]/g, '')
+          if (embOnlyNumberUnit && pOnlyNumberUnit) {
+            if (
+              embOnlyNumberUnit.includes(pOnlyNumberUnit) ||
+              pOnlyNumberUnit.includes(embOnlyNumberUnit)
+            ) {
+              return true
+            }
+          }
+          return false
         })
 
         if (match) {
           trava2Passou = true
-          trava2Msg = `Embalagem "${embalagem}" autorizada para o NCM ${ncm}. Permitidas: ${permitidas.join(', ')}.`
+          trava2Msg = `Embalagem "${embalagem}" autorizada para o NCM ${ncm}. Permitidas: ${permitidas.slice(0, 6).join(', ')}${permitidas.length > 6 ? '...' : ''}.`
         } else {
-          trava2Msg = `Embalagem "${embalagem}" NÃO autorizada para o NCM ${ncm}. Permitidas: ${permitidas.join(', ')}.`
+          trava2Msg = `Embalagem "${embalagem}" NÃO autorizada para o NCM ${ncm}. Permitidas: ${permitidas.slice(0, 6).join(', ')}${permitidas.length > 6 ? '...' : ''}.`
         }
       }
     } catch (err) {
