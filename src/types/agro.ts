@@ -278,6 +278,8 @@ export interface RespostaValidacaoCadastro {
   produto_canonico?: Partial<BaseMestreProduto>
   base_mestre_inclusao?: BaseMestreInclusaoResultado
   produto_validado: ProdutoValidadoConsolidado
+  timestamp?: string
+  data_validacao?: string
 }
 
 export interface ProdutoInput {

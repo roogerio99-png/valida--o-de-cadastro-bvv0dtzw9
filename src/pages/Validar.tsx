@@ -310,8 +310,9 @@ export default function Validar() {
     if (!resultado) return
 
     const linhas: string[] = []
+    const dataHoraIso = resultado.timestamp || resultado.data_validacao || new Date().toISOString()
     linhas.push('RELATÓRIO DE AUDITORIA E VALIDAÇÃO FISCAL CADASTRAL')
-    linhas.push(`Data/Hora;${new Date(resultado.timestamp).toLocaleString('pt-BR')}`)
+    linhas.push(`Data/Hora;${new Date(dataHoraIso).toLocaleString('pt-BR')}`)
     linhas.push(`Veredito Geral;${resultado.veredito_geral}`)
     linhas.push(`Score de Conformidade;${resultado.score}%`)
     linhas.push(`Motivo do Veredito;"${(resultado.veredito_motivo || '').replace(/"/g, '""')}"`)
@@ -385,7 +386,7 @@ export default function Validar() {
         veredito_geral: resultado.veredito_geral,
         score_conformidade: resultado.score,
         veredito_motivo: resultado.veredito_motivo,
-        timestamp: resultado.timestamp,
+        timestamp: resultado.timestamp || resultado.data_validacao || new Date().toISOString(),
       },
       validacao_cruzada_campos: resultado.campos_validacao,
       travas_auditoria: resultado.travas,
