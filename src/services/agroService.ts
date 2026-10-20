@@ -170,28 +170,104 @@ export async function listarLogValidacoes(params?: {
 // -----------------------------------------------------------------------------
 // Bulk Insert no Cliente para Importações (Chunked com delay para estabilidade)
 // -----------------------------------------------------------------------------
+export interface ItemErroImportacao {
+  linhaOriginal: number
+  linhaLote: number
+  motivo: string
+  categoria: string
+  campo?: string
+  valor?: string
+  dados: Record<string, unknown>
+}
+
+export interface ResultadoImportacaoLote {
+  inseridos: number
+  ignorados: number
+  erros: ItemErroImportacao[]
+  resumoCategorias: Record<string, number>
+}
+
+/**
+ * Importação em lote resiliente com controle de concorrência,
+ * auto-retry exponencial contra rate-limit 429 e relatório detalhado com auditoria de erros.
+ */
 export async function importarEmLote<T extends Record<string, unknown>>(
   collectionName: string,
-  records: T[],
+  records: { data: T; originalLine?: number }[],
   onProgress?: (processados: number, total: number) => void,
-): Promise<{ inseridos: number; ignorados: number; erros: string[] }> {
+): Promise<ResultadoImportacaoLote> {
   let inseridos = 0
   let ignorados = 0
-  const erros: string[] = []
+  const erros: ItemErroImportacao[] = []
+  const resumoCategorias: Record<string, number> = {}
   const total = records.length
 
+  const registrarErro = (erro: ItemErroImportacao) => {
+    erros.push(erro)
+    resumoCategorias[erro.categoria] = (resumoCategorias[erro.categoria] || 0) + 1
+  }
+
   for (let i = 0; i < total; i++) {
-    const item = records[i]
-    try {
-      await pb.collection(collectionName).create(item)
-      inseridos++
-    } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : String(err)
-      if (msg.toLowerCase().includes('unique') || msg.toLowerCase().includes('already exists')) {
-        ignorados++
-      } else {
-        erros.push(`Linha ${i + 1}: ${msg}`)
+    const { data: item, originalLine } = records[i]
+    const rowNum = originalLine ?? i + 1
+
+    let sucesso = false
+    let tentativas = 0
+    const maxTentativas = 4
+
+    while (!sucesso && tentativas < maxTentativas) {
+      try {
+        await pb.collection(collectionName).create(item)
+        inseridos++
+        sucesso = true
+      } catch (err: unknown) {
+        tentativas++
+        const msg = err instanceof Error ? err.message : String(err)
+        const is429 = msg.includes('429') || msg.toLowerCase().includes('too many requests')
+        const isUnique =
+          msg.toLowerCase().includes('unique') || msg.toLowerCase().includes('already exists')
+
+        if (is429 && tentativas < maxTentativas) {
+          // Backoff exponencial para lidar suavemente com o rate limit do PocketBase
+          const delay = tentativas * 400 + Math.random() * 200
+          await new Promise((resolve) => setTimeout(resolve, delay))
+          continue
+        }
+
+        if (isUnique) {
+          ignorados++
+          sucesso = true
+        } else {
+          // Categorizar erro para relatório inteligível
+          let categoria = 'Erro no Banco de Dados'
+          let motivo = msg
+
+          if (msg.includes('nome_produto') || msg.includes('Cannot be blank')) {
+            categoria = 'Campo Obrigatório Ausente'
+            motivo = 'Nome do produto ou identificador obrigatório ausente.'
+          } else if (msg.includes('ncm')) {
+            categoria = 'NCM Inválido'
+            motivo = 'Formato ou valor de NCM rejeitado pelo banco.'
+          } else if (is429) {
+            categoria = 'Limite de Requisições (429)'
+            motivo = 'Muitas requisições simultâneas ao servidor.'
+          }
+
+          registrarErro({
+            linhaOriginal: rowNum,
+            linhaLote: i + 1,
+            motivo,
+            categoria,
+            dados: item,
+          })
+          break
+        }
       }
+    }
+
+    // Pequeno throttle de 30ms a cada 10 registros para garantir estabilidade da conexão
+    if (i % 10 === 0) {
+      await new Promise((resolve) => setTimeout(resolve, 30))
     }
 
     if (onProgress && (i % 5 === 0 || i === total - 1)) {
@@ -199,5 +275,5 @@ export async function importarEmLote<T extends Record<string, unknown>>(
     }
   }
 
-  return { inseridos, ignorados, erros }
+  return { inseridos, ignorados, erros, resumoCategorias }
 }
