@@ -46,12 +46,18 @@ export default function Validar() {
     nome_produto: '',
     ncm: '',
     embalagem: '',
+    quantidade_embalagem: '',
+    unidade_embalagem: 'L',
     principio_ativo: '',
     fabricante: '',
     registro_mapa: '',
     concentracao: 0,
     unidade_concentracao: 'g/L',
   })
+
+  // Quantidade da embalagem principal: valor numérico ou digitado e unidade selecionada
+  const [qtdValor, setQtdValor] = useState('')
+  const [qtdUnidade, setQtdUnidade] = useState<'L' | 'ML' | 'KG' | 'G'>('L')
 
   const [loading, setLoading] = useState(false)
   const [savingBaseMestre, setSavingBaseMestre] = useState(false)
@@ -62,13 +68,44 @@ export default function Validar() {
     setFormData((prev) => ({ ...prev, [field]: value }))
   }
 
+  // Normalizar quantidade da embalagem (ex.: 5 com L -> "5L", "25" com "KG" -> "25KG", ou se digitou "20L" direto)
+  const normalizarQtdEmbalagem = (valor: string, unidade: string): string => {
+    const limpo = valor.trim().toUpperCase().replace(/\s+/g, '')
+    if (!limpo) return ''
+    // Se o usuário já digitou letras/unidade (ex.: 5L, 20L, 25KG, 500ML)
+    if (/[A-Z]/.test(limpo)) {
+      return limpo
+    }
+    return `${limpo}${unidade}`
+  }
+
+  // Compor a embalagem final com o tipo e a quantidade principal
+  const comporEmbalagemFinal = (tipo: string, qtdNorm: string): string => {
+    const t = tipo.trim()
+    if (!qtdNorm) return t
+    if (!t) return qtdNorm
+    // Se a embalagem já contém a quantidade (ex.: "1X20L" ou "Bombona 5L"), mantém
+    if (t.toUpperCase().includes(qtdNorm)) return t
+    return `${t} ${qtdNorm}`.trim()
+  }
+
   const handleValidar = async (e: React.FormEvent) => {
     e.preventDefault()
     setLoading(true)
     setSalvoComSucesso(false)
 
     try {
-      const resp = await validarProdutoServidor(formData)
+      const qtdNorm = normalizarQtdEmbalagem(qtdValor, qtdUnidade)
+      const embalagemComposta = comporEmbalagemFinal(formData.embalagem, qtdNorm)
+
+      const dadosParaEnvio: ProdutoInput = {
+        ...formData,
+        embalagem: embalagemComposta,
+        quantidade_embalagem: qtdNorm,
+        unidade_embalagem: qtdUnidade,
+      }
+
+      const resp = await validarProdutoServidor(dadosParaEnvio)
       setRelatorio(resp)
       if (resp.status === 'APROVADO') {
         toast({
@@ -98,10 +135,14 @@ export default function Validar() {
     if (!relatorio || relatorio.status !== 'APROVADO') return
     setSavingBaseMestre(true)
     try {
+      const qtdNorm = normalizarQtdEmbalagem(qtdValor, qtdUnidade)
+      const embalagemFinal =
+        relatorio.produto_validado?.embalagem || comporEmbalagemFinal(formData.embalagem, qtdNorm)
+
       await criarProdutoBaseMestre({
         nome_produto: formData.nome_produto,
         ncm: formData.ncm.replace(/\D/g, ''),
-        embalagem: formData.embalagem,
+        embalagem: embalagemFinal,
         principio_ativo: formData.principio_ativo,
         fabricante: formData.fabricante,
         registro_mapa: formData.registro_mapa,
@@ -131,12 +172,16 @@ export default function Validar() {
       nome_produto: '',
       ncm: '',
       embalagem: '',
+      quantidade_embalagem: '',
+      unidade_embalagem: 'L',
       principio_ativo: '',
       fabricante: '',
       registro_mapa: '',
       concentracao: 0,
       unidade_concentracao: 'g/L',
     })
+    setQtdValor('')
+    setQtdUnidade('L')
     setRelatorio(null)
     setSalvoComSucesso(false)
   }
@@ -147,12 +192,16 @@ export default function Validar() {
       nome_produto: 'GLIFOSATO 480 SL PREMIUM',
       ncm: '38089324',
       embalagem: 'Bombona',
+      quantidade_embalagem: '5L',
+      unidade_embalagem: 'L',
       principio_ativo: 'Glifosato',
       fabricante: 'AgroQuímica do Brasil S/A',
       registro_mapa: '00123/21',
       concentracao: 480,
       unidade_concentracao: 'g/L',
     })
+    setQtdValor('5')
+    setQtdUnidade('L')
   }
 
   return (
@@ -242,7 +291,7 @@ export default function Validar() {
                   />
                 </div>
 
-                {/* Embalagem */}
+                {/* Tipo de Embalagem */}
                 <div className="space-y-1">
                   <Label htmlFor="embalagem" className="text-xs font-semibold text-[#1C2B1C]">
                     Tipo de Embalagem *
@@ -264,6 +313,93 @@ export default function Validar() {
                   </Select>
                 </div>
 
+                {/* Quantidade da Embalagem Principal */}
+                <div className="space-y-1">
+                  <div className="flex items-center justify-between">
+                    <Label htmlFor="qtd_embalagem" className="text-xs font-semibold text-[#1C2B1C]">
+                      Quantidade da Embalagem Principal *
+                    </Label>
+                    <span className="text-[10px] text-[#5A6D5A]">Volume / Peso da unidade</span>
+                  </div>
+                  <div className="grid grid-cols-3 gap-2">
+                    <div className="col-span-2">
+                      <Input
+                        id="qtd_embalagem"
+                        required
+                        value={qtdValor}
+                        onChange={(e) => setQtdValor(e.target.value)}
+                        placeholder="Ex.: 5, 10, 20 ou 25"
+                        className="h-9 text-xs border-[#DCE5DC] focus-visible:ring-[#1B5E20]"
+                      />
+                    </div>
+                    <div>
+                      <Select
+                        value={qtdUnidade}
+                        onValueChange={(val: 'L' | 'ML' | 'KG' | 'G') => setQtdUnidade(val)}
+                      >
+                        <SelectTrigger className="h-9 text-xs font-semibold border-[#DCE5DC]">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="L" className="text-xs font-semibold">
+                            L (Litros)
+                          </SelectItem>
+                          <SelectItem value="ML" className="text-xs font-semibold">
+                            ML (Mililitros)
+                          </SelectItem>
+                          <SelectItem value="KG" className="text-xs font-semibold">
+                            KG (Quilos)
+                          </SelectItem>
+                          <SelectItem value="G" className="text-xs font-semibold">
+                            G (Gramas)
+                          </SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  </div>
+                  <div className="flex items-center justify-between text-[11px] text-[#5A6D5A] px-0.5 pt-0.5">
+                    <span>Exemplos rápidos:</span>
+                    <div className="flex gap-1">
+                      {[
+                        { valor: '5', unidade: 'L' as const, label: '5L' },
+                        { valor: '10', unidade: 'L' as const, label: '10L' },
+                        { valor: '20', unidade: 'L' as const, label: '20L' },
+                        { valor: '1', unidade: 'KG' as const, label: '1KG' },
+                        { valor: '25', unidade: 'KG' as const, label: '25KG' },
+                      ].map((chip) => (
+                        <button
+                          key={chip.label}
+                          type="button"
+                          onClick={() => {
+                            setQtdValor(chip.valor)
+                            setQtdUnidade(chip.unidade)
+                          }}
+                          className="px-1.5 py-0.5 rounded text-[10px] font-semibold bg-emerald-50 text-[#1B5E20] hover:bg-emerald-100 transition-colors border border-emerald-200/60"
+                        >
+                          {chip.label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                  {qtdValor && (
+                    <p className="text-[10px] text-emerald-700 bg-emerald-50/60 rounded px-2 py-0.5 border border-emerald-200/40">
+                      Valor normalizado:{' '}
+                      <strong>{normalizarQtdEmbalagem(qtdValor, qtdUnidade)}</strong>
+                      {formData.embalagem ? (
+                        <span>
+                          {' '}
+                          — Formato submetido:{' '}
+                          <strong>
+                            {comporEmbalagemFinal(
+                              formData.embalagem,
+                              normalizarQtdEmbalagem(qtdValor, qtdUnidade),
+                            )}
+                          </strong>
+                        </span>
+                      ) : null}
+                    </p>
+                  )}
+                </div>
                 {/* Princípio Ativo */}
                 <div className="space-y-1">
                   <Label htmlFor="pa" className="text-xs font-semibold text-[#1C2B1C]">
@@ -545,12 +681,19 @@ export default function Validar() {
                           <AlertTriangle className="w-5 h-5 animate-in zoom-in-75 duration-200" />
                         )}
                       </div>
-
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center justify-between gap-2">
-                          <h5 className="text-xs font-bold text-[#1C2B1C]">
-                            Trava {trava.id_trava}: {trava.trava_nome}
-                          </h5>
+                          <div className="flex items-center gap-2">
+                            <h5 className="text-xs font-bold text-[#1C2B1C]">
+                              Trava {trava.id_trava}: {trava.trava_nome}
+                            </h5>
+                            {trava.id_trava === 2 &&
+                              relatorio.produto_validado?.quantidade_embalagem && (
+                                <Badge className="bg-emerald-50 text-emerald-800 border border-emerald-200 text-[10px] px-1.5 py-0 h-4 font-mono font-medium">
+                                  Qtd: {relatorio.produto_validado.quantidade_embalagem}
+                                </Badge>
+                              )}
+                          </div>
                           <Badge
                             variant="outline"
                             className={`text-[10px] uppercase font-bold border-0 ${
@@ -565,7 +708,7 @@ export default function Validar() {
                         <p className="text-xs text-[#5A6D5A] mt-1 leading-relaxed">
                           {trava.mensagem}
                         </p>
-                      </div>
+                      </div>{' '}
                     </div>
                   )
                 })}

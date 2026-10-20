@@ -83,6 +83,7 @@ export interface RelatorioValidacao {
     nome_produto: string
     ncm: string
     embalagem: string
+    quantidade_embalagem?: string
     principio_ativo: string
     fabricante: string
     registro_mapa: string
@@ -94,6 +95,8 @@ export interface ProdutoInput {
   nome_produto: string
   ncm: string
   embalagem: string
+  quantidade_embalagem?: string
+  unidade_embalagem?: string
   principio_ativo: string
   fabricante: string
   registro_mapa: string

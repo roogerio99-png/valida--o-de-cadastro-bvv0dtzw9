@@ -19,7 +19,39 @@ routerAdd('POST', '/backend/v1/validar-produto', (e) => {
   // Limpar NCM mantendo apenas números
   const ncmRaw = String(data.ncm || '').trim()
   const ncm = ncmRaw.replace(/\D/g, '')
-  const embalagem = String(data.embalagem || '').trim()
+  let embalagem = String(data.embalagem || '').trim()
+  const quantidadeEmbalagem = String(
+    data.quantidade_embalagem || data.qtd_embalagem_principal || '',
+  ).trim()
+  const unidadeEmbalagem = String(
+    data.unidade_embalagem || data.unidade_embalagem_principal || '',
+  ).trim()
+
+  // Se a quantidade da embalagem foi informada separadamente e não consta na string de embalagem, compor
+  let qtdFormatada = ''
+  if (quantidadeEmbalagem) {
+    const qtdUpper = quantidadeEmbalagem.toUpperCase().replace(/\s+/g, '')
+    const unidUpper = unidadeEmbalagem.toUpperCase().replace(/\s+/g, '')
+    // Se a quantidade já contém unidade (ex.: 5L, 25KG), usa direto
+    if (/[A-Z]/.test(qtdUpper)) {
+      qtdFormatada = qtdUpper
+    } else if (unidUpper) {
+      qtdFormatada = `${qtdUpper}${unidUpper}`
+    } else {
+      qtdFormatada = qtdUpper
+    }
+  }
+
+  // Compor a embalagem principal se fornecida
+  if (qtdFormatada) {
+    if (!embalagem) {
+      embalagem = qtdFormatada
+    } else if (!embalagem.toUpperCase().includes(qtdFormatada)) {
+      // Ex.: "Bombona 5L" ou "5L (Bombona)"
+      embalagem = `${embalagem} ${qtdFormatada}`.trim()
+    }
+  }
+
   const principioAtivo = String(data.principio_ativo || '').trim()
   const fabricante = String(data.fabricante || '').trim()
   const registroMapa = String(data.registro_mapa || '').trim()
@@ -100,19 +132,28 @@ routerAdd('POST', '/backend/v1/validar-produto', (e) => {
         trava2Passou = true
         trava2Msg = `Nenhuma restrição específica de embalagem cadastrada para o NCM ${ncm}. Embalagem "${embalagem}" aceita.`
       } else {
-        // Normalização agressiva para bater embalagens como "4X5L", "5L", "Bombona", "Saco"
+        // Normalização agressiva para bater embalagens como "4X5L", "5L", "Bombona", "Saco", "Bombona 5L"
         const cleanStr = (s) =>
           String(s || '')
             .toLowerCase()
             .replace(/[\s\-_]/g, '')
 
         const embNorm = cleanStr(embalagem)
+        const qtdNorm = cleanStr(qtdFormatada)
 
         const match = permitidas.some((p) => {
           const pNorm = cleanStr(p)
           if (!pNorm) return false
           if (embNorm === pNorm) return true
           if (embNorm.includes(pNorm) || pNorm.includes(embNorm)) return true
+
+          // Se a quantidade informada bater com a permitida (ex.: "5L" ou "10KG")
+          if (
+            qtdNorm &&
+            (pNorm === qtdNorm || pNorm.includes(qtdNorm) || qtdNorm.includes(pNorm))
+          ) {
+            return true
+          }
 
           // Se a embalagem contiver o volume unitário (ex.: 5L contido em 4X5L)
           const embOnlyNumberUnit = embNorm.replace(/[^0-9a-z]/g, '')
@@ -452,6 +493,7 @@ routerAdd('POST', '/backend/v1/validar-produto', (e) => {
       nome_produto: nomeProduto,
       ncm: ncm,
       embalagem: embalagem,
+      quantidade_embalagem: qtdFormatada || undefined,
       principio_ativo: principioAtivo,
       fabricante: fabricante,
       registro_mapa: registroMapa,
