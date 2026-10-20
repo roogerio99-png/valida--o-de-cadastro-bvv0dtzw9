@@ -120,11 +120,31 @@ export async function listarBaseMestre(params?: {
 }
 
 export async function criarProdutoBaseMestre(data: Partial<BaseMestreProduto>) {
-  return pb.collection('base_mestre').create<BaseMestreProduto>(data)
+  const payload: Record<string, unknown> = { ...data }
+  if (data.marca_padronizada && !payload.nome_produto) {
+    payload.nome_produto = data.marca_padronizada
+  }
+  if (data.ncm_padrao && !payload.ncm) {
+    payload.ncm = data.ncm_padrao.replace(/\D/g, '')
+  }
+  if (data.titular_fabricante && !payload.fabricante) {
+    payload.fabricante = data.titular_fabricante
+  }
+  return pb.collection('base_mestre').create<BaseMestreProduto>(payload)
 }
 
 export async function atualizarProdutoBaseMestre(id: string, data: Partial<BaseMestreProduto>) {
-  return pb.collection('base_mestre').update<BaseMestreProduto>(id, data)
+  const payload: Record<string, unknown> = { ...data }
+  if (data.marca_padronizada && !payload.nome_produto) {
+    payload.nome_produto = data.marca_padronizada
+  }
+  if (data.ncm_padrao && !payload.ncm) {
+    payload.ncm = data.ncm_padrao.replace(/\D/g, '')
+  }
+  if (data.titular_fabricante && !payload.fabricante) {
+    payload.fabricante = data.titular_fabricante
+  }
+  return pb.collection('base_mestre').update<BaseMestreProduto>(id, payload)
 }
 
 export async function excluirProdutoBaseMestre(id: string) {

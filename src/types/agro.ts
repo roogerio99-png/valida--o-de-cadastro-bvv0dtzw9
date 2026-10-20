@@ -23,17 +23,61 @@ export interface DicionarioPrincipioAtivo extends RecordModel {
 
 export type StatusValidacao = 'aprovado' | 'reprovado' | 'pendente'
 
+export type TipoProdutoCanonico =
+  | 'Produto Formulado Comercial'
+  | 'Produto Técnico Industrial'
+  | 'Pré-Mistura Industrial'
+  | 'Fertilizante Mineral / Organomineral'
+  | 'Inoculante / Biológico'
+  | 'Corretivo / Condicionador de Solo'
+  | 'Semente Certificada'
+  | 'Adjuvante / Espalhante Adesivo'
+  | 'Outros Insumos Químicos e Reagentes'
+
+export type UnidadeFisicaCanonica = 'L' | 'KG' | 'SC' | 'UN' | 'DOSES'
+
 export interface BaseMestreProduto extends RecordModel {
-  nome_produto: string
-  ncm: string
+  // Contrato Canônico de 28 Campos (v2.4.0)
+  nome_completo?: string
+  marca_padronizada?: string
+  tipo_produto?: TipoProdutoCanonico
   embalagem: string
+  unidade?: UnidadeFisicaCanonica
   principio_ativo: string
-  fabricante: string
+  macro_grupo?: string
+  sub_grupo?: string
+  nota_subpos_2?: 'SIM' | 'NÃO'
+  ncm_padrao?: string
+  ncm_faixa1_ate_300g?: string
+  ncm_faixa2_300g_a_7_5kg?: string
+  ncm_faixa3_7_5kg_a_10kg?: string
+  ncm_faixa4_acima_10kg?: string
+  regra_tipi?: string
   registro_mapa: string
-  concentracao: number
+  sistema_norma_mapa?: string
+  titular_fabricante?: string
+  origem_base?: string
+  status_pis_cofins?: string
+  aliquota_ate_mar2026?: string
+  aliquota_pos_abr2026_real?: string
+  aliquota_pos_abr2026_presumido?: string
+  cst_saida?: string
+  cst_entrada?: string
+  ibs_cbs_2027?: string
+  url_oficial?: string
+
+  // Legado e compatibilidade
+  nome_produto?: string
+  ncm?: string
+  fabricante?: string
+  concentracao?: number
   unidade_concentracao?: string
-  status_validacao: StatusValidacao
-  data_inclusao: string
+  status_validacao?: StatusValidacao
+  data_inclusao?: string
+  macro_grupo_subgrupo?: string
+  regra_tipi_embalagem?: string
+  cst_recomendado?: string
+  dados_classificacao?: string
   created: string
   updated: string
 }

@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-10-20T15:41:37.663Z",
+  "generatedAt": "2026-10-20T15:57:45.433Z",
   "collections": [
     {
       "name": "users",
@@ -290,11 +290,158 @@
           "type": "json",
           "required": false,
           "system": false
+        },
+        {
+          "name": "nome_completo",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "marca_padronizada",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "tipo_produto",
+          "type": "select",
+          "required": false,
+          "system": false,
+          "selectValues": [
+            "Produto Formulado Comercial",
+            "Produto Técnico Industrial",
+            "Pré-Mistura Industrial",
+            "Fertilizante Mineral / Organomineral",
+            "Inoculante / Biológico",
+            "Corretivo / Condicionador de Solo",
+            "Semente Certificada",
+            "Adjuvante / Espalhante Adesivo",
+            "Outros Insumos Químicos e Reagentes"
+          ]
+        },
+        {
+          "name": "unidade",
+          "type": "select",
+          "required": false,
+          "system": false,
+          "selectValues": ["L", "KG", "SC", "UN", "DOSES"]
+        },
+        {
+          "name": "macro_grupo",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "sub_grupo",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "nota_subpos_2",
+          "type": "select",
+          "required": false,
+          "system": false,
+          "selectValues": ["SIM", "NÃO"]
+        },
+        {
+          "name": "ncm_padrao",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "ncm_faixa1_ate_300g",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "ncm_faixa2_300g_a_7_5kg",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "ncm_faixa3_7_5kg_a_10kg",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "ncm_faixa4_acima_10kg",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "regra_tipi",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "sistema_norma_mapa",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "titular_fabricante",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "status_pis_cofins",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "aliquota_ate_mar2026",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "aliquota_pos_abr2026_real",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "aliquota_pos_abr2026_presumido",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "cst_saida",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "cst_entrada",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "url_oficial",
+          "type": "text",
+          "required": false,
+          "system": false
         }
       ],
       "indexes": [
-        "CREATE INDEX idx_base_mestre_busca ON base_mestre (nome_produto, ncm, fabricante)",
-        "CREATE UNIQUE INDEX idx_base_mestre_unique ON base_mestre (ncm, principio_ativo, fabricante) WHERE ncm != '' AND principio_ativo != '' AND fabricante != ''"
+        "CREATE INDEX `idx_cadmestre_regmapa` ON `base_mestre` (registro_mapa)",
+        "CREATE INDEX `idx_cadmestre_marca_pad` ON `base_mestre` (marca_padronizada)",
+        "CREATE INDEX `idx_cadmestre_ncm_padrao` ON `base_mestre` (ncm_padrao)",
+        "CREATE INDEX `idx_cadmestre_macro` ON `base_mestre` (macro_grupo)"
       ]
     },
     {

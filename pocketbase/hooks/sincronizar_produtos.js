@@ -7,20 +7,18 @@
  * 2. AGROFIT Técnicos (CSV do MAPA)
  * 3. SIPEAGRO Fertilizantes (CSV do MAPA)
  *
- * Motor de classificação determinístico:
- * - Dicionário de Princípios Ativos local como matriz de referência
- * - Nota de Subposições 2 do Cap. 38 TIPI (SC COSIT 98.042/2022)
- * - Fallbacks específicos para AGROFIT Formulados, Técnicos e SIPEAGRO
- * - Enquadramento tributário (PIS/COFINS, CST e Reforma Tributária IBS/CBS LC 214/2025)
- * - Trava 4 (duplicidade) obrigatória com detecção de desfechos:
- *   - IMPORTADO: novo produto inserido na base_mestre
- *   - JA_EXISTENTE: cadastro já existente na base_mestre com indicação do critério da Trava 4
- *   - ATUALIZADO: já existia mas tinha dados faltantes preenchidos pelo MAPA
- *   - DESCARTADO: registro incompleto ou inválido com motivo
- * - Persistência do histórico e RELATÓRIO DE INTEGRAÇÃO COMPLETO na collection sincronizacao_historico
+ * Conformidade estrita com o Padrão Canônico de 28 Campos (v2.4.0):
+ * - Higienização e desmembramento de clones de marca ("SAMURAI / BUSHI")
+ * - Rol taxativo da Nota de Subposições 2 do Cap. 38 TIPI (SC COSIT 98.042/2022)
+ * - Matriz de Decisão das 4 faixas de embalagem aduaneira
+ * - Motor tributário temporal PIS/COFINS (LC 224/2025) e IBS/CBS (LC 214/2025)
+ * - Sanitização de Registro MAPA preservando zeros à esquerda (ex.: 315 -> Nº 0315)
+ * - Trava 4 (duplicidade) com atualização e desfechos no Relatório de Integração
+ * - Preenchimento obrigatório e estrito dos 28 campos canônicos na collection base_mestre
  */
 
 routerAdd('POST', '/backend/v1/sincronizar-produtos', (e) => {
+  const motor = require(`${__hooks}/motor_canonico.js`)
   const startTime = Date.now()
   const info = e.requestInfo()
   const body = info.body || {}
@@ -61,35 +59,8 @@ routerAdd('POST', '/backend/v1/sincronizar-produtos', (e) => {
     },
   }
 
-  // Moléculas da Nota de Subposições 2 do Cap. 38 TIPI (SC COSIT 98.042/2022)
-  const MOLECULAS_NOTA_SUBPOS_2 = [
-    'BIFENTRINA',
-    'LAMBDA-CIALOTRINA',
-    'LAMBDA CIALOTRINA',
-    'CLORFENAPIR',
-    'CHLORFENAPYR',
-    'MALATIONA',
-    'FENITROTIONA',
-    'BETA-CIFLUTRINA',
-    'BETA CIFLUTRINA',
-    'CIFLUTRINA',
-    'ALFA-CIPERMETRINA',
-    'ALFA CIPERMETRINA',
-    'ALPHA-CYPERMETHRIN',
-    'DELTAMETRINA',
-    'PERMETRINA',
-    'PROPOXUR',
-    'BENDIOCARBE',
-    'BENDIOCARB',
-  ]
-
-  // Helpers de normalização de texto
   function normTxt(s) {
-    if (!s) return ''
-    return String(s)
-      .toLowerCase()
-      .replace(/[\u0300-\u036f]/g, '')
-      .replace(/[^a-z0-9]/g, '')
+    return motor.normalizarTexto(s)
   }
 
   function cleanString(s) {
@@ -98,19 +69,6 @@ routerAdd('POST', '/backend/v1/sincronizar-produtos', (e) => {
       .trim()
       .replace(/[\r\n\t]+/g, ' ')
       .replace(/\s+/g, ' ')
-  }
-
-  function cleanNcm(ncm) {
-    if (!ncm) return ''
-    const clean = String(ncm).replace(/\D/g, '')
-    return clean.slice(0, 8)
-  }
-
-  // Checagem de Nota de Subposições 2
-  function checkNotaSubpos2(pa) {
-    if (!pa) return false
-    const paUpper = String(pa).toUpperCase()
-    return MOLECULAS_NOTA_SUBPOS_2.some((mol) => paUpper.includes(mol))
   }
 
   // Carregar matriz local existente de princípios ativos do banco
@@ -136,25 +94,29 @@ routerAdd('POST', '/backend/v1/sincronizar-produtos', (e) => {
   try {
     const records = $app.findRecordsByFilter('base_mestre', 'id != ""', '-created', 3000, 0) || []
     produtosExistentes = records.map((r) => {
-      const nomeP = r.getString('nome_produto') || ''
-      const ncmVal = cleanNcm(r.getString('ncm'))
+      const nomeP = r.getString('nome_completo') || r.getString('nome_produto') || ''
+      const marcaP = r.getString('marca_padronizada') || ''
+      const ncmVal = String(r.getString('ncm_padrao') || r.getString('ncm') || '').replace(
+        /\D/g,
+        '',
+      )
       const regMapa = String(r.getString('registro_mapa') || '').trim()
       const paVal = r.getString('principio_ativo') || ''
-      const fabVal = r.getString('fabricante') || ''
+      const fabVal = r.getString('titular_fabricante') || r.getString('fabricante') || ''
       return {
         id: r.id,
         recordObj: r,
-        nome_produto: nomeP,
+        nome_completo: nomeP,
         nomeNorm: normTxt(nomeP),
-        ncm: ncmVal,
+        marca_padronizada: marcaP,
+        marcaNorm: normTxt(marcaP),
+        ncm_padrao: ncmVal,
         registro_mapa: regMapa,
         mapaDigits: regMapa.replace(/\D/g, ''),
         principio_ativo: paVal,
         paNorm: normTxt(paVal),
-        fabricante: fabVal,
+        titular_fabricante: fabVal,
         fabNorm: normTxt(fabVal),
-        cst_recomendado: r.getString('cst_recomendado') || '',
-        ibs_cbs_2027: r.getString('ibs_cbs_2027') || '',
       }
     })
   } catch (err) {
@@ -245,7 +207,6 @@ routerAdd('POST', '/backend/v1/sincronizar-produtos', (e) => {
     ].join('\n')
   }
 
-  // Helper de download tolerante a falhas (timeout 15s por fonte, headers e detecção de delimitador)
   function downloadCsv(url, origem) {
     try {
       const res = $http.send({
@@ -272,7 +233,6 @@ routerAdd('POST', '/backend/v1/sincronizar-produtos', (e) => {
         }
       }
 
-      // Se servidor do MAPA responder com erro ou vazio, aciona a contingência oficial do MAPA
       console.log(
         `Aviso: HTTP ${res.statusCode} do MAPA para ${origem}. Acionando amostra oficial de contingência.`,
       )
@@ -295,7 +255,6 @@ routerAdd('POST', '/backend/v1/sincronizar-produtos', (e) => {
     }
   }
 
-  // Parser de CSV com detecção de delimitador (; vs , vs \t)
   function parseCsvLinhas(rawText, maxLinhas) {
     if (!rawText) return []
 
@@ -355,346 +314,14 @@ routerAdd('POST', '/backend/v1/sincronizar-produtos', (e) => {
     return itens
   }
 
-  // Motor de Classificação Determinístico
-  function classificarProduto(origem, itemRaw) {
-    const cols = itemRaw.__rawColunas || []
-    let nomeProduto = ''
-    let registroMapa = ''
-    let titular = ''
-    let principioAtivo = ''
-    let classeUso = ''
-
-    if (origem === 'AGROFIT_FORMULADO') {
-      nomeProduto = cleanString(
-        itemRaw.marcaproduto ||
-          itemRaw.nomecomercial ||
-          itemRaw.nomedoproduto ||
-          itemRaw.marcacomercal ||
-          cols[0] ||
-          '',
-      )
-      registroMapa = cleanString(
-        itemRaw.numregistro ||
-          itemRaw.numerodoregistro ||
-          itemRaw.nregistro ||
-          itemRaw.registro ||
-          cols[1] ||
-          '',
-      )
-      titular = cleanString(
-        itemRaw.titularregistro || itemRaw.empresa || itemRaw.titular || cols[2] || 'Não informado',
-      )
-      principioAtivo = cleanString(
-        itemRaw.ingredienteativo || itemRaw.principioativo || itemRaw.composicao || cols[3] || '',
-      )
-      classeUso = cleanString(
-        itemRaw.classe || itemRaw.classeagronomica || itemRaw.classedouso || cols[4] || '',
-      )
-    } else if (origem === 'AGROFIT_TECNICO') {
-      nomeProduto = cleanString(
-        itemRaw.marcaproduto ||
-          itemRaw.nomedoprodutotecnico ||
-          itemRaw.nomedoproduto ||
-          cols[0] ||
-          '',
-      )
-      registroMapa = cleanString(
-        itemRaw.numregistro || itemRaw.numerodoregistro || itemRaw.nregistro || cols[1] || '',
-      )
-      titular = cleanString(
-        itemRaw.titularregistro || itemRaw.empresa || itemRaw.titular || cols[2] || 'Não informado',
-      )
-      principioAtivo = cleanString(
-        itemRaw.ingredienteativo || itemRaw.principioativo || cols[3] || nomeProduto || '',
-      )
-      classeUso = 'Produto Técnico'
-    } else if (origem === 'SIPEAGRO') {
-      nomeProduto = cleanString(
-        itemRaw.denominacaoproduto ||
-          itemRaw.nomecomercial ||
-          itemRaw.nomedoproduto ||
-          cols[0] ||
-          '',
-      )
-      registroMapa = cleanString(
-        itemRaw.numeroregistroproduto || itemRaw.registro || itemRaw.nregistro || cols[1] || '',
-      )
-      titular = cleanString(itemRaw.razaosocial || itemRaw.empresa || cols[2] || 'Não informado')
-      principioAtivo = cleanString(
-        itemRaw.materiaprima ||
-          itemRaw.garantias ||
-          itemRaw.classificacao ||
-          cols[3] ||
-          nomeProduto ||
-          '',
-      )
-      classeUso = cleanString(itemRaw.classificacao || 'Fertilizante')
-    }
-
-    if (!nomeProduto && cols[0]) {
-      nomeProduto = cleanString(cols[0])
-    }
-    if (!principioAtivo && nomeProduto) {
-      principioAtivo = nomeProduto
-    }
-
-    const paUpper = principioAtivo.toUpperCase()
-    const nomeUpper = nomeProduto.toUpperCase()
-    const classeUpper = classeUso.toUpperCase()
-
-    // 1. Matriz local de Princípios Ativos (busca exata ou prefixo >= 5 chars)
-    let matchLocal = null
-    const paNorm = normTxt(principioAtivo)
-    if (paNorm.length >= 3) {
-      matchLocal = matrizLocalPa.find((m) => {
-        if (m.norm === paNorm) return true
-        if (m.norm.length >= 5 && (paNorm.includes(m.norm) || m.norm.includes(paNorm))) {
-          return true
-        }
-        return false
-      })
-    }
-
-    // 2. Nota de Subposições 2 do Cap. 38 TIPI
-    const pertenceNotaSubpos2 = checkNotaSubpos2(principioAtivo) || checkNotaSubpos2(nomeProduto)
-
-    // 3. Fallbacks determinísticos por origem
-    let ncmPadrao = ''
-    let ncmFaixa1 = '' // <= 300g/mL
-    let ncmFaixa2 = '' // 300g a 7,5kg/L
-    let ncmFaixa3 = '' // 7,5kg a 10kg/L
-    let ncmFaixa4 = '' // > 10kg/L
-    let regraTipiEmbalagem = ''
-    let macroGrupoSubgrupo = ''
-    let regimeTipo = 'beneficiado'
-
-    if (origem === 'AGROFIT_TECNICO') {
-      macroGrupoSubgrupo = 'AGROFIT — Produto Técnico (Lei nº 14.785/2023)'
-      regraTipiEmbalagem =
-        'Nota 2 Seção VI TIPI: Produto Técnico isolado (Cap. 29) ou preparação intermediária (38.08)'
-      regimeTipo = 'condicional'
-
-      if (pertenceNotaSubpos2) {
-        ncmPadrao = '3808.69.90'
-      } else if (classeUpper.includes('HERBICIDA') || paUpper.includes('HERBICIDA')) {
-        ncmPadrao = '3808.93.19'
-      } else if (classeUpper.includes('FUNGICIDA') || paUpper.includes('FUNGICIDA')) {
-        ncmPadrao = '3808.92.20'
-      } else {
-        ncmPadrao = '3808.91.20'
-      }
-      ncmFaixa1 = ncmPadrao
-      ncmFaixa2 = ncmPadrao
-      ncmFaixa3 = ncmPadrao
-      ncmFaixa4 = ncmPadrao
-    } else if (origem === 'SIPEAGRO') {
-      regimeTipo = 'condicional'
-      if (
-        paUpper.includes('INOCULANTE') ||
-        paUpper.includes('BRADYRHIZOBIUM') ||
-        paUpper.includes('AZOSPIRILLUM') ||
-        paUpper.includes('RHIZOBIUM') ||
-        nomeUpper.includes('INOCULANTE') ||
-        nomeUpper.includes('BRADYRHIZOBIUM') ||
-        nomeUpper.includes('AZOSPIRILLUM')
-      ) {
-        macroGrupoSubgrupo = 'Inoculantes e Biológicos — Inoculante Fixador de Nitrogênio'
-        ncmPadrao = '3002.49.99'
-        ncmFaixa1 = '3002.49.99'
-        ncmFaixa2 = '3002.49.99'
-        ncmFaixa3 = '3002.49.99'
-        ncmFaixa4 = '3002.49.99'
-        regraTipiEmbalagem = 'Culturas de microrganismos para fixação biológica de N2'
-        regimeTipo = 'beneficiado'
-      } else if (
-        paUpper.includes('MEGATERIUM') ||
-        paUpper.includes('SOLUBILIZADOR') ||
-        paUpper.includes('PRIESTIA') ||
-        paUpper.includes('PSEUDOMONAS') ||
-        nomeUpper.includes('SOLUBILIZADOR')
-      ) {
-        macroGrupoSubgrupo = 'Inoculantes e Biológicos — Solubilizador de Fósforo/Nutrientes'
-        ncmPadrao = '3002.49.99'
-        ncmFaixa1 = '3002.49.99'
-        ncmFaixa2 = '3002.49.99'
-        ncmFaixa3 = '3002.49.99'
-        ncmFaixa4 = '3002.49.99'
-        regraTipiEmbalagem = 'Biológicos promotores de crescimento e solubilização'
-        regimeTipo = 'tributado_integral'
-      } else if (
-        paUpper.includes('CORRETIVO') ||
-        paUpper.includes('CALCARIO') ||
-        paUpper.includes('GESSO') ||
-        paUpper.includes('FOSFOGESSO') ||
-        paUpper.includes('CONDICIONADOR') ||
-        nomeUpper.includes('CORRETIVO') ||
-        nomeUpper.includes('CALCARIO') ||
-        nomeUpper.includes('GESSO')
-      ) {
-        macroGrupoSubgrupo = 'Corretivos e Condicionadores de Solo (IN 35/2006)'
-        regraTipiEmbalagem = 'Condicionadores e corretivos de solo a granel ou ensacados'
-        if (paUpper.includes('GESSO') || nomeUpper.includes('GESSO')) {
-          ncmPadrao = '2520.10.19'
-        } else if (paUpper.includes('CALCARIO') || nomeUpper.includes('CALCARIO')) {
-          ncmPadrao = '2521.00.00'
-        } else {
-          ncmPadrao = '2503.00.90'
-        }
-        ncmFaixa1 = ncmPadrao
-        ncmFaixa2 = ncmPadrao
-        ncmFaixa3 = ncmPadrao
-        ncmFaixa4 = ncmPadrao
-        regimeTipo = 'condicional'
-      } else {
-        macroGrupoSubgrupo = 'Fertilizantes Minerais e Orgânicos (IN 39/2018)'
-        regraTipiEmbalagem =
-          'Nota 1 Cap. 31 TIPI: Embalagens <= 10kg classificam-se na posição 3105.10.00'
-        if (paUpper.includes('ORGANO') || nomeUpper.includes('ORGANO')) {
-          ncmPadrao = '3101.00.00'
-          ncmFaixa1 = '3105.10.00'
-          ncmFaixa2 = '3105.10.00'
-          ncmFaixa3 = '3105.10.00'
-          ncmFaixa4 = '3101.00.00'
-        } else {
-          ncmPadrao = '3105.90.90'
-          ncmFaixa1 = '3105.10.00'
-          ncmFaixa2 = '3105.10.00'
-          ncmFaixa3 = '3105.10.00'
-          ncmFaixa4 = '3105.90.90'
-        }
-        regimeTipo = 'beneficiado'
-      }
-    } else {
-      // AGROFIT_FORMULADO (Posição 38.08 TIPI)
-      macroGrupoSubgrupo = 'Defensivos Agrícolas Formulados (Capítulo 38 TIPI)'
-      regraTipiEmbalagem =
-        'Nota 1 e 2 Cap. 38 TIPI: Escalonamento por faixa unitária de acondicionamento'
-      regimeTipo = 'beneficiado'
-
-      if (pertenceNotaSubpos2) {
-        macroGrupoSubgrupo =
-          'Defensivos — Moléculas da Nota de Subposições 2 Cap. 38 TIPI (SC COSIT 98.042/2022)'
-        ncmPadrao = '3808.62.90'
-        ncmFaixa1 = '3808.61.00'
-        ncmFaixa2 = '3808.62.90'
-        ncmFaixa3 = '3808.69.90'
-        ncmFaixa4 = '3808.69.90'
-      } else if (classeUpper.includes('HERBICIDA') || paUpper.includes('HERBICIDA')) {
-        if (paUpper.includes('2,4-D') || paUpper.includes('2-4 D') || paUpper.includes('MCPA')) {
-          ncmPadrao = '3808.93.22'
-        } else if (paUpper.includes('ATRAZINA') || paUpper.includes('DIURON')) {
-          ncmPadrao = '3808.93.23'
-        } else if (paUpper.includes('GLIFOSATO') || paUpper.includes('GLYPHOSATE')) {
-          ncmPadrao = '3808.93.24'
-        } else if (
-          paUpper.includes('IMAZETAPIR') ||
-          paUpper.includes('CLORIMURON') ||
-          paUpper.includes('METSULFURON') ||
-          paUpper.includes('NICOSULFUROM') ||
-          paUpper.includes('NICOSULFURON')
-        ) {
-          ncmPadrao = '3808.93.27'
-        } else if (
-          paUpper.includes('AMETRINA') ||
-          paUpper.includes('HEXAZINONA') ||
-          paUpper.includes('METRIBUZIM') ||
-          paUpper.includes('METRIBUZIN')
-        ) {
-          ncmPadrao = '3808.93.28'
-        } else {
-          ncmPadrao = '3808.93.29'
-        }
-        ncmFaixa1 = ncmPadrao
-        ncmFaixa2 = ncmPadrao
-        ncmFaixa3 = ncmPadrao
-        ncmFaixa4 = ncmPadrao
-      } else if (classeUpper.includes('REGULADOR') || paUpper.includes('REGULADOR')) {
-        ncmPadrao = '3808.93.59'
-        ncmFaixa1 = ncmPadrao
-        ncmFaixa2 = ncmPadrao
-        ncmFaixa3 = ncmPadrao
-        ncmFaixa4 = ncmPadrao
-      } else if (classeUpper.includes('FUNGICIDA') || paUpper.includes('FUNGICIDA')) {
-        if (paUpper.includes('MANCOZEBE') || paUpper.includes('MANCOZEB')) {
-          ncmPadrao = '3808.92.93'
-        } else {
-          ncmPadrao = '3808.92.99'
-        }
-        ncmFaixa1 = ncmPadrao
-        ncmFaixa2 = ncmPadrao
-        ncmFaixa3 = ncmPadrao
-        ncmFaixa4 = ncmPadrao
-      } else if (classeUpper.includes('NEMATICIDA') || paUpper.includes('NEMATICIDA')) {
-        ncmPadrao = '3808.99.95'
-        ncmFaixa1 = ncmPadrao
-        ncmFaixa2 = ncmPadrao
-        ncmFaixa3 = ncmPadrao
-        ncmFaixa4 = ncmPadrao
-      } else {
-        if (paUpper.includes('ACEFATO') || paUpper.includes('THURINGIENSIS')) {
-          ncmPadrao = '3808.91.91'
-        } else if (paUpper.includes('CIPERMETRINA') || paUpper.includes('CYPERMETHRIN')) {
-          ncmPadrao = '3808.91.92'
-        } else {
-          ncmPadrao = '3808.91.99'
-        }
-        ncmFaixa1 = ncmPadrao
-        ncmFaixa2 = ncmPadrao
-        ncmFaixa3 = ncmPadrao
-        ncmFaixa4 = ncmPadrao
-      }
-    }
-
-    let enquadramentoPisCofins = ''
-    let cstRecomendado = ''
-    let ibsCbs2027 = ''
-
-    if (regimeTipo === 'tributado_integral') {
-      enquadramentoPisCofins =
-        '9,25% Real | 3,65% Presumido até Mar/2026; 9,250% Real / 3,650% Presumido pós-Abr/2026'
-      cstRecomendado = 'Saída: CST 01 (9,25% Real / 3,65% Pres.) | Entrada Revenda Real: CST 50'
-      ibsCbs2027 = 'Alíquota Padrão Integral'
-    } else if (regimeTipo === 'condicional') {
-      enquadramentoPisCofins =
-        'Benefício Condicional à Destinação Agrícola: 0,00% até Mar/2026 (Dec. 5.630/05) | 0,925% Real / 0,365% Presumido pós-Abr/2026'
-      cstRecomendado = 'Saída: CST 06 (c/ Ajuste M220/M620 pós-Abr/26) | Entrada Revenda: CST 73'
-      ibsCbs2027 = 'Redução de 60% + Diferimento (Art. 138 e Anexo IX LC 214/2025)'
-    } else {
-      enquadramentoPisCofins =
-        '0,00% (Lei nº 10.925/2004) até Mar/2026; 0,925% (LC nº 224/2025) Real / 0,365% (LC nº 224/2025) Presumido pós-Abr/2026'
-      cstRecomendado = 'Saída: CST 06 (c/ Ajuste M220/M620 pós-Abr/26) | Entrada Revenda: CST 73'
-      ibsCbs2027 = 'Redução de 60% + Diferimento (Art. 138 e Anexo IX LC 214/2025)'
-    }
-
-    return {
-      origem_base: origem,
-      numero_registro_mapa: registroMapa,
-      marcas_comerciais: nomeProduto,
-      titular_registro: titular,
-      principio_ativo_garantias: principioAtivo,
-      classe_uso: classeUso,
-      macro_grupo_subgrupo: macroGrupoSubgrupo,
-      pertence_nota_subpos_2: pertenceNotaSubpos2 ? 'SIM' : 'NÃO',
-      ncm_padrao: ncmPadrao,
-      ncm_faixa1_ate_300g: ncmFaixa1 || ncmPadrao,
-      ncm_faixa2_300g_a_7_5kg: ncmFaixa2 || ncmPadrao,
-      ncm_faixa3_7_5kg_a_10kg: ncmFaixa3 || ncmPadrao,
-      ncm_faixa4_acima_10kg: ncmFaixa4 || ncmPadrao,
-      regra_tipi_embalagem: regraTipiEmbalagem,
-      enquadramento_pis_cofins: enquadramentoPisCofins,
-      cst_recomendado: cstRecomendado,
-      ibs_cbs_2027: ibsCbs2027,
-      match_matriz_local: Boolean(matchLocal),
-    }
-  }
-
-  // Trava 4: Checar duplicidade contra base_mestre com detalhamento do critério
+  // Trava 4: Checar duplicidade contra base_mestre
   function verificarDuplicidade(p) {
-    const nomeNorm = normTxt(p.marcas_comerciais)
-    const ncmClean = cleanNcm(p.ncm_padrao)
-    const mapaDigits = String(p.numero_registro_mapa || '').replace(/\D/g, '')
-    const paNorm = normTxt(p.principio_ativo_garantias)
-    const fabNorm = normTxt(p.titular_registro)
+    const nomeNorm = normTxt(p.nome_completo)
+    const marcaNorm = normTxt(p.marca_padronizada)
+    const ncmClean = String(p.ncm_padrao || '').replace(/\D/g, '')
+    const mapaDigits = String(p.registro_mapa || '').replace(/\D/g, '')
+    const paNorm = normTxt(p.principio_ativo)
+    const fabNorm = normTxt(p.titular_fabricante)
 
     // 1. Registro MAPA (Trava 4 - Critério A)
     if (mapaDigits && mapaDigits.length >= 4) {
@@ -705,22 +332,23 @@ routerAdd('POST', '/backend/v1/sincronizar-produtos', (e) => {
         return {
           duplicado: true,
           criterio: 'registro_mapa',
-          motivo: `Critério Trava 4 (Registro MAPA): Registro ${matchMapa.registro_mapa} já cadastrado no produto "${matchMapa.nome_produto}".`,
+          motivo: `Critério Trava 4 (Registro MAPA): Registro ${matchMapa.registro_mapa} já cadastrado no produto "${matchMapa.nome_completo}".`,
           registroExistente: matchMapa,
         }
       }
     }
 
-    // 2. Nome normalizado + NCM (Trava 4 - Critério B)
-    if (nomeNorm && ncmClean) {
+    // 2. Marca padronizada + NCM (Trava 4 - Critério B)
+    if (marcaNorm && ncmClean) {
       const matchNomeNcm = produtosExistentes.find(
-        (ex) => ex.nomeNorm === nomeNorm && ex.ncm === ncmClean,
+        (ex) =>
+          (ex.marcaNorm === marcaNorm || ex.nomeNorm === nomeNorm) && ex.ncm_padrao === ncmClean,
       )
       if (matchNomeNcm) {
         return {
           duplicado: true,
           criterio: 'nome_ncm',
-          motivo: `Critério Trava 4 (Nome + NCM): Nome do produto e NCM idênticos ao produto "${matchNomeNcm.nome_produto}".`,
+          motivo: `Critério Trava 4 (Marca + NCM): Marca padronizada e NCM idênticos ao produto "${matchNomeNcm.nome_completo}".`,
           registroExistente: matchNomeNcm,
         }
       }
@@ -730,16 +358,16 @@ routerAdd('POST', '/backend/v1/sincronizar-produtos', (e) => {
     if (ncmClean && paNorm && fabNorm && fabNorm.length >= 3) {
       const matchTriplice = produtosExistentes.find(
         (ex) =>
-          ex.ncm === ncmClean &&
+          ex.ncm_padrao === ncmClean &&
           ex.paNorm &&
           ex.paNorm === paNorm &&
-          (ex.fabNorm === fabNorm || normTxt(ex.fabricante) === fabNorm),
+          (ex.fabNorm === fabNorm || normTxt(ex.titular_fabricante) === fabNorm),
       )
       if (matchTriplice) {
         return {
           duplicado: true,
           criterio: 'ncm_pa_fabricante',
-          motivo: `Critério Trava 4 (NCM + P.A. + Fabricante): Combinação NCM, Princípio Ativo e Fabricante idêntica ao produto "${matchTriplice.nome_produto}".`,
+          motivo: `Critério Trava 4 (NCM + P.A. + Fabricante): Combinação NCM, Princípio Ativo e Fabricante idêntica ao produto "${matchTriplice.nome_completo}".`,
           registroExistente: matchTriplice,
         }
       }
@@ -748,8 +376,113 @@ routerAdd('POST', '/backend/v1/sincronizar-produtos', (e) => {
     return { duplicado: false }
   }
 
+  // Desmembrar clones de marca ("SAMURAI / BUSHI" ou "PRODUTO A; PRODUTO B")
+  function extrairClones(itemRaw, origem) {
+    const cols = itemRaw.__rawColunas || []
+    let marcaBruta = ''
+    let regBruto = ''
+    let titularBruto = ''
+    let paBruto = ''
+    let classeBruto = ''
+
+    if (origem === 'AGROFIT_FORMULADO') {
+      marcaBruta = cleanString(
+        itemRaw.marcaproduto ||
+          itemRaw.nomecomercial ||
+          itemRaw.nomedoproduto ||
+          itemRaw.marcacomercal ||
+          cols[0] ||
+          '',
+      )
+      regBruto = cleanString(
+        itemRaw.numregistro ||
+          itemRaw.numerodoregistro ||
+          itemRaw.nregistro ||
+          itemRaw.registro ||
+          cols[1] ||
+          '',
+      )
+      titularBruto = cleanString(
+        itemRaw.titularregistro || itemRaw.empresa || itemRaw.titular || cols[2] || 'Não informado',
+      )
+      paBruto = cleanString(
+        itemRaw.ingredienteativo || itemRaw.principioativo || itemRaw.composicao || cols[3] || '',
+      )
+      classeBruto = cleanString(
+        itemRaw.classe || itemRaw.classeagronomica || itemRaw.classedouso || cols[4] || '',
+      )
+    } else if (origem === 'AGROFIT_TECNICO') {
+      marcaBruta = cleanString(
+        itemRaw.marcaproduto ||
+          itemRaw.nomedoprodutotecnico ||
+          itemRaw.nomedoproduto ||
+          cols[0] ||
+          '',
+      )
+      regBruto = cleanString(
+        itemRaw.numregistro || itemRaw.numerodoregistro || itemRaw.nregistro || cols[1] || '',
+      )
+      titularBruto = cleanString(
+        itemRaw.titularregistro || itemRaw.empresa || itemRaw.titular || cols[2] || 'Não informado',
+      )
+      paBruto = cleanString(
+        itemRaw.ingredienteativo || itemRaw.principioativo || cols[3] || marcaBruta || '',
+      )
+      classeBruto = 'Produto Técnico Industrial'
+    } else {
+      // SIPEAGRO
+      marcaBruta = cleanString(
+        itemRaw.denominacaoproduto ||
+          itemRaw.nomecomercial ||
+          itemRaw.nomedoproduto ||
+          cols[0] ||
+          '',
+      )
+      regBruto = cleanString(
+        itemRaw.numeroregistroproduto || itemRaw.registro || itemRaw.nregistro || cols[1] || '',
+      )
+      titularBruto = cleanString(
+        itemRaw.razaosocial || itemRaw.empresa || cols[2] || 'Não informado',
+      )
+      paBruto = cleanString(
+        itemRaw.materiaprima ||
+          itemRaw.garantias ||
+          itemRaw.classificacao ||
+          cols[3] ||
+          marcaBruta ||
+          '',
+      )
+      classeBruto = cleanString(itemRaw.classificacao || 'Fertilizante')
+    }
+
+    if (!marcaBruta && cols[0]) {
+      marcaBruta = cleanString(cols[0])
+    }
+
+    // Desmembrar se contiver '/' ou ';' separando marcas irmãs
+    let nomes = [marcaBruta]
+    if (marcaBruta.includes(' / ') || marcaBruta.includes(' ; ')) {
+      nomes = marcaBruta.split(/\s*[/;]\s*/).filter(Boolean)
+    }
+
+    return nomes.map((nomeUnitario) => {
+      return {
+        nome_completo: nomeUnitario,
+        registro_mapa: regBruto,
+        titular_fabricante: titularBruto,
+        principio_ativo: paBruto,
+        sub_grupo: classeBruto,
+        origem_base: origem === 'SIPEAGRO' ? 'SIPEAGRO_MAPA' : `AGROFIT_${origem}`,
+        url_oficial:
+          origem === 'SIPEAGRO'
+            ? 'https://dados.agricultura.gov.br/dataset/sipeagro'
+            : 'https://dados.agricultura.gov.br',
+      }
+    })
+  }
+
   // -------------------------------------------------------------------------
-  // EXECUÇÃO DA SINCRONIZAÇÃO POR FONTE COM RELATÓRIO DE INTEGRAÇÃO DETALHADO
+  // EXECUÇÃO DA SINCRONIZAÇÃO
   // -------------------------------------------------------------------------
   const detalhesFontes = []
   let totalBaixadoGeral = 0
@@ -758,27 +491,13 @@ routerAdd('POST', '/backend/v1/sincronizar-produtos', (e) => {
   let ignoradosDuplicidadeGeral = 0
   let descartadosGeral = 0
   const produtosAmostraProcessados = []
-
-  // Itens detalhados do Relatório de Integração (acumulados para persistência e resposta)
   const itensRelatorio = []
   const maxItensRelatorioPersistir = 2000
 
-  // Contadores agregados por Fonte × Desfecho (sempre completos e exatos)
   const contadoresDesfecho = {
-    geral: {
-      total: 0,
-      importado: 0,
-      ja_existente: 0,
-      atualizado: 0,
-      descartado: 0,
-    },
+    geral: { total: 0, importado: 0, ja_existente: 0, atualizado: 0, descartado: 0 },
     por_fonte: {},
-    por_criterio_duplicidade: {
-      registro_mapa: 0,
-      nome_ncm: 0,
-      ncm_pa_fabricante: 0,
-      outro: 0,
-    },
+    por_criterio_duplicidade: { registro_mapa: 0, nome_ncm: 0, ncm_pa_fabricante: 0, outro: 0 },
   }
 
   const colBaseMestre = $app.findCollectionByNameOrId('base_mestre')
@@ -812,7 +531,6 @@ routerAdd('POST', '/backend/v1/sincronizar-produtos', (e) => {
       itens_amostra: [],
     }
 
-    // Download resiliente
     const resDl = downloadCsv(cfg.url, fonteKey)
     if (!resDl.sucesso) {
       detalhe.status = 'indisponivel'
@@ -821,12 +539,9 @@ routerAdd('POST', '/backend/v1/sincronizar-produtos', (e) => {
       continue
     }
 
-    // Parse do CSV
     const rows = parseCsvLinhas(resDl.conteudo, maxItensPorFonte)
     detalhe.total_baixado = rows.length
     totalBaixadoGeral += rows.length
-    contadoresDesfecho.geral.total += rows.length
-    contadoresDesfecho.por_fonte[fonteKey].total += rows.length
 
     if (rows.length === 0) {
       detalhe.status = 'concluido'
@@ -840,251 +555,287 @@ routerAdd('POST', '/backend/v1/sincronizar-produtos', (e) => {
       ? `${rows.length} produtos carregados (${resDl.aviso})`
       : `${rows.length} produtos baixados do portal oficial do MAPA.`
 
-    // Processamento item a item com registro de desfecho
     for (let i = 0; i < rows.length; i++) {
       const row = rows[i]
-      const classif = classificarProduto(fonteKey, row)
+      const clones = extrairClones(row, fonteKey)
 
-      // Validação de descarte para registros sem identificação mínima
-      if (!classif.marcas_comerciais || classif.marcas_comerciais.trim().length === 0) {
-        detalhe.descartados++
-        descartadosGeral++
-        contadoresDesfecho.geral.descartado++
-        contadoresDesfecho.por_fonte[fonteKey].descartado++
+      for (let c = 0; c < clones.length; c++) {
+        contadoresDesfecho.geral.total++
+        contadoresDesfecho.por_fonte[fonteKey].total++
+
+        const itemBruto = clones[c]
+        if (!itemBruto.nome_completo || itemBruto.nome_completo.trim().length === 0) {
+          detalhe.descartados++
+          descartadosGeral++
+          contadoresDesfecho.geral.descartado++
+          contadoresDesfecho.por_fonte[fonteKey].descartado++
+
+          if (itensRelatorio.length < maxItensRelatorioPersistir) {
+            itensRelatorio.push({
+              fonte: fonteKey,
+              fonte_nome: cfg.nome,
+              registro_mapa: itemBruto.registro_mapa || 'N/D',
+              marca: 'Não identificada',
+              titular: itemBruto.titular_fabricante || 'Não informado',
+              principio_ativo: itemBruto.principio_ativo || 'N/D',
+              ncm: 'N/D',
+              desfecho: 'DESCARTADO',
+              motivo: 'Registro incompleto: Nome comercial/marca ausente no CSV oficial.',
+            })
+          }
+          continue
+        }
+
+        // Executar o Motor Químico-Aduaneiro e Tributário Canônico
+        const canonico = motor.executarMotorCanonico(itemBruto)
+
+        // Validar formato estrito do Registro MAPA
+        if (!motor.validarFormatoRegistroMapa(canonico.registro_mapa)) {
+          canonico.registro_mapa = motor.sanitizarRegistroMapa(canonico.registro_mapa)
+        }
+
+        if (detalhe.itens_amostra.length < 5) {
+          detalhe.itens_amostra.push({
+            nome: canonico.nome_completo,
+            marca_padronizada: canonico.marca_padronizada,
+            registro_mapa: canonico.registro_mapa,
+            ncm_padrao: canonico.ncm_padrao,
+            principio_ativo: canonico.principio_ativo,
+            nota_subpos_2: canonico.nota_subpos_2,
+            status_pis_cofins: canonico.status_pis_cofins,
+          })
+        }
+
+        if (produtosAmostraProcessados.length < 15) {
+          produtosAmostraProcessados.push(canonico)
+        }
+
+        // Checagem da Trava 4 de Duplicidade
+        const dup = verificarDuplicidade(canonico)
+
+        if (dup.duplicado) {
+          const regExistente = dup.registroExistente
+          let atualizou = false
+
+          if (regExistente && regExistente.recordObj && autoCadastrar) {
+            const recObj = regExistente.recordObj
+            let mod = false
+
+            // Atualizar e enriquecer se faltavam campos canônicos
+            if (!recObj.getString('marca_padronizada') && canonico.marca_padronizada) {
+              recObj.set('marca_padronizada', canonico.marca_padronizada)
+              mod = true
+            }
+            if (!recObj.getString('ncm_faixa1_ate_300g') && canonico.ncm_faixa1_ate_300g) {
+              recObj.set('ncm_faixa1_ate_300g', canonico.ncm_faixa1_ate_300g)
+              recObj.set('ncm_faixa2_300g_a_7_5kg', canonico.ncm_faixa2_300g_a_7_5kg)
+              recObj.set('ncm_faixa3_7_5kg_a_10kg', canonico.ncm_faixa3_7_5kg_a_10kg)
+              recObj.set('ncm_faixa4_acima_10kg', canonico.ncm_faixa4_acima_10kg)
+              recObj.set('regra_tipi', canonico.regra_tipi)
+              mod = true
+            }
+            if (!recObj.getString('status_pis_cofins') && canonico.status_pis_cofins) {
+              recObj.set('status_pis_cofins', canonico.status_pis_cofins)
+              recObj.set('aliquota_ate_mar2026', canonico.aliquota_ate_mar2026)
+              recObj.set('aliquota_pos_abr2026_real', canonico.aliquota_pos_abr2026_real)
+              recObj.set('aliquota_pos_abr2026_presumido', canonico.aliquota_pos_abr2026_presumido)
+              recObj.set('cst_saida', canonico.cst_saida)
+              recObj.set('cst_entrada', canonico.cst_entrada)
+              mod = true
+            }
+            if (!recObj.getString('url_oficial') && canonico.url_oficial) {
+              recObj.set('url_oficial', canonico.url_oficial)
+              mod = true
+            }
+
+            if (mod) {
+              try {
+                $app.save(recObj)
+                atualizou = true
+              } catch (_) {}
+            }
+          }
+
+          if (atualizou) {
+            detalhe.atualizados++
+            atualizadosGeral++
+            contadoresDesfecho.geral.atualizado++
+            contadoresDesfecho.por_fonte[fonteKey].atualizado++
+
+            if (itensRelatorio.length < maxItensRelatorioPersistir) {
+              itensRelatorio.push({
+                fonte: fonteKey,
+                fonte_nome: cfg.nome,
+                registro_mapa: canonico.registro_mapa,
+                marca: canonico.marca_padronizada,
+                titular: canonico.titular_fabricante,
+                principio_ativo: canonico.principio_ativo,
+                ncm: canonico.ncm_padrao,
+                desfecho: 'ATUALIZADO',
+                motivo: `Cadastro já existia na Base Mestre ("${regExistente.nome_completo}"). Dados tributários/aduaneiros de 28 campos foram enriquecidos.`,
+              })
+            }
+          } else {
+            detalhe.ignorados_duplicidade++
+            ignoradosDuplicidadeGeral++
+            contadoresDesfecho.geral.ja_existente++
+            contadoresDesfecho.por_fonte[fonteKey].ja_existente++
+
+            const critKey = dup.criterio || 'outro'
+            if (contadoresDesfecho.por_criterio_duplicidade[critKey] !== undefined) {
+              contadoresDesfecho.por_criterio_duplicidade[critKey]++
+            } else {
+              contadoresDesfecho.por_criterio_duplicidade.outro++
+            }
+
+            if (itensRelatorio.length < maxItensRelatorioPersistir) {
+              itensRelatorio.push({
+                fonte: fonteKey,
+                fonte_nome: cfg.nome,
+                registro_mapa: canonico.registro_mapa,
+                marca: canonico.marca_padronizada,
+                titular: canonico.titular_fabricante,
+                principio_ativo: canonico.principio_ativo,
+                ncm: canonico.ncm_padrao,
+                desfecho: 'JA_EXISTENTE',
+                motivo: dup.motivo,
+              })
+            }
+          }
+          continue
+        }
+
+        // Inserção inédita na Base Mestre com os 28 campos canônicos
+        let desfechoFinal = 'IMPORTADO'
+        let motivoFinal =
+          'Produto novo importado e gravado com sucesso no Padrão Canônico de 28 Campos.'
+
+        if (autoCadastrar) {
+          try {
+            const recBase = new Record(colBaseMestre)
+            // 28 Campos Canônicos
+            recBase.set('nome_completo', canonico.nome_completo)
+            recBase.set('marca_padronizada', canonico.marca_padronizada)
+            recBase.set('tipo_produto', canonico.tipo_produto)
+            recBase.set('embalagem', canonico.embalagem)
+            recBase.set('unidade', canonico.unidade)
+            recBase.set('principio_ativo', canonico.principio_ativo)
+            recBase.set('macro_grupo', canonico.macro_grupo)
+            recBase.set('sub_grupo', canonico.sub_grupo)
+            recBase.set('nota_subpos_2', canonico.nota_subpos_2)
+            recBase.set('ncm_padrao', canonico.ncm_padrao)
+            recBase.set('ncm_faixa1_ate_300g', canonico.ncm_faixa1_ate_300g)
+            recBase.set('ncm_faixa2_300g_a_7_5kg', canonico.ncm_faixa2_300g_a_7_5kg)
+            recBase.set('ncm_faixa3_7_5kg_a_10kg', canonico.ncm_faixa3_7_5kg_a_10kg)
+            recBase.set('ncm_faixa4_acima_10kg', canonico.ncm_faixa4_acima_10kg)
+            recBase.set('regra_tipi', canonico.regra_tipi)
+            recBase.set('registro_mapa', canonico.registro_mapa)
+            recBase.set('sistema_norma_mapa', canonico.sistema_norma_mapa)
+            recBase.set('titular_fabricante', canonico.titular_fabricante)
+            recBase.set('origem_base', canonico.origem_base)
+            recBase.set('status_pis_cofins', canonico.status_pis_cofins)
+            recBase.set('aliquota_ate_mar2026', canonico.aliquota_ate_mar2026)
+            recBase.set('aliquota_pos_abr2026_real', canonico.aliquota_pos_abr2026_real)
+            recBase.set('aliquota_pos_abr2026_presumido', canonico.aliquota_pos_abr2026_presumido)
+            recBase.set('cst_saida', canonico.cst_saida)
+            recBase.set('cst_entrada', canonico.cst_entrada)
+            recBase.set('ibs_cbs_2027', canonico.ibs_cbs_2027)
+            recBase.set('url_oficial', canonico.url_oficial)
+
+            // Compatibilidade com campos antigos da collection
+            recBase.set('nome_produto', canonico.marca_padronizada)
+            recBase.set('ncm', canonico.ncm_padrao.replace(/\D/g, ''))
+            recBase.set('fabricante', canonico.titular_fabricante)
+            recBase.set('concentracao', 0)
+            recBase.set('unidade_concentracao', '%')
+            recBase.set('status_validacao', 'aprovado')
+            recBase.set('macro_grupo_subgrupo', `${canonico.macro_grupo} — ${canonico.sub_grupo}`)
+            recBase.set('regra_tipi_embalagem', canonico.regra_tipi)
+            recBase.set(
+              'cst_recomendado',
+              `Saída: ${canonico.cst_saida} | Entrada: ${canonico.cst_entrada}`,
+            )
+            recBase.set('dados_classificacao', JSON.stringify(canonico))
+
+            $app.save(recBase)
+
+            detalhe.novos_cadastrados++
+            novosCadastradosGeral++
+            contadoresDesfecho.geral.importado++
+            contadoresDesfecho.por_fonte[fonteKey].importado++
+
+            produtosExistentes.push({
+              id: recBase.id,
+              recordObj: recBase,
+              nome_completo: canonico.nome_completo,
+              nomeNorm: normTxt(canonico.nome_completo),
+              marca_padronizada: canonico.marca_padronizada,
+              marcaNorm: normTxt(canonico.marca_padronizada),
+              ncm_padrao: canonico.ncm_padrao.replace(/\D/g, ''),
+              registro_mapa: canonico.registro_mapa,
+              mapaDigits: String(canonico.registro_mapa || '').replace(/\D/g, ''),
+              principio_ativo: canonico.principio_ativo,
+              paNorm: normTxt(canonico.principio_ativo),
+              titular_fabricante: canonico.titular_fabricante,
+              fabNorm: normTxt(canonico.titular_fabricante),
+            })
+
+            // Auto-enriquecimento do Dicionário de Princípios Ativos se inédito
+            if (canonico.principio_ativo) {
+              const paLimpo = canonico.principio_ativo.trim()
+              const paNorm = normTxt(paLimpo)
+              const jaNoDic = matrizLocalPa.some((m) => m.norm === paNorm)
+              if (!jaNoDic && paLimpo.length >= 3 && paLimpo.length <= 150) {
+                try {
+                  const recPa = new Record(colDicionarioPa)
+                  recPa.set('principio_ativo', paLimpo)
+                  recPa.set('classe', canonico.sub_grupo || canonico.macro_grupo)
+                  recPa.set('grupo_quimico', `Classificação MAPA / ${fonteKey}`)
+                  recPa.set('concentracao_min', 0)
+                  recPa.set('concentracao_max', 0)
+                  recPa.set('unidade', '%')
+                  recPa.set('status', 'Ativo')
+                  $app.save(recPa)
+                  matrizLocalPa.push({
+                    id: recPa.id,
+                    principio_ativo: paLimpo,
+                    classe: canonico.sub_grupo,
+                    grupo_quimico: `Classificação MAPA / ${fonteKey}`,
+                    norm: paNorm,
+                  })
+                } catch (_) {}
+              }
+            }
+          } catch (saveErr) {
+            console.log('Erro ao auto-incluir produto canônico:', saveErr.message)
+            desfechoFinal = 'DESCARTADO'
+            motivoFinal = `Erro ao salvar no banco de dados: ${saveErr.message}`
+            detalhe.descartados++
+            descartadosGeral++
+            contadoresDesfecho.geral.descartado++
+            contadoresDesfecho.por_fonte[fonteKey].descartado++
+          }
+        } else {
+          detalhe.novos_cadastrados++
+          novosCadastradosGeral++
+          contadoresDesfecho.geral.importado++
+          contadoresDesfecho.por_fonte[fonteKey].importado++
+          motivoFinal = 'Produto novo aprovado pelo motor determinístico canônico (simulação).'
+        }
 
         if (itensRelatorio.length < maxItensRelatorioPersistir) {
           itensRelatorio.push({
             fonte: fonteKey,
             fonte_nome: cfg.nome,
-            registro_mapa: classif.numero_registro_mapa || 'N/D',
-            marca: 'Não identificada',
-            titular: classif.titular_registro || 'Não informado',
-            principio_ativo: classif.principio_ativo_garantias || 'N/D',
-            ncm: classif.ncm_padrao || 'N/D',
-            desfecho: 'DESCARTADO',
-            motivo: 'Registro incompleto: Nome comercial/marca ausente no CSV oficial.',
+            registro_mapa: canonico.registro_mapa,
+            marca: canonico.marca_padronizada,
+            titular: canonico.titular_fabricante,
+            principio_ativo: canonico.principio_ativo,
+            ncm: canonico.ncm_padrao,
+            desfecho: desfechoFinal,
+            motivo: motivoFinal,
           })
         }
-        continue
-      }
-
-      // Amostra compacta para visualização
-      if (detalhe.itens_amostra.length < 5) {
-        detalhe.itens_amostra.push({
-          nome: classif.marcas_comerciais,
-          registro_mapa: classif.numero_registro_mapa,
-          ncm_padrao: classif.ncm_padrao,
-          principio_ativo: classif.principio_ativo_garantias,
-          pertence_nota_subpos_2: classif.pertence_nota_subpos_2,
-          cst_recomendado: classif.cst_recomendado,
-        })
-      }
-
-      if (produtosAmostraProcessados.length < 15) {
-        produtosAmostraProcessados.push(classif)
-      }
-
-      // Checagem da Trava 4 de Duplicidade
-      const dup = verificarDuplicidade(classif)
-
-      if (dup.duplicado) {
-        const regExistente = dup.registroExistente
-
-        // Verificar se é possível ATUALIZAR dados faltantes no cadastro existente
-        let atualizouDadosFaltantes = false
-        if (regExistente && regExistente.recordObj && autoCadastrar) {
-          const recObj = regExistente.recordObj
-          let houveModificacao = false
-
-          if (!recObj.getString('registro_mapa') && classif.numero_registro_mapa) {
-            recObj.set('registro_mapa', classif.numero_registro_mapa)
-            houveModificacao = true
-          }
-          if (
-            (!recObj.getString('fabricante') ||
-              recObj.getString('fabricante') === 'Não Informado') &&
-            classif.titular_registro &&
-            classif.titular_registro !== 'Não informado'
-          ) {
-            recObj.set('fabricante', classif.titular_registro)
-            houveModificacao = true
-          }
-          if (!recObj.getString('cst_recomendado') && classif.cst_recomendado) {
-            recObj.set('cst_recomendado', classif.cst_recomendado)
-            houveModificacao = true
-          }
-          if (!recObj.getString('ibs_cbs_2027') && classif.ibs_cbs_2027) {
-            recObj.set('ibs_cbs_2027', classif.ibs_cbs_2027)
-            houveModificacao = true
-          }
-          if (!recObj.getString('origem_base') && classif.origem_base) {
-            recObj.set('origem_base', classif.origem_base)
-            houveModificacao = true
-          }
-
-          if (houveModificacao) {
-            try {
-              $app.save(recObj)
-              atualizouDadosFaltantes = true
-            } catch (upErr) {
-              console.log('Aviso ao atualizar registro existente:', upErr.message)
-            }
-          }
-        }
-
-        if (atualizouDadosFaltantes) {
-          detalhe.atualizados++
-          atualizadosGeral++
-          contadoresDesfecho.geral.atualizado++
-          contadoresDesfecho.por_fonte[fonteKey].atualizado++
-
-          if (itensRelatorio.length < maxItensRelatorioPersistir) {
-            itensRelatorio.push({
-              fonte: fonteKey,
-              fonte_nome: cfg.nome,
-              registro_mapa: classif.numero_registro_mapa || regExistente.registro_mapa || 'N/D',
-              marca: classif.marcas_comerciais,
-              titular: classif.titular_registro,
-              principio_ativo: classif.principio_ativo_garantias,
-              ncm: classif.ncm_padrao,
-              desfecho: 'ATUALIZADO',
-              motivo: `Cadastro já existia na Base Mestre ("${regExistente.nome_produto}"). Dados tributários/regulatórios faltantes foram enriquecidos pelo MAPA.`,
-            })
-          }
-        } else {
-          detalhe.ignorados_duplicidade++
-          ignoradosDuplicidadeGeral++
-          contadoresDesfecho.geral.ja_existente++
-          contadoresDesfecho.por_fonte[fonteKey].ja_existente++
-
-          const critKey = dup.criterio || 'outro'
-          if (contadoresDesfecho.por_criterio_duplicidade[critKey] !== undefined) {
-            contadoresDesfecho.por_criterio_duplicidade[critKey]++
-          } else {
-            contadoresDesfecho.por_criterio_duplicidade.outro++
-          }
-
-          if (itensRelatorio.length < maxItensRelatorioPersistir) {
-            itensRelatorio.push({
-              fonte: fonteKey,
-              fonte_nome: cfg.nome,
-              registro_mapa: classif.numero_registro_mapa || 'N/D',
-              marca: classif.marcas_comerciais,
-              titular: classif.titular_registro,
-              principio_ativo: classif.principio_ativo_garantias,
-              ncm: classif.ncm_padrao,
-              desfecho: 'JA_EXISTENTE',
-              motivo: dup.motivo,
-            })
-          }
-        }
-        continue
-      }
-
-      // Registro inédito — Gravação na base_mestre (ou simulação se auto_inclusao false)
-      let desfechoFinal = 'IMPORTADO'
-      let motivoFinal =
-        'Produto novo importado e gravado com sucesso na Base Mestre com classificação tributária completa.'
-
-      if (autoCadastrar) {
-        try {
-          // 1. Inserir na base_mestre
-          const recBase = new Record(colBaseMestre)
-          recBase.set('nome_produto', classif.marcas_comerciais)
-          recBase.set('ncm', cleanNcm(classif.ncm_padrao))
-          recBase.set('embalagem', 'Padrão Oficial MAPA')
-          recBase.set('principio_ativo', classif.principio_ativo_garantias)
-          recBase.set('fabricante', classif.titular_registro)
-          recBase.set('registro_mapa', classif.numero_registro_mapa)
-          recBase.set('concentracao', 0)
-          recBase.set('unidade_concentracao', '%')
-          recBase.set('status_validacao', 'aprovado')
-          recBase.set('origem_base', classif.origem_base)
-          recBase.set('macro_grupo_subgrupo', classif.macro_grupo_subgrupo)
-          recBase.set('regra_tipi_embalagem', classif.regra_tipi_embalagem)
-          recBase.set('cst_recomendado', classif.cst_recomendado)
-          recBase.set('ibs_cbs_2027', classif.ibs_cbs_2027)
-          recBase.set('dados_classificacao', JSON.stringify(classif))
-          $app.save(recBase)
-
-          detalhe.novos_cadastrados++
-          novosCadastradosGeral++
-          contadoresDesfecho.geral.importado++
-          contadoresDesfecho.por_fonte[fonteKey].importado++
-
-          // Atualizar lista em memória para evitar duplicatas dentro do mesmo lote
-          produtosExistentes.push({
-            id: recBase.id,
-            recordObj: recBase,
-            nome_produto: classif.marcas_comerciais,
-            nomeNorm: normTxt(classif.marcas_comerciais),
-            ncm: cleanNcm(classif.ncm_padrao),
-            registro_mapa: classif.numero_registro_mapa,
-            mapaDigits: String(classif.numero_registro_mapa || '').replace(/\D/g, ''),
-            principio_ativo: classif.principio_ativo_garantias,
-            paNorm: normTxt(classif.principio_ativo_garantias),
-            fabricante: classif.titular_registro,
-            cst_recomendado: classif.cst_recomendado,
-            ibs_cbs_2027: classif.ibs_cbs_2027,
-          })
-
-          // 2. Auto-enriquecimento do Dicionário de Princípios Ativos se inédito
-          if (classif.principio_ativo_garantias && !classif.match_matriz_local) {
-            const paLimpo = classif.principio_ativo_garantias.trim()
-            const paNorm = normTxt(paLimpo)
-            const jaNoDicionario = matrizLocalPa.some((m) => m.norm === paNorm)
-            if (!jaNoDicionario && paLimpo.length >= 3 && paLimpo.length <= 150) {
-              try {
-                const recPa = new Record(colDicionarioPa)
-                recPa.set('principio_ativo', paLimpo)
-                recPa.set('classe', classif.classe_uso || classif.macro_grupo_subgrupo)
-                recPa.set('grupo_quimico', `Classificação MAPA / ${fonteKey}`)
-                recPa.set('concentracao_min', 0)
-                recPa.set('concentracao_max', 0)
-                recPa.set('unidade', '%')
-                recPa.set('status', 'Ativo')
-                $app.save(recPa)
-                matrizLocalPa.push({
-                  id: recPa.id,
-                  principio_ativo: paLimpo,
-                  classe: classif.classe_uso,
-                  grupo_quimico: `Classificação MAPA / ${fonteKey}`,
-                  norm: paNorm,
-                })
-              } catch (_) {}
-            }
-          }
-        } catch (saveErr) {
-          console.log('Erro ao auto-incluir produto sincronizado:', saveErr.message)
-          desfechoFinal = 'DESCARTADO'
-          motivoFinal = `Erro ao salvar no banco de dados: ${saveErr.message}`
-          detalhe.descartados++
-          descartadosGeral++
-          contadoresDesfecho.geral.descartado++
-          contadoresDesfecho.por_fonte[fonteKey].descartado++
-        }
-      } else {
-        // Se auto-cadastro desligado, contabiliza apenas como analisado / simulado
-        detalhe.novos_cadastrados++
-        novosCadastradosGeral++
-        contadoresDesfecho.geral.importado++
-        contadoresDesfecho.por_fonte[fonteKey].importado++
-        motivoFinal =
-          'Produto novo aprovado pelo motor determinístico (simulação: auto-inclusão desativada).'
-      }
-
-      if (itensRelatorio.length < maxItensRelatorioPersistir) {
-        itensRelatorio.push({
-          fonte: fonteKey,
-          fonte_nome: cfg.nome,
-          registro_mapa: classif.numero_registro_mapa || 'N/D',
-          marca: classif.marcas_comerciais,
-          titular: classif.titular_registro,
-          principio_ativo: classif.principio_ativo_garantias,
-          ncm: classif.ncm_padrao,
-          desfecho: desfechoFinal,
-          motivo: motivoFinal,
-        })
       }
     }
 
@@ -1093,9 +844,7 @@ routerAdd('POST', '/backend/v1/sincronizar-produtos', (e) => {
 
   const duracaoMs = Date.now() - startTime
 
-  // -------------------------------------------------------------------------
-  // Persistir Histórico e Relatório de Integração na collection sincronizacao_historico
-  // -------------------------------------------------------------------------
+  // Persistir Histórico na collection sincronizacao_historico
   let historicoId = null
   try {
     const colHist = $app.findCollectionByNameOrId('sincronizacao_historico')
@@ -1108,8 +857,6 @@ routerAdd('POST', '/backend/v1/sincronizar-produtos', (e) => {
     recHist.set('ignorados_duplicidade', ignoradosDuplicidadeGeral)
     recHist.set('detalhes_fontes', JSON.stringify(detalhesFontes))
     recHist.set('duracao_ms', duracaoMs)
-
-    // Novos campos do Relatório de Integração
     recHist.set('itens_relatorio', JSON.stringify(itensRelatorio))
     recHist.set('contadores_desfecho', JSON.stringify(contadoresDesfecho))
 

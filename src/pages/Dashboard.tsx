@@ -103,11 +103,11 @@ export default function Dashboard() {
 
       // 4. Agrupamento por capítulo NCM (primeiros 2 dígitos) a partir dos primeiros 100 itens
       const amostragem = await pb.collection('base_mestre').getList(1, 100, {
-        fields: 'ncm',
+        fields: 'ncm,ncm_padrao',
       })
       const mapCapitulos: Record<string, number> = {}
       amostragem.items.forEach((item) => {
-        const rawNcm = String(item.ncm || '').replace(/\D/g, '')
+        const rawNcm = String(item.ncm_padrao || item.ncm || '').replace(/\D/g, '')
         const cap = rawNcm.length >= 2 ? `Cap. ${rawNcm.slice(0, 2)}` : 'Outros'
         mapCapitulos[cap] = (mapCapitulos[cap] || 0) + 1
       })

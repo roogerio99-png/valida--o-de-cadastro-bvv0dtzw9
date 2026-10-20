@@ -26,6 +26,7 @@ import {
   type ItemErroImportacao,
   type ResultadoImportacaoLote,
 } from '@/services/agroService'
+import { executarMotorCanonicoFrontend } from '@/lib/motorCanonico'
 
 interface ZoneConfig {
   id: string
@@ -486,15 +487,54 @@ export default function Importar() {
         // Fabricante: extraído da coluna Fabricante; onde a planilha não traz, gravar "Não Informado"
         const fabLimpo = fab.trim() || 'Não Informado'
 
+        // Executar Motor Químico-Aduaneiro e Tributário Determinístico para gerar os 28 campos
+        const canonico = executarMotorCanonicoFrontend({
+          nome_completo: trimmedNome,
+          embalagem: embalagemLimpa || '1X20L (20 L)',
+          unidade: unid || 'L',
+          principio_ativo: paLimpo || trimmedNome,
+          registro_mapa: mapaLimpo,
+          titular_fabricante: fabLimpo,
+          ncm_padrao: ncmLimpo,
+          origem_base: 'PLANILHA_IMPORTACAO',
+        })
+
         validos.push({
           originalLine: originalLineNum,
           data: {
-            nome_produto: trimmedNome,
-            ncm: ncmLimpo,
-            embalagem: embalagemLimpa || 'Padrão',
-            principio_ativo: paLimpo || 'Não Informado',
-            fabricante: fabLimpo,
-            registro_mapa: mapaLimpo,
+            // 28 Campos Canônicos
+            nome_completo: canonico.nome_completo,
+            marca_padronizada: canonico.marca_padronizada,
+            tipo_produto: canonico.tipo_produto,
+            embalagem: canonico.embalagem,
+            unidade: canonico.unidade,
+            principio_ativo: canonico.principio_ativo,
+            macro_grupo: canonico.macro_grupo,
+            sub_grupo: canonico.sub_grupo,
+            nota_subpos_2: canonico.nota_subpos_2,
+            ncm_padrao: canonico.ncm_padrao,
+            ncm_faixa1_ate_300g: canonico.ncm_faixa1_ate_300g,
+            ncm_faixa2_300g_a_7_5kg: canonico.ncm_faixa2_300g_a_7_5kg,
+            ncm_faixa3_7_5kg_a_10kg: canonico.ncm_faixa3_7_5kg_a_10kg,
+            ncm_faixa4_acima_10kg: canonico.ncm_faixa4_acima_10kg,
+            regra_tipi: canonico.regra_tipi,
+            registro_mapa: canonico.registro_mapa,
+            sistema_norma_mapa: canonico.sistema_norma_mapa,
+            titular_fabricante: canonico.titular_fabricante,
+            origem_base: canonico.origem_base,
+            status_pis_cofins: canonico.status_pis_cofins,
+            aliquota_ate_mar2026: canonico.aliquota_ate_mar2026,
+            aliquota_pos_abr2026_real: canonico.aliquota_pos_abr2026_real,
+            aliquota_pos_abr2026_presumido: canonico.aliquota_pos_abr2026_presumido,
+            cst_saida: canonico.cst_saida,
+            cst_entrada: canonico.cst_entrada,
+            ibs_cbs_2027: canonico.ibs_cbs_2027,
+            url_oficial: canonico.url_oficial,
+
+            // Compatibilidade com campos antigos
+            nome_produto: canonico.marca_padronizada,
+            ncm: canonico.ncm_padrao.replace(/\D/g, ''),
+            fabricante: canonico.titular_fabricante,
             concentracao: pesoVol,
             unidade_concentracao: unid,
             status_validacao: 'aprovado',
