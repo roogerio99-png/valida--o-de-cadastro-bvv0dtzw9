@@ -615,12 +615,11 @@ export default function Importar() {
 
         // Se o NCM não for válido (deve ter 8 dígitos na TIPI)
         if (!ncmLimpo || ncmLimpo.length !== 8) {
-          // Se na verdade for uma linha sem NCM útil (ex: notas, contadores de divergência)
           rejeitados.push({
             linhaOriginal: originalLineNum,
             linhaLote: idx + 1,
             motivo: ncmLimpo
-              ? `Código NCM "${ncmLimpo}" possui ${ncmLimpo.length} dígitos. O padrão TIPI exige 8 dígitos.`
+              ? `Código NCM "${ncmLimpo}" possui ${ncmLimpo.length} dígitos. O padrão TIPI exige 8 dígitos numéricos.`
               : 'NCM obrigatório ausente ou inválido.',
             categoria: 'NCM Inválido ou Ausente',
             campo: 'NCM',
@@ -631,7 +630,6 @@ export default function Importar() {
         }
 
         // Processar embalagens permitidas: pode vir como "Saco, Tambor", "Bombona / Frasco"
-        // ou como texto de condição "Até 5L; 10L; 20L"
         let embArr: string[] = []
         if (condicaoEmb) {
           embArr = condicaoEmb
@@ -640,7 +638,6 @@ export default function Importar() {
             .filter((s) => s.length > 0)
         }
 
-        // Se não houver lista explícita, mas houver regra, tentar manter regra especial clara
         const regraCompleta = [rawRegraId ? `[${rawRegraId}]` : '', dispositivo || '']
           .filter(Boolean)
           .join(' ')
@@ -661,7 +658,7 @@ export default function Importar() {
       // ZONA 3: dicionario_principios_ativos
       // ------------------------------------------------------------------
       else if (targetCol === 'dicionario_principios_ativos') {
-        // Mapeamento Canônico dos 13 Campos da Aba 4 (Matriz de Princípios Ativos v2.5.0)
+        // Mapeamento Canônico dos 13 Campos da Aba 3 / Matriz (Matriz de Princípios Ativos v2.5.0)
         const paChave = getFieldValue(row, [
           'principio_ativo_chave',
           'principio_ativo',
@@ -744,21 +741,77 @@ export default function Importar() {
           'cst',
         ])
 
-        if (!paChave) {
+        // Checar linhas de cabeçalho explicativo ou instrução no corpo da planilha
+        const allText = Object.values(row).join(' ').trim()
+        const lowerAll = allText.toLowerCase()
+        if (
+          lowerAll.includes('como usar:') ||
+          lowerAll.includes('regras oficiais da tipi') ||
+          lowerAll.includes('resumo quantitativo') ||
+          lowerAll.includes('relação nominal') ||
+          lowerAll.includes('relacao nominal')
+        ) {
           rejeitados.push({
             linhaOriginal: originalLineNum,
             linhaLote: idx + 1,
-            motivo: 'Nome do princípio ativo / chave canônica não informado.',
-            categoria: 'Princípio Ativo Ausente',
+            motivo: 'Linha de notas ou instruções informativas ignorada.',
+            categoria: 'Linha Informativa / Cabeçalho',
+            campo: 'Linha',
+            valor: allText.slice(0, 60),
+            dados: row,
+          })
+          return
+        }
+
+        if (!paChave || /^\d+$/.test(paChave.trim())) {
+          rejeitados.push({
+            linhaOriginal: originalLineNum,
+            linhaLote: idx + 1,
+            motivo: /^\d+$/.test(paChave.trim())
+              ? `Chave de Princípio Ativo "${paChave}" é numérica (índice/linha). Nome químico ou ingrediente ativo é obrigatório.`
+              : 'Nome do princípio ativo / chave canônica obrigatório ausente.',
+            categoria: /^\d+$/.test(paChave.trim())
+              ? 'Chave Numérica (Linha de Tabela)'
+              : 'Princípio Ativo Ausente',
             campo: 'Principio Ativo',
-            valor: '',
+            valor: paChave || 'vazio',
+            dados: row,
+          })
+          return
+        }
+
+        // Se for repetição de cabeçalho
+        if (
+          ['principioativo', 'principio_ativo', 'ingredienteativo', 'molecula', 'ativo'].includes(
+            normalize(paChave),
+          )
+        ) {
+          rejeitados.push({
+            linhaOriginal: originalLineNum,
+            linhaLote: idx + 1,
+            motivo: `Linha de cabeçalho duplicada ("${paChave}") identificada no corpo da planilha.`,
+            categoria: 'Cabeçalho Duplicado',
+            campo: 'Principio Ativo',
+            valor: paChave,
             dados: row,
           })
           return
         }
 
         const chaveUpper = paChave.trim().toUpperCase()
-        const nota2Norm = nota2Raw.toUpperCase().includes('SIM') ? 'SIM' : 'NÃO'
+
+        // Normalização flexível e robusta de nota_subpos_2: aceita "S", "Sim", "SIM", "true", "1"
+        const nota2StrUpper = String(nota2Raw || '')
+          .trim()
+          .toUpperCase()
+        const nota2Norm =
+          nota2StrUpper === 'SIM' ||
+          nota2StrUpper === 'S' ||
+          nota2StrUpper === 'TRUE' ||
+          nota2StrUpper === '1' ||
+          nota2StrUpper.startsWith('SIM')
+            ? 'SIM'
+            : 'NÃO'
 
         const ncmPadraoNorm = cleanNcm(ncmRef)
           ? formatarNcmMascara(cleanNcm(ncmRef))
@@ -801,8 +854,12 @@ export default function Importar() {
             cst_recomendado: cstRec || 'Saída: CST 06 (c/ Ajuste M220/M620) | Entrada: CST 73',
             // Legado
             principio_ativo: chaveUpper,
-            classe: macroSub.includes('—') ? macroSub.split('—')[1].trim() : 'Defensivos',
-            grupo_quimico: 'Importação Aba 4 Matriz',
+            classe: macroSub.includes('—')
+              ? macroSub.split('—')[1].trim()
+              : macroSub.includes('-')
+                ? macroSub.split('-')[1].trim()
+                : 'Defensivos',
+            grupo_quimico: 'Importação Aba 3 Matriz',
             concentracao_min: 0,
             concentracao_max: 0,
             unidade: '%',
@@ -1276,13 +1333,27 @@ export default function Importar() {
                                     {item.categoria}
                                   </td>
                                   <td className="py-2 px-3 text-red-800">{item.motivo}</td>
-                                  <td className="py-2 px-3 text-red-700 truncate max-w-[200px]">
+                                  <td
+                                    className="py-2 px-3 text-red-700 truncate max-w-[240px]"
+                                    title={
+                                      item.campo
+                                        ? `${item.campo}: ${item.valor || 'vazio'}`
+                                        : item.motivo
+                                    }
+                                  >
                                     {item.campo ? (
                                       <span>
-                                        <strong>{item.campo}:</strong> {item.valor || 'vazio'}
+                                        <strong className="font-semibold">{item.campo}:</strong>{' '}
+                                        <span className="font-mono text-[10px]">
+                                          {item.valor || 'vazio'}
+                                        </span>
                                       </span>
                                     ) : (
-                                      '—'
+                                      <span className="text-red-500/80 italic text-[10px]">
+                                        {item.motivo.length > 25
+                                          ? `${item.motivo.slice(0, 25)}...`
+                                          : item.motivo}
+                                      </span>
                                     )}
                                   </td>
                                   <td className="py-2 px-2 text-center text-red-500">

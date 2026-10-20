@@ -440,6 +440,12 @@ export async function limparBases(params: {
  * Importação em lote resiliente com controle de concorrência,
  * auto-retry exponencial contra rate-limit 429 e relatório detalhado com auditoria de erros.
  */
+/**
+ * Importação em lote resiliente executada diretamente no servidor via pb_hooks (POST /backend/v1/importar-lote).
+ * Envia os dados em chunks seguros (ex.: 200 linhas por chamada) em vez de requisição registro a registro,
+ * eliminando por completo rajadas de requisições e o rate limit HTTP 429.
+ * Inclui auto-retry com backoff exponencial para resiliência máxima e relatório detalhado com campo/valor exatos.
+ */
 export async function importarEmLote<T extends Record<string, unknown>>(
   collectionName: string,
   records: { data: T; originalLine?: number }[],
@@ -451,76 +457,121 @@ export async function importarEmLote<T extends Record<string, unknown>>(
   const resumoCategorias: Record<string, number> = {}
   const total = records.length
 
-  const registrarErro = (erro: ItemErroImportacao) => {
-    erros.push(erro)
-    resumoCategorias[erro.categoria] = (resumoCategorias[erro.categoria] || 0) + 1
+  if (total === 0) {
+    return { inseridos: 0, ignorados: 0, erros: [], resumoCategorias: {} }
   }
 
-  for (let i = 0; i < total; i++) {
-    const { data: item, originalLine } = records[i]
-    const rowNum = originalLine ?? i + 1
+  const token = pb.authStore.token
+  const baseUrl = import.meta.env.VITE_POCKETBASE_URL || ''
+  const endpointUrl = `${baseUrl}/backend/v1/importar-lote`
 
-    let sucesso = false
+  // Chunking seguro: 200 registros por requisição para manter o payload leve e estável
+  const CHUNK_SIZE = 200
+  let processados = 0
+
+  for (let offset = 0; offset < total; offset += CHUNK_SIZE) {
+    const chunk = records.slice(offset, offset + CHUNK_SIZE)
+    const payload = {
+      collection: collectionName,
+      records: chunk,
+    }
+
+    let respostaChunk: {
+      sucesso: boolean
+      inseridos: number
+      atualizados: number
+      ignorados: number
+      erros: ItemErroImportacao[]
+      resumoCategorias: Record<string, number>
+      error?: string
+    } | null = null
+
     let tentativas = 0
     const maxTentativas = 4
+    let sucessoEnvio = false
 
-    while (!sucesso && tentativas < maxTentativas) {
+    while (!sucessoEnvio && tentativas < maxTentativas) {
       try {
-        await pb.collection(collectionName).create(item)
-        inseridos++
-        sucesso = true
-      } catch (err: unknown) {
-        tentativas++
-        const msg = err instanceof Error ? err.message : String(err)
-        const is429 = msg.includes('429') || msg.toLowerCase().includes('too many requests')
-        const isUnique =
-          msg.toLowerCase().includes('unique') || msg.toLowerCase().includes('already exists')
+        const response = await fetch(endpointUrl, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            ...(token ? { Authorization: token } : {}),
+          },
+          body: JSON.stringify(payload),
+        })
 
-        if (is429 && tentativas < maxTentativas) {
-          // Backoff exponencial para lidar suavemente com o rate limit do PocketBase
-          const delay = tentativas * 400 + Math.random() * 200
-          await new Promise((resolve) => setTimeout(resolve, delay))
-          continue
-        }
-
-        if (isUnique) {
-          ignorados++
-          sucesso = true
-        } else {
-          // Categorizar erro para relatório inteligível
-          let categoria = 'Erro no Banco de Dados'
-          let motivo = msg
-
-          if (msg.includes('nome_produto') || msg.includes('Cannot be blank')) {
-            categoria = 'Campo Obrigatório Ausente'
-            motivo = 'Nome do produto ou identificador obrigatório ausente.'
-          } else if (msg.includes('ncm')) {
-            categoria = 'NCM Inválido'
-            motivo = 'Formato ou valor de NCM rejeitado pelo banco.'
-          } else if (is429) {
-            categoria = 'Limite de Requisições (429)'
-            motivo = 'Muitas requisições simultâneas ao servidor.'
+        if (!response.ok) {
+          const status = response.status
+          let errorMsg = `HTTP ${status}`
+          try {
+            const errJson = await response.json()
+            errorMsg = errJson.error || errJson.message || errorMsg
+          } catch (_) {
+            try {
+              const text = await response.text()
+              if (text) errorMsg = text.slice(0, 200)
+            } catch {
+              /* noop */
+            }
           }
 
-          registrarErro({
-            linhaOriginal: rowNum,
-            linhaLote: i + 1,
-            motivo,
-            categoria,
-            dados: item,
+          if (status === 429 && tentativas < maxTentativas - 1) {
+            tentativas++
+            const delay = tentativas * 800 + Math.random() * 400
+            await new Promise((resolve) => setTimeout(resolve, delay))
+            continue
+          }
+
+          throw new Error(errorMsg)
+        }
+
+        respostaChunk = await response.json()
+        sucessoEnvio = true
+      } catch (err: unknown) {
+        tentativas++
+        if (tentativas >= maxTentativas) {
+          // Registrar erro para cada item do chunk se o bloco falhou definitivamente
+          const msg = err instanceof Error ? err.message : String(err)
+          const is429 = msg.includes('429') || msg.toLowerCase().includes('too many requests')
+          const categoria = is429 ? 'Limite de Requisições (429)' : 'Erro no Banco de Dados'
+
+          chunk.forEach((item, idxInChunk) => {
+            const rowNum = item.originalLine ?? offset + idxInChunk + 1
+            erros.push({
+              linhaOriginal: rowNum,
+              linhaLote: offset + idxInChunk + 1,
+              motivo: msg,
+              categoria,
+              campo: 'Servidor',
+              valor: 'Falha no endpoint em lote',
+              dados: item.data,
+            })
+            resumoCategorias[categoria] = (resumoCategorias[categoria] || 0) + 1
           })
           break
         }
+        const delay = tentativas * 600 + Math.random() * 300
+        await new Promise((resolve) => setTimeout(resolve, delay))
       }
     }
 
-    // Pequeno throttle de 30ms a cada 10 registros para garantir estabilidade da conexão
-    if (i % 10 === 0) {
-      await new Promise((resolve) => setTimeout(resolve, 30))
+    if (respostaChunk) {
+      inseridos += respostaChunk.inseridos || 0
+      ignorados += respostaChunk.ignorados || 0
+
+      if (Array.isArray(respostaChunk.erros)) {
+        respostaChunk.erros.forEach((err) => {
+          erros.push(err)
+          const cat = err.categoria || 'Erro no Banco de Dados'
+          resumoCategorias[cat] = (resumoCategorias[cat] || 0) + 1
+        })
+      }
     }
 
-    if (onProgress && (i % 5 === 0 || i === total - 1)) {
-      onProgress(i + 1, total)
+    processados += chunk.length
+    if (onProgress) {
+      onProgress(Math.min(processados, total), total)
     }
   }
 
