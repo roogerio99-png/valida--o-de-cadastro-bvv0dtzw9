@@ -72,6 +72,37 @@ export interface TravaResultado {
   mensagem: string
 }
 
+export interface FonteConsultada {
+  fonte: string
+  tipo: 'mapa' | 'bula' | 'ncm' | 'outros'
+  status: 'sucesso' | 'nao_encontrado' | 'divergencia' | 'indisponivel'
+  url?: string
+  detalhes: string
+}
+
+export interface BaseMestreInclusaoResultado {
+  incluido: boolean
+  motivo: string
+  id_registro?: string | null
+}
+
+export interface ProdutoValidadoConsolidado {
+  nome_produto: string
+  ncm: string
+  ncm_descricao_oficial?: string
+  embalagem: string
+  quantidade_embalagem?: string
+  principio_ativo: string
+  fabricante: string
+  registro_mapa: string
+  concentracao: number
+  unidade_concentracao?: string
+  classe_uso?: string
+  formulacao?: string
+  culturas?: string[]
+  bula_resumo?: string
+}
+
 export interface RelatorioValidacao {
   status: 'APROVADO' | 'REPROVADO'
   score: number
@@ -79,16 +110,10 @@ export interface RelatorioValidacao {
   total_aprovadas: number
   travas: TravaResultado[]
   parametrizacao_fiscal: Partial<ParametrizacaoFiscal> | null
-  produto_validado: {
-    nome_produto: string
-    ncm: string
-    embalagem: string
-    quantidade_embalagem?: string
-    principio_ativo: string
-    fabricante: string
-    registro_mapa: string
-    concentracao: number
-  }
+  fontes_consultadas?: FonteConsultada[]
+  avisos_divergencia?: string[]
+  base_mestre_inclusao?: BaseMestreInclusaoResultado
+  produto_validado: ProdutoValidadoConsolidado
 }
 
 export interface ProdutoInput {
@@ -102,6 +127,7 @@ export interface ProdutoInput {
   registro_mapa: string
   concentracao: number
   unidade_concentracao?: string
+  auto_cadastrar?: boolean
 }
 
 export interface GrupoDuplicidade {

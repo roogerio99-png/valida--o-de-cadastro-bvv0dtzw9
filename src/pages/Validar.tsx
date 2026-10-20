@@ -1,4 +1,4 @@
-import React, { useState } from 'react'
+import React, { useState, useEffect } from 'react'
 import {
   CheckCircle2,
   XCircle,
@@ -9,6 +9,15 @@ import {
   Sparkles,
   Info,
   Check,
+  Globe,
+  FileText,
+  ExternalLink,
+  ShieldCheck,
+  Database,
+  Building,
+  Layers,
+  Sprout,
+  HelpCircle,
 } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -23,6 +32,7 @@ import {
 } from '@/components/ui/select'
 import { Badge } from '@/components/ui/badge'
 import { Progress } from '@/components/ui/progress'
+import { Switch } from '@/components/ui/switch'
 import { toast } from '@/hooks/use-toast'
 import { validarProdutoServidor, criarProdutoBaseMestre } from '@/services/agroService'
 import type { ProdutoInput, RelatorioValidacao } from '@/types/agro'
@@ -41,6 +51,15 @@ const EMBALAGENS_OPCOES = [
   'Granel',
 ]
 
+const ETAPAS_PROGRESSO = [
+  { etapa: 1, texto: 'Iniciando auditoria cadastral...' },
+  { etapa: 2, texto: 'Consultando registro e vigência no AGROFIT (MAPA)...' },
+  { etapa: 3, texto: 'Buscando bula oficial e cruzando ingredientes ativos...' },
+  { etapa: 4, texto: 'Verificando NCM e descrição oficial no Siscomex / TIPI...' },
+  { etapa: 5, texto: 'Auditando matriz de embalagens, duplicidade e concentrações...' },
+  { etapa: 6, texto: 'Consolidando veredito e enriquecendo Base Mestre...' },
+]
+
 export default function Validar() {
   const [formData, setFormData] = useState<ProdutoInput>({
     nome_produto: '',
@@ -53,18 +72,35 @@ export default function Validar() {
     registro_mapa: '',
     concentracao: 0,
     unidade_concentracao: 'g/L',
+    auto_cadastrar: true,
   })
 
   // Quantidade da embalagem principal: valor numérico ou digitado e unidade selecionada
   const [qtdValor, setQtdValor] = useState('')
   const [qtdUnidade, setQtdUnidade] = useState<'L' | 'ML' | 'KG' | 'G'>('L')
+  const [autoCadastrarToggle, setAutoCadastrarToggle] = useState<boolean>(true)
 
   const [loading, setLoading] = useState(false)
+  const [progressoIndice, setProgressoIndice] = useState(0)
   const [savingBaseMestre, setSavingBaseMestre] = useState(false)
   const [relatorio, setRelatorio] = useState<RelatorioValidacao | null>(null)
   const [salvoComSucesso, setSalvoComSucesso] = useState(false)
 
-  const handleChange = (field: keyof ProdutoInput, value: string | number) => {
+  // Efeito para alternar mensagens de progresso durante a validação externa
+  useEffect(() => {
+    let timer: ReturnType<typeof setInterval> | undefined
+    if (loading) {
+      setProgressoIndice(0)
+      timer = setInterval(() => {
+        setProgressoIndice((prev) => (prev < ETAPAS_PROGRESSO.length - 1 ? prev + 1 : prev))
+      }, 1200)
+    }
+    return () => {
+      if (timer) clearInterval(timer)
+    }
+  }, [loading])
+
+  const handleChange = (field: keyof ProdutoInput, value: string | number | boolean) => {
     setFormData((prev) => ({ ...prev, [field]: value }))
   }
 
@@ -72,7 +108,6 @@ export default function Validar() {
   const normalizarQtdEmbalagem = (valor: string, unidade: string): string => {
     const limpo = valor.trim().toUpperCase().replace(/\s+/g, '')
     if (!limpo) return ''
-    // Se o usuário já digitou letras/unidade (ex.: 5L, 20L, 25KG, 500ML)
     if (/[A-Z]/.test(limpo)) {
       return limpo
     }
@@ -84,7 +119,6 @@ export default function Validar() {
     const t = tipo.trim()
     if (!qtdNorm) return t
     if (!t) return qtdNorm
-    // Se a embalagem já contém a quantidade (ex.: "1X20L" ou "Bombona 5L"), mantém
     if (t.toUpperCase().includes(qtdNorm)) return t
     return `${t} ${qtdNorm}`.trim()
   }
@@ -103,20 +137,36 @@ export default function Validar() {
         embalagem: embalagemComposta,
         quantidade_embalagem: qtdNorm,
         unidade_embalagem: qtdUnidade,
+        auto_cadastrar: autoCadastrarToggle,
       }
 
       const resp = await validarProdutoServidor(dadosParaEnvio)
       setRelatorio(resp)
+
       if (resp.status === 'APROVADO') {
-        toast({
-          title: 'Produto Aprovado!',
-          description: 'Todas as 6 travas de auditoria foram satisfeitas com sucesso.',
-        })
+        if (resp.base_mestre_inclusao?.incluido) {
+          setSalvoComSucesso(true)
+          toast({
+            title: 'Produto Aprovado e Homologado!',
+            description:
+              'Todas as 6 travas foram satisfeitas e o produto foi incluído automaticamente na Base Mestre.',
+          })
+        } else if (resp.base_mestre_inclusao?.motivo?.includes('já existe')) {
+          toast({
+            title: 'Produto Aprovado com Ressalva',
+            description: resp.base_mestre_inclusao.motivo,
+          })
+        } else {
+          toast({
+            title: 'Produto Aprovado!',
+            description: 'Todas as travas foram satisfeitas. Produto pronto para a Base Mestre.',
+          })
+        }
       } else {
         toast({
           variant: 'destructive',
-          title: 'Produto Reprovado',
-          description: 'Uma ou mais travas de auditoria impediram a aprovação do cadastro.',
+          title: 'Produto Reprovado na Auditoria',
+          description: 'Uma ou mais travas ou fontes oficiais impediram a aprovação do cadastro.',
         })
       }
     } catch (err: unknown) {
@@ -140,14 +190,15 @@ export default function Validar() {
         relatorio.produto_validado?.embalagem || comporEmbalagemFinal(formData.embalagem, qtdNorm)
 
       await criarProdutoBaseMestre({
-        nome_produto: formData.nome_produto,
-        ncm: formData.ncm.replace(/\D/g, ''),
+        nome_produto: relatorio.produto_validado.nome_produto || formData.nome_produto,
+        ncm: relatorio.produto_validado.ncm.replace(/\D/g, '') || formData.ncm.replace(/\D/g, ''),
         embalagem: embalagemFinal,
-        principio_ativo: formData.principio_ativo,
-        fabricante: formData.fabricante,
-        registro_mapa: formData.registro_mapa,
-        concentracao: Number(formData.concentracao),
-        unidade_concentracao: formData.unidade_concentracao,
+        principio_ativo: relatorio.produto_validado.principio_ativo || formData.principio_ativo,
+        fabricante: relatorio.produto_validado.fabricante || formData.fabricante,
+        registro_mapa: relatorio.produto_validado.registro_mapa || formData.registro_mapa,
+        concentracao: Number(relatorio.produto_validado.concentracao || formData.concentracao),
+        unidade_concentracao:
+          relatorio.produto_validado.unidade_concentracao || formData.unidade_concentracao,
         status_validacao: 'aprovado',
       })
       setSalvoComSucesso(true)
@@ -179,6 +230,7 @@ export default function Validar() {
       registro_mapa: '',
       concentracao: 0,
       unidade_concentracao: 'g/L',
+      auto_cadastrar: autoCadastrarToggle,
     })
     setQtdValor('')
     setQtdUnidade('L')
@@ -189,18 +241,19 @@ export default function Validar() {
   // Preenchimento de exemplo para demonstração
   const handlePreencherExemplo = () => {
     setFormData({
-      nome_produto: 'GLIFOSATO 480 SL PREMIUM',
+      nome_produto: 'ROUNDUP ORIGINAL DI',
       ncm: '38089324',
       embalagem: 'Bombona',
-      quantidade_embalagem: '5L',
+      quantidade_embalagem: '20L',
       unidade_embalagem: 'L',
-      principio_ativo: 'Glifosato',
-      fabricante: 'AgroQuímica do Brasil S/A',
-      registro_mapa: '00123/21',
-      concentracao: 480,
+      principio_ativo: 'Glifosato - sal de di-amônio',
+      fabricante: 'Bayer S.A.',
+      registro_mapa: '008907',
+      concentracao: 445,
       unidade_concentracao: 'g/L',
+      auto_cadastrar: autoCadastrarToggle,
     })
-    setQtdValor('5')
+    setQtdValor('20')
     setQtdUnidade('L')
   }
 
@@ -211,12 +264,13 @@ export default function Validar() {
         <div>
           <h2 className="text-xl font-bold text-[#1C2B1C] flex items-center gap-2">
             <span>Validação de Cadastro de Produtos</span>
-            <Badge className="bg-emerald-100 text-emerald-800 border-0 text-xs">
-              Motor de 6 Travas
+            <Badge className="bg-emerald-100 text-emerald-800 border-0 text-xs font-semibold">
+              Motor 6 Travas + Web AGROFIT
             </Badge>
           </h2>
           <p className="text-xs text-[#5A6D5A] mt-0.5">
-            Preencha os dados técnicos do produto para submissão à auditoria em tempo real.
+            Auditoria regulatória cruzada com AGROFIT (MAPA), Bula Oficial, Siscomex/TIPI e Base
+            Mestre.
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -248,11 +302,14 @@ export default function Validar() {
         <div className="lg:col-span-5">
           <Card className="rounded-2xl border-[#DCE5DC] bg-white shadow-sm sticky top-6">
             <CardHeader className="pb-3">
-              <CardTitle className="text-sm font-bold text-[#1C2B1C]">
-                Ficha Cadastral do Produto
+              <CardTitle className="text-sm font-bold text-[#1C2B1C] flex items-center justify-between">
+                <span>Ficha Cadastral do Produto</span>
+                <span className="text-[10px] text-emerald-700 bg-emerald-50 font-medium px-2 py-0.5 rounded-full border border-emerald-200">
+                  Auditoria Ampliada
+                </span>
               </CardTitle>
               <CardDescription className="text-xs text-[#5A6D5A]">
-                Campos obrigatórios para homologação junto aos órgãos fiscalizadores
+                Os dados serão cruzados com a bula oficial do AGROFIT e catálogo Siscomex.
               </CardDescription>
             </CardHeader>
             <CardContent>
@@ -267,7 +324,7 @@ export default function Validar() {
                     required
                     value={formData.nome_produto}
                     onChange={(e) => handleChange('nome_produto', e.target.value)}
-                    placeholder="Ex.: HERBICIDA TOTAL MAX"
+                    placeholder="Ex.: ROUNDUP ORIGINAL DI"
                     className="h-9 text-xs border-[#DCE5DC] focus-visible:ring-[#1B5E20]"
                   />
                 </div>
@@ -278,7 +335,7 @@ export default function Validar() {
                     <Label htmlFor="ncm" className="text-xs font-semibold text-[#1C2B1C]">
                       Código NCM (8 dígitos) *
                     </Label>
-                    <span className="text-[10px] text-[#5A6D5A]">TIPI Brasil</span>
+                    <span className="text-[10px] text-[#5A6D5A]">Conferência Siscomex / TIPI</span>
                   </div>
                   <Input
                     id="ncm"
@@ -400,6 +457,7 @@ export default function Validar() {
                     </p>
                   )}
                 </div>
+
                 {/* Princípio Ativo */}
                 <div className="space-y-1">
                   <Label htmlFor="pa" className="text-xs font-semibold text-[#1C2B1C]">
@@ -425,7 +483,7 @@ export default function Validar() {
                     required
                     value={formData.fabricante}
                     onChange={(e) => handleChange('fabricante', e.target.value)}
-                    placeholder="Ex.: Syngenta, Bayer, UPL, Basf..."
+                    placeholder="Ex.: Bayer, Syngenta, UPL, Basf..."
                     className="h-9 text-xs border-[#DCE5DC] focus-visible:ring-[#1B5E20]"
                   />
                 </div>
@@ -436,14 +494,14 @@ export default function Validar() {
                     <Label htmlFor="mapa" className="text-xs font-semibold text-[#1C2B1C]">
                       Registro MAPA *
                     </Label>
-                    <span className="text-[10px] text-[#5A6D5A]">Ex: 00123/21</span>
+                    <span className="text-[10px] text-[#5A6D5A]">Consulta AGROFIT ao vivo</span>
                   </div>
                   <Input
                     id="mapa"
                     required
                     value={formData.registro_mapa}
                     onChange={(e) => handleChange('registro_mapa', e.target.value)}
-                    placeholder="Ex.: 00123/21 ou 1234-9"
+                    placeholder="Ex.: 008907 ou 00123/21"
                     className="h-9 text-xs border-[#DCE5DC] focus-visible:ring-[#1B5E20]"
                   />
                 </div>
@@ -463,7 +521,7 @@ export default function Validar() {
                       onChange={(e) =>
                         handleChange('concentracao', parseFloat(e.target.value) || 0)
                       }
-                      placeholder="Ex.: 480"
+                      placeholder="Ex.: 445"
                       className="h-9 text-xs border-[#DCE5DC] focus-visible:ring-[#1B5E20]"
                     />
                   </div>
@@ -488,25 +546,72 @@ export default function Validar() {
                   </div>
                 </div>
 
+                {/* Toggle de Auto-Preenchimento na Base Mestre */}
+                <div className="pt-2 border-t border-[#DCE5DC]">
+                  <div className="flex items-center justify-between p-3 rounded-xl bg-emerald-50/50 border border-emerald-200/60">
+                    <div className="space-y-0.5 pr-2">
+                      <div className="flex items-center gap-1.5">
+                        <Database className="w-3.5 h-3.5 text-[#1B5E20]" />
+                        <span className="text-xs font-bold text-[#1C2B1C]">
+                          Auto-Cadastrar na Base Mestre
+                        </span>
+                      </div>
+                      <p className="text-[11px] text-[#5A6D5A] leading-tight">
+                        Quando aprovado, insere o produto homologado e enriquecido sem clique
+                        manual.
+                      </p>
+                    </div>
+                    <Switch
+                      checked={autoCadastrarToggle}
+                      onCheckedChange={(checked) => {
+                        setAutoCadastrarToggle(checked)
+                        handleChange('auto_cadastrar', checked)
+                      }}
+                      className="data-[state=checked]:bg-[#1B5E20]"
+                    />
+                  </div>
+                </div>
+
                 {/* Botão Submeter */}
                 <Button
                   type="submit"
                   disabled={loading}
-                  className="w-full h-11 bg-[#1B5E20] hover:bg-[#2E7D32] text-white font-semibold rounded-xl mt-4 flex items-center justify-center gap-2 shadow-md transition-all active:scale-[0.98]"
+                  className="w-full h-11 bg-[#1B5E20] hover:bg-[#2E7D32] text-white font-semibold rounded-xl mt-3 flex items-center justify-center gap-2 shadow-md transition-all active:scale-[0.98]"
                 >
                   {loading ? (
                     <>
                       <Loader2 className="w-4 h-4 animate-spin" />
-                      <span>Processando 6 Travas no Servidor...</span>
+                      <span>Consultando Fontes Externas...</span>
                     </>
                   ) : (
                     <>
-                      <CheckCircle2 className="w-4 h-4" />
-                      <span>Executar Auditoria Cadastral</span>
+                      <ShieldCheck className="w-4 h-4" />
+                      <span>Executar Auditoria Cadastral Ampliada</span>
                     </>
                   )}
                 </Button>
               </form>
+
+              {/* Box de Progresso Dinâmico durante a busca */}
+              {loading && (
+                <div className="mt-3 p-3 rounded-xl bg-emerald-50 border border-emerald-200 animate-in fade-in duration-300">
+                  <div className="flex items-center gap-2 text-xs font-semibold text-[#1B5E20]">
+                    <Loader2 className="w-4 h-4 animate-spin text-[#1B5E20]" />
+                    <span>{ETAPAS_PROGRESSO[progressoIndice].texto}</span>
+                  </div>
+                  <div className="w-full bg-emerald-200/50 h-1.5 rounded-full mt-2 overflow-hidden">
+                    <div
+                      className="bg-[#1B5E20] h-full transition-all duration-500 rounded-full"
+                      style={{
+                        width: `${((progressoIndice + 1) / ETAPAS_PROGRESSO.length) * 100}%`,
+                      }}
+                    />
+                  </div>
+                  <span className="text-[10px] text-[#5A6D5A] block mt-1 text-right">
+                    Etapa {progressoIndice + 1} de {ETAPAS_PROGRESSO.length}
+                  </span>
+                </div>
+              )}
             </CardContent>
           </Card>
         </div>
@@ -518,12 +623,12 @@ export default function Validar() {
           {!relatorio ? (
             <div className="bg-white rounded-2xl border border-dashed border-[#DCE5DC] p-12 text-center flex flex-col items-center justify-center min-h-[460px]">
               <div className="w-14 h-14 rounded-2xl bg-emerald-50 text-[#1B5E20] flex items-center justify-center mb-3">
-                <CheckCircle2 className="w-7 h-7" />
+                <Globe className="w-7 h-7" />
               </div>
               <h3 className="font-bold text-base text-[#1C2B1C]">Aguardando Submissão</h3>
               <p className="text-xs text-[#5A6D5A] max-w-sm mt-1">
-                Preencha os campos ao lado e clique em "Executar Auditoria Cadastral" para testar as
-                6 travas regulamentares e apurar alíquotas fiscais.
+                Preencha os campos ao lado e execute a auditoria para cruzar os dados em tempo real
+                com o AGROFIT (MAPA), Bula Oficial, Siscomex/TIPI e Base Mestre.
               </p>
             </div>
           ) : (
@@ -575,10 +680,10 @@ export default function Validar() {
                       </div>
                     </div>
 
-                    {/* Botão de Salvar na Base Mestre */}
+                    {/* Feedback de Inclusão Automática / Botão Manual */}
                     {relatorio.status === 'APROVADO' && (
                       <div>
-                        {salvoComSucesso ? (
+                        {relatorio.base_mestre_inclusao?.incluido || salvoComSucesso ? (
                           <Badge className="bg-emerald-700 text-white px-3 py-2 text-xs flex items-center gap-1.5 shadow-sm">
                             <Check className="w-4 h-4" />
                             Cadastrado na Base Mestre
@@ -612,7 +717,162 @@ export default function Validar() {
                       }`}
                     />
                   </div>
+
+                  {/* Notificação de Inclusão / Duplicidade na Base Mestre */}
+                  {relatorio.base_mestre_inclusao && (
+                    <div
+                      className={`mt-4 p-3 rounded-xl text-xs flex items-start gap-2.5 border ${
+                        relatorio.base_mestre_inclusao.incluido
+                          ? 'bg-emerald-50 text-emerald-900 border-emerald-200'
+                          : 'bg-amber-50 text-amber-900 border-amber-200'
+                      }`}
+                    >
+                      <Database className="w-4 h-4 flex-shrink-0 mt-0.5 text-current" />
+                      <div className="flex-1">
+                        <strong className="font-semibold block">
+                          {relatorio.base_mestre_inclusao.incluido
+                            ? 'Produto Homologado na Base Mestre:'
+                            : 'Status da Base Mestre:'}
+                        </strong>
+                        <p className="mt-0.5 leading-relaxed">
+                          {relatorio.base_mestre_inclusao.motivo}
+                        </p>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Avisos de Divergência com Bula Oficial */}
+                  {relatorio.avisos_divergencia && relatorio.avisos_divergencia.length > 0 && (
+                    <div className="mt-3 p-3 rounded-xl text-xs bg-amber-50 text-amber-950 border border-amber-200 space-y-1">
+                      <div className="flex items-center gap-1.5 font-bold text-amber-800">
+                        <AlertTriangle className="w-4 h-4" />
+                        <span>Avisos de Divergência com a Bula Oficial (AGROFIT)</span>
+                      </div>
+                      <ul className="list-disc list-inside space-y-0.5 pl-1 text-[11px]">
+                        {relatorio.avisos_divergencia.map((aviso, idx) => (
+                          <li key={idx}>{aviso}</li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
                 </CardContent>
+              </Card>
+
+              {/* ------------------------------------------------------------------ */}
+              {/* NOVA SEÇÃO: FONTES CONSULTADAS (AUDITORIA EXTERNA) */}
+              {/* ------------------------------------------------------------------ */}
+              <Card className="rounded-2xl border-[#DCE5DC] bg-white shadow-sm p-4">
+                <div className="flex items-center justify-between mb-3">
+                  <div className="flex items-center gap-2">
+                    <Globe className="w-4 h-4 text-[#1B5E20]" />
+                    <h4 className="text-xs font-bold text-[#1C2B1C] uppercase tracking-wider">
+                      Fontes Externas Consultadas em Tempo Real
+                    </h4>
+                  </div>
+                  <Badge variant="outline" className="text-[10px] text-[#5A6D5A] border-[#DCE5DC]">
+                    Auditoria Rastreável
+                  </Badge>
+                </div>
+
+                {relatorio.fontes_consultadas && relatorio.fontes_consultadas.length > 0 ? (
+                  <div className="space-y-2.5">
+                    {relatorio.fontes_consultadas.map((fonte, idx) => {
+                      const isOk = fonte.status === 'sucesso'
+                      const isDiv = fonte.status === 'divergencia'
+                      const isNaoEnc = fonte.status === 'nao_encontrado'
+
+                      let badgeColor = 'bg-gray-100 text-gray-700'
+                      let badgeText = 'Indisponível'
+                      if (isOk) {
+                        badgeColor = 'bg-emerald-100 text-emerald-800'
+                        badgeText = 'Conferido'
+                      } else if (isDiv) {
+                        badgeColor = 'bg-amber-100 text-amber-800'
+                        badgeText = 'Divergência'
+                      } else if (isNaoEnc) {
+                        badgeColor = 'bg-red-100 text-red-800'
+                        badgeText = 'Não Localizado'
+                      }
+
+                      return (
+                        <div
+                          key={idx}
+                          className="p-3 rounded-xl border border-[#DCE5DC] bg-[#FAFBF8] flex flex-col sm:flex-row items-start justify-between gap-2.5"
+                        >
+                          <div className="flex-1">
+                            <div className="flex items-center gap-2">
+                              {fonte.tipo === 'mapa' && (
+                                <Building className="w-3.5 h-3.5 text-[#1B5E20]" />
+                              )}
+                              {fonte.tipo === 'bula' && (
+                                <FileText className="w-3.5 h-3.5 text-[#1B5E20]" />
+                              )}
+                              {fonte.tipo === 'ncm' && (
+                                <Layers className="w-3.5 h-3.5 text-[#1B5E20]" />
+                              )}
+                              <strong className="text-xs text-[#1C2B1C]">{fonte.fonte}</strong>
+                              <Badge className={`text-[10px] border-0 font-semibold ${badgeColor}`}>
+                                {badgeText}
+                              </Badge>
+                            </div>
+                            <p className="text-xs text-[#5A6D5A] mt-1 leading-relaxed">
+                              {fonte.detalhes}
+                            </p>
+                          </div>
+                          {fonte.url && (
+                            <a
+                              href={fonte.url}
+                              target="_blank"
+                              rel="noreferrer"
+                              className="text-[11px] text-[#1B5E20] hover:text-[#2E7D32] hover:underline flex items-center gap-1 flex-shrink-0 self-end sm:self-center font-medium bg-white px-2 py-1 rounded-lg border border-[#DCE5DC]"
+                            >
+                              <span>Acessar portal</span>
+                              <ExternalLink className="w-3 h-3" />
+                            </a>
+                          )}
+                        </div>
+                      )
+                    })}
+                  </div>
+                ) : (
+                  <p className="text-xs text-[#5A6D5A] italic">
+                    Nenhuma fonte externa pôde ser rastreada nesta execução.
+                  </p>
+                )}
+
+                {/* Dados Consolidados Descobertos */}
+                {relatorio.produto_validado && (
+                  <div className="mt-3 pt-3 border-t border-[#DCE5DC] grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
+                    {relatorio.produto_validado.classe_uso && (
+                      <div className="flex items-center gap-1.5 text-[#5A6D5A]">
+                        <Sprout className="w-3.5 h-3.5 text-[#1B5E20]" />
+                        <span>Classe de Uso:</span>
+                        <strong className="text-[#1C2B1C]">
+                          {relatorio.produto_validado.classe_uso}
+                        </strong>
+                      </div>
+                    )}
+                    {relatorio.produto_validado.formulacao && (
+                      <div className="flex items-center gap-1.5 text-[#5A6D5A]">
+                        <Layers className="w-3.5 h-3.5 text-[#1B5E20]" />
+                        <span>Formulação Oficial:</span>
+                        <strong className="text-[#1C2B1C]">
+                          {relatorio.produto_validado.formulacao}
+                        </strong>
+                      </div>
+                    )}
+                    {relatorio.produto_validado.culturas &&
+                      relatorio.produto_validado.culturas.length > 0 && (
+                        <div className="sm:col-span-2 flex items-center gap-1.5 text-[#5A6D5A]">
+                          <Info className="w-3.5 h-3.5 text-[#1B5E20]" />
+                          <span>Culturas Autorizadas na Bula:</span>
+                          <strong className="text-[#1C2B1C]">
+                            {relatorio.produto_validado.culturas.join(', ')}
+                          </strong>
+                        </div>
+                      )}
+                  </div>
+                )}
               </Card>
 
               {/* Parametrização Fiscal Encontrada */}
@@ -653,7 +913,7 @@ export default function Validar() {
                 </Card>
               )}
 
-              {/* Lista dos 6 Cards de Travas com Efeito Pop-Scale & Glow */}
+              {/* Lista dos 6 Cards de Travas com Detalhamento */}
               <div className="space-y-2.5">
                 <h4 className="text-xs font-bold text-[#5A6D5A] uppercase tracking-wider px-1">
                   Detalhamento Individual das 6 Travas de Auditoria
@@ -708,7 +968,7 @@ export default function Validar() {
                         <p className="text-xs text-[#5A6D5A] mt-1 leading-relaxed">
                           {trava.mensagem}
                         </p>
-                      </div>{' '}
+                      </div>
                     </div>
                   )
                 })}
