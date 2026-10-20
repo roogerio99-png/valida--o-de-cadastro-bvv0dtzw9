@@ -180,6 +180,106 @@ export interface RelatorioValidacao {
   produto_validado: ProdutoValidadoConsolidado
 }
 
+export type StatusValidacaoCampo = 'OK' | 'DIVERGENTE' | 'NÃO INFORMADO' | 'NÃO LOCALIZADO'
+
+export interface CampoValidadoResultado {
+  campo: string
+  chave: string
+  obrigatorio: boolean
+  informado: string
+  encontrado_bula: string
+  status: StatusValidacaoCampo
+  explicacao: string
+}
+
+export interface LinhaNcmEmbalagem {
+  faixa_id: number
+  faixa_nome: string
+  faixa_rotulo: string
+  exemplo_embalagem: string
+  ncm_correta: string
+  ncm_informada_se_aplica: boolean
+  status_aplicacao: string
+  observacao: string
+}
+
+export interface DivergenciaCadastroExistente {
+  campo: string
+  valor_gravado: string
+  valor_correto_bula: string
+  sugestao: string
+}
+
+export interface ComparacaoExistenteResultado {
+  id_registro: string
+  produto_gravado: {
+    id: string
+    nome_completo: string
+    marca_padronizada?: string
+    ncm: string
+    principio_ativo: string
+    registro_mapa: string
+    fabricante: string
+    embalagem: string
+  }
+  divergencias: DivergenciaCadastroExistente[]
+  necessita_atualizacao: boolean
+}
+
+export interface BulaOficialExtraida {
+  encontrado: boolean
+  nome_comercial_oficial?: string
+  principio_ativo?: string
+  fabricante?: string
+  registro_mapa?: string
+  classe_uso?: string
+  formulacao?: string
+  embalagens_autorizadas?: string[]
+  embalagem_principal?: string
+  quantidade_embalagem_principal?: string
+  resumo_bula?: string
+  link_oficial?: string
+}
+
+export interface GravacaoBaseMestreResultado {
+  executada: boolean
+  acao: 'criado' | 'atualizado' | 'nenhuma'
+  id_registro?: string | null
+  mensagem: string
+}
+
+export interface ValidarCadastroInput {
+  nome_comercial: string
+  ncm: string
+  principio_ativo?: string
+  codigo_mapa?: string
+  embalagem?: string
+  modo?: 'novo' | 'existente'
+  id_produto_existente?: string
+  auto_cadastrar?: boolean
+}
+
+export interface RespostaValidacaoCadastro {
+  veredito_geral: 'APROVADO' | 'APROVADO COM RESSALVAS' | 'REPROVADO'
+  status: 'APROVADO' | 'REPROVADO'
+  veredito_motivo: string
+  modo: 'novo' | 'existente'
+  score: number
+  total_travas: number
+  total_aprovadas: number
+  campos_validacao: CampoValidadoResultado[]
+  possui_diferenca_ncm_embalagem: boolean
+  linhas_ncm_embalagem: LinhaNcmEmbalagem[]
+  travas: TravaResultado[]
+  comparacao_existente?: ComparacaoExistenteResultado | null
+  fontes_consultadas: FonteConsultada[]
+  bula_extraida?: BulaOficialExtraida | null
+  gravacao_base_mestre?: GravacaoBaseMestreResultado
+  produto_canonico?: Partial<BaseMestreProduto>
+  base_mestre_inclusao?: BaseMestreInclusaoResultado
+  produto_validado: ProdutoValidadoConsolidado
+}
+
 export interface ProdutoInput {
   nome_produto: string
   ncm: string
@@ -192,6 +292,10 @@ export interface ProdutoInput {
   concentracao: number
   unidade_concentracao?: string
   auto_cadastrar?: boolean
+  nome_comercial?: string
+  codigo_mapa?: string
+  modo?: 'novo' | 'existente'
+  id_produto_existente?: string
 }
 
 export interface GrupoDuplicidade {

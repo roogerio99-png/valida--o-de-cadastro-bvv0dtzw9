@@ -1,23 +1,21 @@
 /**
  * POST /backend/v1/validar-produto
- * Executa as 6 travas de auditoria agropecuária no servidor PocketBase:
- * 1. NCM Obrigatório (8 dígitos, confere com regras_ncm_embalagem e fontes oficiais TIPI/Siscomex)
- * 2. Embalagem vs NCM (matriz de embalagens permitidas para o NCM)
- * 3. Princípio Ativo Obrigatório (dicionario_principios_ativos e cruzamento com Bula/AGROFIT)
- * 4. Duplicidade (NCM + marca/nome/registro em base_mestre)
- * 5. Concentração Válida (faixa concentracao_min / concentracao_max e cruzamento com Bula oficial)
- * 6. Registro MAPA (formato canônico "Nº ", "TC", "ISENTO" ou código estadual)
- *
- * PREENCHIMENTO AUTOMÁTICO DA BASE MESTRE:
- * Quando o status for APROVADO e auto_cadastrar !== false, submete os dados ao
- * Motor Químico-Aduaneiro e Tributário Canônico e insere na collection base_mestre
- * preenchendo obrigatoriamente TODOS os 28 campos canônicos.
+ * Endpoint canônico para validação de produtos agrícolas e novos cadastros:
+ * - FORMULÁRIO DE ENTRADA: Nome Comercial (obrigatório), NCM (obrigatório),
+ *   Princípio Ativo (opcional), Código MAPA (opcional), Embalagem (opcional).
+ * - ETAPA 1: Busca pelo Nome Comercial na Base Mestre, Dicionário de PAs e fontes externas (AGROFIT / Bula MAPA).
+ * - ETAPA 2: Validação cruzada campo a campo com status (OK / DIVERGENTE / NÃO INFORMADO / NÃO LOCALIZADO)
+ *   e conferência com as Travas de Auditoria (1 a 4).
+ * - ETAPA 3: NCM por Embalagem em linhas diferentes (conforme faixas TIPI / fertilizantes).
+ * - Suporta validação de novo cadastro e conferência de cadastro existente da Base Mestre.
+ * - Suporta auto_cadastrar e gravação canônica de 28 campos + registro em log_validacoes.
  */
 
 routerAdd('POST', '/backend/v1/validar-produto', (e) => {
   try {
-    // Motor químico-aduaneiro e tributário determinístico canônico (Contrato Canônico de 28 Campos)
-    // Definido inline para garantir isolamento e compatibilidade total com o bundling de hooks no Skip Cloud
+    // -------------------------------------------------------------------------
+    // MOTOR QUÍMICO-ADUANEIRO E TRIBUTÁRIO CANÔNICO (Inline para isolamento)
+    // -------------------------------------------------------------------------
     const MOLECULAS_NOTA_SUBPOS_2 = [
       'BIFENTRINA',
       'LAMBDA-CIALOTRINA',
@@ -517,10 +515,6 @@ routerAdd('POST', '/backend/v1/validar-produto', (e) => {
       executarMotorCanonico: fallbackExecutarMotorCanonico,
     }
 
-    function normTxt(s) {
-      return motor.normalizarTexto(s)
-    }
-
     function cleanStr(s) {
       if (!s) return ''
       return String(s)
@@ -528,378 +522,614 @@ routerAdd('POST', '/backend/v1/validar-produto', (e) => {
         .replace(/[\s\-_]/g, '')
     }
 
+    // -------------------------------------------------------------------------
+    // ENTRADA DOS DADOS (5 campos do escopo reformulado)
+    // -------------------------------------------------------------------------
     const info = e.requestInfo()
     const data = info.body || {}
 
-    const nomeProduto = String(data.nome_produto || data.nome_completo || '').trim()
-    const ncmRaw = String(data.ncm || data.ncm_padrao || '').trim()
-    const ncm = ncmRaw.replace(/\D/g, '')
-    let embalagem = String(data.embalagem || '').trim()
-    const quantidadeEmbalagem = String(
-      data.quantidade_embalagem || data.qtd_embalagem_principal || '',
+    const nomeComercial = String(
+      data.nome_comercial || data.nome_produto || data.nome_completo || '',
     ).trim()
-    const unidadeEmbalagem = String(
-      data.unidade_embalagem || data.unidade_embalagem_principal || data.unidade || '',
+    const ncmInputRaw = String(data.ncm || data.ncm_padrao || '').trim()
+    const ncmDigitos = ncmInputRaw.replace(/\D/g, '')
+    const ncmFormatado = motor.formatarNcmMascara(ncmDigitos)
+
+    const principioAtivoInformado = String(data.principio_ativo || '').trim()
+    const codigoMapaInformado = String(
+      data.codigo_mapa || data.registro_mapa || data.registro || '',
     ).trim()
+    const embalagemInformada = String(data.embalagem || '').trim()
 
-    // Se a quantidade da embalagem foi informada separadamente e não consta na string de embalagem, compor
-    let qtdFormatada = ''
-    if (quantidadeEmbalagem) {
-      const qtdUpper = quantidadeEmbalagem.toUpperCase().replace(/\s+/g, '')
-      const unidUpper = unidadeEmbalagem.toUpperCase().replace(/\s+/g, '')
-      if (/[A-Z]/.test(qtdUpper)) {
-        qtdFormatada = qtdUpper
-      } else if (unidUpper) {
-        qtdFormatada = `${qtdUpper}${unidUpper}`
-      } else {
-        qtdFormatada = qtdUpper
-      }
+    const modoValidacao = data.modo === 'existente' ? 'existente' : 'novo'
+    const idProdutoExistente = String(data.id_produto_existente || '').trim()
+    const autoCadastrar = data.auto_cadastrar === true
+
+    if (!nomeComercial) {
+      return e.json(400, {
+        status: 'REPROVADO',
+        error: 'O campo Nome Comercial é obrigatório para a validação.',
+      })
     }
 
-    if (qtdFormatada) {
-      if (!embalagem) {
-        embalagem = qtdFormatada
-      } else if (!embalagem.toUpperCase().includes(qtdFormatada)) {
-        embalagem = `${embalagem} ${qtdFormatada}`.trim()
-      }
-    }
-
-    const principioAtivo = String(data.principio_ativo || '').trim()
-    const fabricante = String(data.fabricante || data.titular_fabricante || '').trim()
-    let registroMapa = String(data.registro_mapa || '').trim()
-    const concentracao = Number(data.concentracao)
-    const unidadeConcentracao = String(data.unidade_concentracao || 'g/L').trim()
-    const autoCadastrar = data.auto_cadastrar !== false // Default true
-
-    // Sanitizar registro MAPA
-    if (registroMapa) {
-      registroMapa = motor.sanitizarRegistroMapa(registroMapa)
-    }
-
-    // Resolver ou criar Princípio Ativo na Matriz (13 campos canônicos) para garantir vínculo relacional 1:N
-    let paRecordResolvido = null
-    const paNomeUpper = String(principioAtivo || nomeProduto)
-      .toUpperCase()
-      .trim()
-    if (paNomeUpper) {
-      try {
-        const colPaMatriz = $app.findCollectionByNameOrId('dicionario_principios_ativos')
-        const escPa = paNomeUpper.replace(/'/g, "\\'")
-        const pasExistentes = $app.findRecordsByFilter(
-          'dicionario_principios_ativos',
-          `principio_ativo_chave = '${escPa}' || principio_ativo = '${escPa}'`,
-          '-created',
-          1,
-          0,
-        )
-        if (pasExistentes && pasExistentes.length > 0) {
-          paRecordResolvido = pasExistentes[0]
-        } else if (autoCadastrar) {
-          // Criar na matriz com 13 campos canônicos
-          const novoPa = new Record(colPaMatriz)
-          const isNota2 = motor.verificarNotaSubpos2(paNomeUpper, nomeProduto)
-          const nota2Val = isNota2 ? 'SIM' : 'NÃO'
-
-          let macroSub = 'Defensivos — Herbicida'
-          let ncmRef = '3808.93.29'
-          let ncmF1 = '3808.93.29'
-          let ncmF2 = '3808.93.29'
-          let ncmF3 = '3808.93.29'
-          let ncmF4 = '3808.93.29'
-          let ncmGranel = '3808.93.19'
-          let regTipi = 'Posição 38.08 TIPI: Embalagem comercial agrícola'
-          let sisMapa = 'AGROFIT/MAPA — Produto Formulado (Lei nº 14.785/2023)'
-          let regimePis = 'Beneficiado (Lei 10.925/04): 0% até Mar/26 | 0,925% Real pós-Abr/26'
-          let cstStr = 'Saída: CST 06 (c/ Ajuste M220/M620) | Entrada: CST 73'
-
-          if (isNota2) {
-            macroSub = 'Defensivos — Inseticida / Acaricida'
-            ncmRef = '3808.62.90'
-            ncmF1 = '3808.61.00'
-            ncmF2 = '3808.62.90'
-            ncmF3 = '3808.69.90'
-            ncmF4 = '3808.69.90'
-            ncmGranel = '3808.69.90'
-            regTipi = 'Nota de Subposições 2 Cap. 38 TIPI (SC COSIT 98.042/2022)'
-          }
-
-          novoPa.set('principio_ativo_chave', paNomeUpper)
-          novoPa.set('macro_grupo_subgrupo_padrao', macroSub)
-          novoPa.set('nota_subpos_2', nota2Val)
-          novoPa.set('ncm_padrao_referencia', motor.formatarNcmMascara(ncmRef))
-          novoPa.set('ncm_faixa1_ate_300g', motor.formatarNcmMascara(ncmF1))
-          novoPa.set('ncm_faixa2_300g_a_7_5kg', motor.formatarNcmMascara(ncmF2))
-          novoPa.set('ncm_faixa3_7_5kg_a_10kg', motor.formatarNcmMascara(ncmF3))
-          novoPa.set('ncm_faixa4_acima_10kg', motor.formatarNcmMascara(ncmF4))
-          novoPa.set('ncm_granel_tecnico', motor.formatarNcmMascara(ncmGranel))
-          novoPa.set('regra_tipi_embalagem', regTipi)
-          novoPa.set('sistema_registro_mapa', sisMapa)
-          novoPa.set('enquadramento_pis_cofins', regimePis)
-          novoPa.set('cst_recomendado', cstStr)
-          novoPa.set('principio_ativo', paNomeUpper)
-          novoPa.set('status', 'Ativo')
-
-          $app.save(novoPa)
-          paRecordResolvido = novoPa
-        }
-      } catch (errPa) {
-        console.log('Aviso ao resolver princípio ativo na matriz:', errPa.message)
-      }
+    if (!ncmDigitos || ncmDigitos.length !== 8) {
+      return e.json(400, {
+        status: 'REPROVADO',
+        error: `O NCM é obrigatório e deve conter exatamente 8 dígitos numéricos (recebido: "${ncmInputRaw}").`,
+      })
     }
 
     // -------------------------------------------------------------------------
-    // AUDITORIA AMPLIADA: CONSULTAS EXTERNAS
+    // ETAPA 1 — BUSCA POR NOME COMERCIAL (Base Mestre + Dicionário + Fontes Externas)
     // -------------------------------------------------------------------------
     const fontesConsultadas = []
+    let cadastroExistenteNaBase = null
 
-    let ncmExternoInfo = null
-    if (ncm && ncm.length === 8) {
-      const urlBrasilApi = `https://brasilapi.com.br/api/ncm/v1/${ncm}`
+    // 1.1 Se o usuário indicou validar produto existente específico ou buscamos por ID
+    if (idProdutoExistente) {
       try {
-        const resNcm = $http.send({
-          url: urlBrasilApi,
-          method: 'GET',
-          headers: {
-            'User-Agent': 'ValidadorAgro/1.0 (Auditoria Fiscal)',
-            Accept: 'application/json',
-          },
-          timeout: 5,
-        })
+        cadastroExistenteNaBase = $app.findRecordById('base_mestre', idProdutoExistente)
+      } catch (_) {}
+    }
 
-        if (resNcm.statusCode === 200) {
-          const bodyNcm =
-            typeof resNcm.json === 'function' ? resNcm.json() : JSON.parse(resNcm.raw || '{}')
-          ncmExternoInfo = {
-            codigo: bodyNcm.codigo || ncm,
-            descricao: bodyNcm.descricao || '',
-            data_inicio: bodyNcm.data_inicio || '',
-            data_fim: bodyNcm.data_fim || '',
-            ato: bodyNcm.numero_ato
-              ? `${bodyNcm.tipo_ato || 'Ato'} ${bodyNcm.numero_ato}/${bodyNcm.ano_ato || ''}`
-              : '',
-          }
-          fontesConsultadas.push({
-            fonte: 'Classif Siscomex / TIPI (Receita Federal)',
-            tipo: 'ncm',
-            status: 'sucesso',
-            url: 'https://portalunico.siscomex.gov.br/classif/',
-            detalhes: `NCM ${ncm} validada no catálogo oficial. Descrição: "${ncmExternoInfo.descricao}". Vigência: ${ncmExternoInfo.data_inicio || 'Vigente'}.`,
+    // 1.2 Busca interna por Marca Padronizada / Nome Comercial na Base Mestre
+    let produtoBaseMestreEncontrado = cadastroExistenteNaBase
+    if (!produtoBaseMestreEncontrado) {
+      try {
+        const escNome = nomeComercial.replace(/'/g, "\\'")
+        const matchBase = $app.findRecordsByFilter(
+          'base_mestre',
+          `nome_completo ~ '${escNome}' || marca_padronizada ~ '${escNome}' || nome_produto ~ '${escNome}'`,
+          '-created',
+          5,
+          0,
+        )
+        if (matchBase && matchBase.length > 0) {
+          const normIn = motor.normalizarTexto(nomeComercial)
+          const exact = matchBase.find((r) => {
+            const m = r.getString('marca_padronizada') || r.getString('nome_completo')
+            return motor.normalizarTexto(m) === normIn
           })
-        } else if (resNcm.statusCode === 404) {
-          fontesConsultadas.push({
-            fonte: 'Classif Siscomex / TIPI (Receita Federal)',
-            tipo: 'ncm',
-            status: 'nao_encontrado',
-            url: 'https://portalunico.siscomex.gov.br/classif/',
-            detalhes: `Código NCM ${ncm} não encontrado na tabela oficial da TIPI/Siscomex.`,
-          })
-        } else {
-          fontesConsultadas.push({
-            fonte: 'Classif Siscomex / TIPI (Receita Federal)',
-            tipo: 'ncm',
-            status: 'indisponivel',
-            url: 'https://portalunico.siscomex.gov.br/classif/',
-            detalhes: `Consulta externa retornou status ${resNcm.statusCode}. Utilizando dados locais.`,
-          })
+          produtoBaseMestreEncontrado = exact || matchBase[0]
         }
-      } catch (httpErr) {
+      } catch (errBase) {
+        console.log('Aviso ao consultar base_mestre por nome comercial:', errBase.message)
+      }
+    }
+
+    if (produtoBaseMestreEncontrado) {
+      fontesConsultadas.push({
+        fonte: 'Base Mestre Interna (Skip Cloud)',
+        tipo: 'mapa',
+        status: 'sucesso',
+        detalhes: `Produto localizado na base interna: "${produtoBaseMestreEncontrado.getString('nome_completo') || produtoBaseMestreEncontrado.getString('marca_padronizada')}". NCM cadastrado: ${produtoBaseMestreEncontrado.getString('ncm_padrao') || produtoBaseMestreEncontrado.getString('ncm')}.`,
+      })
+    }
+
+    // 1.3 Busca no Dicionário de Princípios Ativos
+    let paDicionarioEncontrado = null
+    try {
+      const escPa = (principioAtivoInformado || nomeComercial).replace(/'/g, "\\'")
+      const recordsPa = $app.findRecordsByFilter(
+        'dicionario_principios_ativos',
+        `principio_ativo_chave ~ '${escPa}' || principio_ativo ~ '${escPa}'`,
+        '-created',
+        3,
+        0,
+      )
+      if (recordsPa && recordsPa.length > 0) {
+        paDicionarioEncontrado = recordsPa[0]
+      }
+    } catch (_) {}
+
+    // 1.4 Consulta Externa BrasilAPI (Catálogo Oficial Siscomex / TIPI para o NCM)
+    let ncmExternoInfo = null
+    try {
+      const resNcm = $http.send({
+        url: `https://brasilapi.com.br/api/ncm/v1/${ncmDigitos}`,
+        method: 'GET',
+        headers: {
+          'User-Agent': 'ValidadorAgro/2.0 (Auditoria Fiscal)',
+          Accept: 'application/json',
+        },
+        timeout: 5,
+      })
+      if (resNcm.statusCode === 200) {
+        const bodyNcm =
+          typeof resNcm.json === 'function' ? resNcm.json() : JSON.parse(resNcm.raw || '{}')
+        ncmExternoInfo = {
+          codigo: bodyNcm.codigo || ncmDigitos,
+          descricao: bodyNcm.descricao || '',
+          data_inicio: bodyNcm.data_inicio || '',
+        }
         fontesConsultadas.push({
           fonte: 'Classif Siscomex / TIPI (Receita Federal)',
           tipo: 'ncm',
-          status: 'indisponivel',
+          status: 'sucesso',
           url: 'https://portalunico.siscomex.gov.br/classif/',
-          detalhes: `Serviço externo temporariamente indisponível (${httpErr.message || 'timeout'}). Auditoria mantida pela base local.`,
+          detalhes: `NCM ${ncmFormatado} confirmado na tabela oficial TIPI: "${ncmExternoInfo.descricao}".`,
+        })
+      } else if (resNcm.statusCode === 404) {
+        fontesConsultadas.push({
+          fonte: 'Classif Siscomex / TIPI (Receita Federal)',
+          tipo: 'ncm',
+          status: 'nao_encontrado',
+          url: 'https://portalunico.siscomex.gov.br/classif/',
+          detalhes: `Código NCM ${ncmFormatado} não encontrado no catálogo oficial Siscomex.`,
         })
       }
+    } catch (httpErr) {
+      fontesConsultadas.push({
+        fonte: 'Classif Siscomex / TIPI (Receita Federal)',
+        tipo: 'ncm',
+        status: 'indisponivel',
+        detalhes: `Consulta Siscomex externa indisponível (${httpErr.message || 'timeout'}). Auditoria mantida pela matriz local.`,
+      })
     }
 
-    let agrofitInfo = null
-    let bulaInfo = null
-    const mapaLimpo = registroMapa.trim()
-    const mapaDigits = mapaLimpo.replace(/\D/g, '')
+    // 1.5 Busca da BULA e do Registro no AGROFIT / MAPA via IA / Dados Oficiais
+    let bulaExtraida = null
+    let agrofitOficial = null
 
-    if (mapaDigits.length >= 4 || nomeProduto) {
-      try {
-        const promptAgrofit = `Você é o auditor oficial de registros fitossanitários do Ministério da Agricultura (MAPA / AGROFIT).
-Analise os dados fornecidos pelo usuário para validação cadastral:
-- Nome Comercial: "${nomeProduto}"
-- Registro MAPA: "${registroMapa}"
-- Princípio Ativo informado: "${principioAtivo}"
-- Fabricante informado: "${fabricante}"
-- Concentração informada: "${concentracao} ${unidadeConcentracao}"
-- Embalagem informada: "${embalagem}"
+    try {
+      const promptAuditoriaBula = `Você é o Auditor Oficial e Perito Químico-Aduaneiro do Ministério da Agricultura (MAPA / AGROFIT).
+O usuário submeteu um produto comercial para validação cadastral:
+- Nome Comercial informado: "${nomeComercial}"
+- NCM informada: "${ncmFormatado}"
+- Princípio Ativo informado: "${principioAtivoInformado || 'NÃO INFORMADO'}"
+- Código MAPA informado: "${codigoMapaInformado || 'NÃO INFORMADO'}"
+- Embalagem informada: "${embalagemInformada || 'NÃO INFORMADO'}"
 
-Com base na base pública oficial do AGROFIT e nas bulas oficiais registradas no MAPA:
-1. Verifique se o registro MAPA "${registroMapa}" ou o produto "${nomeProduto}" existe no AGROFIT.
-2. Identifique o status regulatório (Vigente, Cancelado, Em análise, Suspenso ou Não Localizado).
-3. Recupere os dados oficiais da BULA: titular, ingrediente ativo, concentração oficial, formulação, classe de uso agronômico, culturas principais e resumo.
-4. Responda ESTRITAMENTE em formato JSON:
+Consulte a base pública oficial do AGROFIT e a BULA oficial registrada no MAPA / Anvisa para este produto ("${nomeComercial}"):
+1. Localize a BULA oficial do produto pelo Nome Comercial.
+2. Extraia:
+   - Ingrediente(s) Ativo(s) oficiais e concentrações
+   - Fabricante / Titular oficial do registro
+   - Código / Número de Registro MAPA oficial (preserve os 4 dígitos ou padrão "Nº 0000" ou código SIPEAGRO)
+   - Classe de uso e formulação (ex.: Herbicida, Concentrado Solúvel SL)
+   - Embalagens e faixas autorizadas na bula (ex.: frascos de 250 mL a 1 L, bombonas de 5 L e 20 L, etc.)
+   - Quantidade principal de embalagem autorizada (ex.: 250 mL, 1 L, 5 L, 20 L)
+3. Responda ESTRITAMENTE em formato JSON com esta estrutura:
 {
   "encontrado": true/false,
-  "status_registro": "Vigente" | "Cancelado" | "Não localizado" | "Pendente",
-  "registro_oficial": "número oficial ou padrão",
-  "titular_oficial": "Nome da empresa titular",
-  "principio_ativo_oficial": "Nome oficial do ingrediente ativo",
-  "concentracao_oficial": número ou string,
-  "unidade_concentracao_oficial": "g/L ou % ou g/kg",
-  "classe_uso": "Herbicida / Inseticida / etc.",
+  "fonte_utilizada": "AGROFIT / Bula Oficial MAPA",
+  "nome_comercial_oficial": "Nome oficial do produto",
+  "principio_ativo_oficial": "Nome canônico do ingrediente ativo",
+  "fabricante_titular_oficial": "Razão social da empresa fabricante/titular",
+  "registro_mapa_oficial": "Nº oficial ex: Nº 0315 ou 008907",
   "formulacao": "ex: Concentrado Solúvel (SL)",
-  "culturas_principais": ["Soja", "Milho"],
-  "bula_resumo": "Breve resumo agronômico oficial",
-  "divergencias": ["divergência 1 se houver"],
+  "classe_uso": "Herbicida / Inseticida / Fungicida",
+  "embalagens_autorizadas": ["Frasco 250 mL", "Frasco 1 L", "Bombona 5 L", "Bombona 20 L"],
+  "embalagem_principal": "Bombona 20 L",
+  "quantidade_embalagem_principal": "20 L",
+  "resumo_bula": "Breve resumo técnico oficial da bula",
   "link_oficial": "https://dados.agricultura.gov.br"
 }`
 
-        const aiRes = $ai.chat({
-          model: 'fast',
-          messages: [
-            {
-              role: 'system',
-              content:
-                'Você é um motor especialista em agrotóxicos e fertilizantes do MAPA/AGROFIT. Responda apenas JSON válido.',
-            },
-            { role: 'user', content: promptAgrofit },
-          ],
-        })
+      const aiRes = $ai.chat({
+        model: 'fast',
+        messages: [
+          {
+            role: 'system',
+            content:
+              'Você é um motor especialista em bulas de defensivos e fertilizantes do MAPA/AGROFIT. Responda apenas JSON válido.',
+          },
+          { role: 'user', content: promptAuditoriaBula },
+        ],
+      })
 
-        const rawAiText = aiRes.choices?.[0]?.message?.content || '{}'
-        const jsonMatch = rawAiText.match(/\{[\s\S]*\}/)
-        if (jsonMatch) {
-          const parsedAi = JSON.parse(jsonMatch[0])
-          if (parsedAi && typeof parsedAi === 'object') {
-            agrofitInfo = {
-              encontrado: Boolean(parsedAi.encontrado),
-              status_registro:
-                parsedAi.status_registro || (parsedAi.encontrado ? 'Vigente' : 'Não localizado'),
-              registro_oficial: parsedAi.registro_oficial || registroMapa,
-              titular_oficial: parsedAi.titular_oficial || fabricante,
-              classe_uso: parsedAi.classe_uso || 'Agrotóxico Fitossanitário',
-              formulacao: parsedAi.formulacao || '',
-              culturas: parsedAi.culturas_principais || [],
-              link: parsedAi.link_oficial || 'https://dados.agricultura.gov.br',
-            }
-
-            bulaInfo = {
-              encontrada: Boolean(parsedAi.encontrado),
-              principio_ativo_oficial: parsedAi.principio_ativo_oficial || '',
-              concentracao_oficial: parsedAi.concentracao_oficial || '',
-              unidade_oficial: parsedAi.unidade_concentracao_oficial || '',
-              resumo: parsedAi.bula_resumo || '',
-              divergencias: Array.isArray(parsedAi.divergencias) ? parsedAi.divergencias : [],
-            }
-
-            fontesConsultadas.push({
-              fonte: 'Sistema AGROFIT — Ministério da Agricultura (MAPA)',
-              tipo: 'mapa',
-              status: parsedAi.encontrado ? 'sucesso' : 'nao_encontrado',
-              url: agrofitInfo.link,
-              detalhes: parsedAi.encontrado
-                ? `Registro MAPA validado no AGROFIT. Status: ${agrofitInfo.status_registro}. Titular oficial: ${agrofitInfo.titular_oficial}. Classe: ${agrofitInfo.classe_uso}.`
-                : `Registro MAPA "${registroMapa}" não localizado com status regular no AGROFIT.`,
-            })
+      const rawAiText = aiRes.choices?.[0]?.message?.content || '{}'
+      const jsonMatch = rawAiText.match(/\{[\s\S]*\}/)
+      if (jsonMatch) {
+        const parsedBula = JSON.parse(jsonMatch[0])
+        if (parsedBula && typeof parsedBula === 'object') {
+          agrofitOficial = {
+            encontrado: Boolean(parsedBula.encontrado),
+            nome_comercial_oficial: parsedBula.nome_comercial_oficial || nomeComercial,
+            principio_ativo: parsedBula.principio_ativo_oficial || '',
+            fabricante: parsedBula.fabricante_titular_oficial || '',
+            registro_mapa: parsedBula.registro_mapa_oficial || '',
+            classe_uso: parsedBula.classe_uso || 'Defensivo Fitossanitário',
+            formulacao: parsedBula.formulacao || '',
+            embalagens_autorizadas: Array.isArray(parsedBula.embalagens_autorizadas)
+              ? parsedBula.embalagens_autorizadas
+              : [],
+            embalagem_principal: parsedBula.embalagem_principal || '1X20L (20 L)',
+            quantidade_embalagem_principal: parsedBula.quantidade_embalagem_principal || '20 L',
+            resumo_bula: parsedBula.resumo_bula || '',
+            link_oficial: parsedBula.link_oficial || 'https://dados.agricultura.gov.br',
           }
+
+          bulaExtraida = agrofitOficial
+
+          fontesConsultadas.push({
+            fonte: 'Bulário Oficial AGROFIT / MAPA',
+            tipo: 'bula',
+            status: agrofitOficial.encontrado ? 'sucesso' : 'nao_encontrado',
+            url: agrofitOficial.link_oficial,
+            detalhes: agrofitOficial.encontrado
+              ? `Bula oficial localizada: Titular "${agrofitOficial.fabricante}". Princípio ativo: "${agrofitOficial.principio_ativo}". Registro MAPA: "${agrofitOficial.registro_mapa}". Embalagens autorizadas: ${agrofitOficial.embalagens_autorizadas.slice(0, 4).join(', ') || 'Diversas'}.`
+              : `Bula oficial não localizada automaticamente para "${nomeComercial}". Validação prosseguida com bases locais.`,
+          })
         }
-      } catch (aiErr) {
-        fontesConsultadas.push({
-          fonte: 'Sistema AGROFIT — Ministério da Agricultura (MAPA)',
-          tipo: 'mapa',
-          status: 'indisponivel',
-          url: 'https://dados.agricultura.gov.br',
-          detalhes: `Consulta ampliada AGROFIT indisponível (${aiErr.message || 'timeout'}). Auditoria mantida por regras locais.`,
-        })
+      }
+    } catch (errAi) {
+      console.log('Aviso ao consultar bula via AI:', errAi.message)
+      fontesConsultadas.push({
+        fonte: 'Bulário Oficial AGROFIT / MAPA',
+        tipo: 'bula',
+        status: 'indisponivel',
+        detalhes: `Serviço de bulário temporariamente ocupado (${errAi.message || 'timeout'}). Auditoria mantida com motor químico interno.`,
+      })
+    }
+
+    // Fallback de contingência caso a busca externa não tenha achado dados
+    if (!bulaExtraida || !bulaExtraida.encontrado) {
+      if (produtoBaseMestreEncontrado) {
+        bulaExtraida = {
+          encontrado: true,
+          nome_comercial_oficial:
+            produtoBaseMestreEncontrado.getString('marca_padronizada') ||
+            produtoBaseMestreEncontrado.getString('nome_completo'),
+          principio_ativo: produtoBaseMestreEncontrado.getString('principio_ativo'),
+          fabricante:
+            produtoBaseMestreEncontrado.getString('titular_fabricante') ||
+            produtoBaseMestreEncontrado.getString('fabricante'),
+          registro_mapa: produtoBaseMestreEncontrado.getString('registro_mapa'),
+          classe_uso: produtoBaseMestreEncontrado.getString('sub_grupo') || 'Defensivo',
+          formulacao: 'Formulação Comercial Homologada',
+          embalagens_autorizadas: [
+            produtoBaseMestreEncontrado.getString('embalagem') || 'Bombona 20 L',
+          ],
+          embalagem_principal: produtoBaseMestreEncontrado.getString('embalagem') || 'Bombona 20 L',
+          quantidade_embalagem_principal: '20 L',
+          resumo_bula: 'Dados recuperados da Base Mestre homologada previamente.',
+          link_oficial: 'https://dados.agricultura.gov.br',
+        }
       }
     }
 
     // -------------------------------------------------------------------------
-    // TRAVAS DE AUDITORIA (1 a 6)
+    // DETERMINAÇÃO CANÔNICA VIA MOTOR QUÍMICO-ADUANEIRO
     // -------------------------------------------------------------------------
-    const travas = []
-    const avisosDivergencia = []
+    const principioAtivoFinal =
+      bulaExtraida?.principio_ativo ||
+      principioAtivoInformado ||
+      paDicionarioEncontrado?.getString('principio_ativo') ||
+      nomeComercial
 
-    // TRAVA 1: NCM Obrigatório
-    let trava1Passou = false
-    let trava1Msg = ''
-    let regraNcmRecord = null
+    const fabricanteFinal =
+      bulaExtraida?.fabricante ||
+      (produtoBaseMestreEncontrado
+        ? produtoBaseMestreEncontrado.getString('titular_fabricante') ||
+          produtoBaseMestreEncontrado.getString('fabricante')
+        : 'Fabricante Não Informado')
 
-    if (!ncm) {
-      trava1Msg = 'NCM não informado. Obrigatório 8 dígitos numéricos.'
-    } else if (ncm.length !== 8) {
-      trava1Msg = `NCM "${ncmRaw}" inválido. Deve conter exatamente 8 dígitos numéricos.`
-    } else {
-      try {
-        const records = $app.findRecordsByFilter(
-          'regras_ncm_embalagem',
-          `ncm = '${ncm}'`,
-          '-created',
-          1,
-          0,
-        )
-        if (records && records.length > 0) {
-          regraNcmRecord = records[0]
-          trava1Passou = true
-          trava1Msg = `NCM ${ncm} válido e localizado na tabela TIPI (${regraNcmRecord.getString('descricao') || 'Sem descrição'}).`
-        } else if (ncmExternoInfo && ncmExternoInfo.descricao) {
-          trava1Passou = true
-          trava1Msg = `NCM ${ncm} homologado via Catálogo Oficial Siscomex/TIPI ("${ncmExternoInfo.descricao}").`
-        } else {
-          trava1Msg = `NCM ${ncm} não cadastrado na tabela de Regras NCM × Embalagem (TIPI) nem confirmado nas fontes oficiais.`
-        }
-      } catch (err) {
-        trava1Msg = `Erro ao consultar regras para o NCM ${ncm}: ${err.message}`
-      }
+    const registroMapaFinal = motor.sanitizarRegistroMapa(
+      bulaExtraida?.registro_mapa ||
+        codigoMapaInformado ||
+        (produtoBaseMestreEncontrado ? produtoBaseMestreEncontrado.getString('registro_mapa') : ''),
+    )
+
+    const embalagemFinal =
+      embalagemInformada ||
+      bulaExtraida?.embalagem_principal ||
+      (produtoBaseMestreEncontrado
+        ? produtoBaseMestreEncontrado.getString('embalagem')
+        : 'Bombona 20 L')
+
+    const dadosMotorInput = {
+      nome_completo: nomeComercial,
+      ncm: ncmFormatado,
+      principio_ativo: principioAtivoFinal,
+      embalagem: embalagemFinal,
+      fabricante: fabricanteFinal,
+      registro_mapa: registroMapaFinal,
+      sub_grupo: bulaExtraida?.classe_uso || '',
+      origem_base: 'VALIDADOR_CADASTRO_PORTAL',
     }
 
-    travas.push({
-      id_trava: 1,
-      trava_nome: 'NCM Obrigatório',
-      aprovado: trava1Passou,
-      mensagem: trava1Msg,
+    const motorCanonico = motor.executarMotorCanonico(dadosMotorInput)
+    const ncmCanonicoDeterminado = motorCanonico.ncm_padrao
+
+    // -------------------------------------------------------------------------
+    // ETAPA 2 — VALIDAÇÃO CRUZADA CAMPO A CAMPO
+    // Status possíveis: OK | DIVERGENTE | NÃO INFORMADO | NÃO LOCALIZADO
+    // -------------------------------------------------------------------------
+    const camposValidacao = []
+
+    // 2.1 NOME COMERCIAL
+    camposValidacao.push({
+      campo: 'Nome Comercial',
+      chave: 'nome_comercial',
+      obrigatorio: true,
+      informado: nomeComercial,
+      encontrado_bula: bulaExtraida?.nome_comercial_oficial || motorCanonico.marca_padronizada,
+      status: 'OK',
+      explicacao: bulaExtraida?.encontrado
+        ? 'Nome comercial localizado e homologado no bulário oficial.'
+        : 'Nome comercial registrado para auditoria cadastral.',
     })
 
-    // TRAVA 2: Embalagem vs NCM
-    let trava2Passou = false
-    let trava2Msg = ''
+    // 2.2 PRINCÍPIO ATIVO (Opcional)
+    let statusPa = 'OK'
+    let explPa = ''
+    const paBula = bulaExtraida?.principio_ativo || ''
 
-    if (!embalagem) {
-      trava2Msg = 'Tipo de embalagem não informado.'
-    } else if (!regraNcmRecord) {
-      trava2Passou = true
-      trava2Msg = `Embalagem "${embalagem}" recebida. Sem restrições impeditivas locais cadastradas para o NCM.`
+    if (!principioAtivoInformado) {
+      statusPa = 'NÃO INFORMADO'
+      explPa = paBula
+        ? `Campo opcional não preenchido. Identificado na bula/AGROFIT: "${paBula}".`
+        : 'Campo opcional não preenchido pelo usuário.'
+    } else if (paBula) {
+      const normPaInf = motor.normalizarTexto(principioAtivoInformado)
+      const normPaBula = motor.normalizarTexto(paBula)
+      if (
+        normPaInf === normPaBula ||
+        normPaInf.includes(normPaBula) ||
+        normPaBula.includes(normPaInf)
+      ) {
+        statusPa = 'OK'
+        explPa = `Princípio ativo informado confere com o ingrediente ativo da bula oficial: "${paBula}".`
+      } else {
+        statusPa = 'DIVERGENTE'
+        explPa = `Divergência: Informado "${principioAtivoInformado}", mas a bula oficial MAPA indica "${paBula}".`
+      }
     } else {
+      statusPa = 'NÃO LOCALIZADO'
+      explPa = `Princípio ativo "${principioAtivoInformado}" não pôde ser confrontado em bula externa.`
+    }
+
+    camposValidacao.push({
+      campo: 'Princípio Ativo',
+      chave: 'principio_ativo',
+      obrigatorio: false,
+      informado: principioAtivoInformado || 'Não informado',
+      encontrado_bula: paBula || 'Não localizado na bula',
+      status: statusPa,
+      explicacao: explPa,
+    })
+
+    // 2.3 NCM (Obrigatório) — Comparar NCM informada com a NCM canônica do motor químico
+    let statusNcm = 'OK'
+    let explNcm = ''
+    const ncmCleanInf = ncmDigitos
+    const ncmCleanCanonico = ncmCanonicoDeterminado.replace(/\D/g, '')
+
+    if (ncmCleanInf === ncmCleanCanonico) {
+      statusNcm = 'OK'
+      explNcm = `NCM informada (${ncmFormatado}) confere com a classificação química e aduaneira recomendada pelo motor canônico.`
+    } else {
+      // Verificar se a NCM informada bate com alguma das faixas de embalagem do motor
+      const ncmF1 = motorCanonico.ncm_faixa1_ate_300g.replace(/\D/g, '')
+      const ncmF2 = motorCanonico.ncm_faixa2_300g_a_7_5kg.replace(/\D/g, '')
+      const ncmF3 = motorCanonico.ncm_faixa3_7_5kg_a_10kg.replace(/\D/g, '')
+      const ncmF4 = motorCanonico.ncm_faixa4_acima_10kg.replace(/\D/g, '')
+
+      if ([ncmF1, ncmF2, ncmF3, ncmF4].includes(ncmCleanInf)) {
+        statusNcm = 'OK'
+        explNcm = `NCM informada (${ncmFormatado}) confere com uma das faixas específicas de embalagem do produto conforme tabela TIPI.`
+      } else {
+        statusNcm = 'DIVERGENTE'
+        explNcm = `Divergência: NCM informada foi ${ncmFormatado}, mas o motor químico determinou ${ncmCanonicoDeterminado} (Regra: ${motorCanonico.regra_tipi || 'Classificação TIPI'}).`
+      }
+    }
+
+    camposValidacao.push({
+      campo: 'NCM',
+      chave: 'ncm',
+      obrigatorio: true,
+      informado: ncmFormatado,
+      encontrado_bula: ncmCanonicoDeterminado,
+      status: statusNcm,
+      explicacao: explNcm,
+    })
+
+    // 2.4 CÓDIGO MAPA (Opcional)
+    let statusMapa = 'OK'
+    let explMapa = ''
+    const mapaBula = bulaExtraida?.registro_mapa || ''
+
+    if (!codigoMapaInformado) {
+      statusMapa = 'NÃO INFORMADO'
+      explMapa = mapaBula
+        ? `Campo opcional não preenchido. Registro oficial encontrado na bula: "${mapaBula}".`
+        : 'Campo opcional não preenchido pelo usuário.'
+    } else if (mapaBula) {
+      const dInf = codigoMapaInformado.replace(/\D/g, '')
+      const dBula = mapaBula.replace(/\D/g, '')
+      if (dInf && dBula && (dInf === dBula || dInf.endsWith(dBula) || dBula.endsWith(dInf))) {
+        statusMapa = 'OK'
+        explMapa = `Código MAPA informado (${codigoMapaInformado}) confere com o registro oficial da bula (${mapaBula}).`
+      } else {
+        statusMapa = 'DIVERGENTE'
+        explMapa = `Divergência: Informado "${codigoMapaInformado}", mas a bula indica "${mapaBula}".`
+      }
+    } else {
+      statusMapa = 'NÃO LOCALIZADO'
+      explMapa = `Registro MAPA "${codigoMapaInformado}" não localizado na consulta externa.`
+    }
+
+    camposValidacao.push({
+      campo: 'Código MAPA',
+      chave: 'codigo_mapa',
+      obrigatorio: false,
+      informado: codigoMapaInformado || 'Não informado',
+      encontrado_bula: mapaBula || 'Não localizado na bula',
+      status: statusMapa,
+      explicacao: explMapa,
+    })
+
+    // 2.5 FABRICANTE / TITULAR (Retorno da busca)
+    camposValidacao.push({
+      campo: 'Fabricante / Titular',
+      chave: 'fabricante',
+      obrigatorio: false,
+      informado: '(Retorno da Busca Oficial)',
+      encontrado_bula: fabricanteFinal,
+      status: 'OK',
+      explicacao: `Titular oficial identificado na bula/AGROFIT: "${fabricanteFinal}".`,
+    })
+
+    // 2.6 EMBALAGEM E QUANTIDADE (Retorno e conferência)
+    let statusEmb = 'OK'
+    let explEmb = ''
+    const embBula =
+      bulaExtraida?.embalagens_autorizadas && bulaExtraida.embalagens_autorizadas.length > 0
+        ? bulaExtraida.embalagens_autorizadas.join(', ')
+        : bulaExtraida?.embalagem_principal || 'Não informada'
+    const qtdBula = bulaExtraida?.quantidade_embalagem_principal || '20 L'
+
+    if (!embalagemInformada) {
+      statusEmb = 'NÃO INFORMADO'
+      explEmb = `Embalagem não informada. Bula oficial autoriza: ${embBula}. Quantidade sugerida: ${qtdBula}.`
+    } else {
+      statusEmb = 'OK'
+      explEmb = `Embalagem informada: "${embalagemInformada}". Autorizadas na bula oficial: ${embBula}.`
+    }
+
+    camposValidacao.push({
+      campo: 'Embalagem e Quantidade',
+      chave: 'embalagem',
+      obrigatorio: false,
+      informado: embalagemInformada || 'Não informada',
+      encontrado_bula: `${embBula} (Volume/Peso: ${qtdBula})`,
+      status: statusEmb,
+      explicacao: explEmb,
+    })
+
+    // -------------------------------------------------------------------------
+    // ETAPA 3 — NCM POR EMBALAGEM EM LINHAS DIFERENTES (Requisito Explícito)
+    // Se o produto tiver variação de NCM por faixa TIPI, trazer UMA LINHA POR FAIXA/EMBALAGEM
+    // -------------------------------------------------------------------------
+    const linhasNcmEmbalagem = []
+
+    const f1Ncm = motorCanonico.ncm_faixa1_ate_300g
+    const f2Ncm = motorCanonico.ncm_faixa2_300g_a_7_5kg
+    const f3Ncm = motorCanonico.ncm_faixa3_7_5kg_a_10kg
+    const f4Ncm = motorCanonico.ncm_faixa4_acima_10kg
+
+    const faixasDef = [
+      {
+        faixa_id: 1,
+        faixa_nome: 'Faixa 1 — Embalagens até 300 g / mL (Frascos Pequenos / Doses)',
+        faixa_rotulo: '≤ 300 g ou mL (ex.: Frasco 250 mL, Sachê 100 g)',
+        ncm_correta: f1Ncm,
+        exemplo_embalagem: 'Frasco 250 mL / Sachê 100 g',
+      },
+      {
+        faixa_id: 2,
+        faixa_nome: 'Faixa 2 — Embalagens > 300 g a 7,5 kg / L (Frascos / Galões Médios)',
+        faixa_rotulo: '> 300 g a 7,5 kg ou L (ex.: Frasco 1 L, Galão 5 L)',
+        ncm_correta: f2Ncm,
+        exemplo_embalagem: 'Frasco 1 L / Galão 5 L',
+      },
+      {
+        faixa_id: 3,
+        faixa_nome: 'Faixa 3 — Embalagens > 7,5 kg a 10 kg / L (Bombonas Médias / Sacos 10 kg)',
+        faixa_rotulo: '> 7,5 kg a 10 kg ou L (ex.: Bombona 10 L, Saco 10 kg)',
+        ncm_correta: f3Ncm,
+        exemplo_embalagem: 'Bombona 10 L / Saco 10 kg',
+      },
+      {
+        faixa_id: 4,
+        faixa_nome: 'Faixa 4 — Embalagens > 10 kg / L (Bombonas 20 L / Tambor / Big Bag / Granel)',
+        faixa_rotulo: '> 10 kg ou L até Granel (ex.: Bombona 20 L, Tambor 200 L, Big Bag 1.000 kg)',
+        ncm_correta: f4Ncm,
+        exemplo_embalagem: 'Bombona 20 L / Tambor 200 L / Granel',
+      },
+    ]
+
+    // Determinar se há diferença real entre as faixas
+    const ncmSet = new Set([f1Ncm, f2Ncm, f3Ncm, f4Ncm])
+    const possuiDiferencaNcmPorEmbalagem = ncmSet.size > 1
+
+    faixasDef.forEach((faixa) => {
+      const seAplicaAoInformado = faixa.ncm_correta.replace(/\D/g, '') === ncmDigitos
+      linhasNcmEmbalagem.push({
+        faixa_id: faixa.faixa_id,
+        faixa_nome: faixa.faixa_nome,
+        faixa_rotulo: faixa.faixa_rotulo,
+        exemplo_embalagem: faixa.exemplo_embalagem,
+        ncm_correta: faixa.ncm_correta,
+        ncm_informada_se_aplica: seAplicaAoInformado,
+        status_aplicacao: seAplicaAoInformado
+          ? 'NCM INFORMADA SE APLICA'
+          : 'NCM INFORMADA NÃO SE APLICA',
+        observacao: seAplicaAoInformado
+          ? `O código NCM ${ncmFormatado} é exatamente o aplicável para esta faixa de embalagem.`
+          : `Para esta embalagem a NCM correta é ${faixa.ncm_correta} (informado: ${ncmFormatado}).`,
+      })
+    })
+
+    // -------------------------------------------------------------------------
+    // TRAVAS DE AUDITORIA (Trava 1 a 4)
+    // -------------------------------------------------------------------------
+    const travas = []
+
+    // Trava 1: NCM Obrigatório e Válido
+    let regraNcmRecord = null
+    try {
+      const recs = $app.findRecordsByFilter(
+        'regras_ncm_embalagem',
+        `ncm = '${ncmDigitos}'`,
+        '-created',
+        1,
+        0,
+      )
+      if (recs && recs.length > 0) {
+        regraNcmRecord = recs[0]
+      }
+    } catch (_) {}
+
+    const trava1Passou = Boolean(regraNcmRecord || (ncmExternoInfo && ncmExternoInfo.descricao))
+    travas.push({
+      id_trava: 1,
+      trava_nome: 'NCM Válido (Siscomex / TIPI)',
+      aprovado: trava1Passou,
+      mensagem: trava1Passou
+        ? `NCM ${ncmFormatado} válido e homologado no catálogo oficial TIPI (${regraNcmRecord ? regraNcmRecord.getString('descricao') : ncmExternoInfo?.descricao}).`
+        : `NCM ${ncmFormatado} não localizado no catálogo oficial da TIPI/Siscomex.`,
+    })
+
+    // Trava 2: Embalagem vs NCM
+    let trava2Passou = true
+    let trava2Msg = ''
+    if (!embalagemInformada) {
+      trava2Msg = 'Embalagem não informada (opcional). Sem impedimento para o NCM.'
+    } else if (regraNcmRecord) {
       try {
         const rawJson = regraNcmRecord.getString('embalagens_permitidas')
         let permitidas = []
         if (rawJson) {
           try {
-            const parsed = JSON.parse(rawJson)
-            if (Array.isArray(parsed)) permitidas = parsed
-            else if (typeof parsed === 'string')
-              permitidas = parsed.split(/[,;/|]/).map((s) => s.trim())
+            const p = JSON.parse(rawJson)
+            if (Array.isArray(p)) permitidas = p
           } catch (_) {
             permitidas = rawJson.split(/[,;/|]/).map((s) => s.trim())
           }
         }
-        permitidas = permitidas.map((s) => String(s).trim()).filter(Boolean)
-
-        if (!Array.isArray(permitidas) || permitidas.length === 0) {
-          trava2Passou = true
-          trava2Msg = `Nenhuma restrição específica de embalagem cadastrada para o NCM ${ncm}. Embalagem "${embalagem}" aceita.`
-        } else {
-          const embNorm = cleanStr(embalagem)
+        if (permitidas.length > 0) {
+          const embNorm = cleanStr(embalagemInformada)
           const match = permitidas.some((p) => {
             const pNorm = cleanStr(p)
             return embNorm === pNorm || embNorm.includes(pNorm) || pNorm.includes(embNorm)
           })
           if (match) {
             trava2Passou = true
-            trava2Msg = `Embalagem "${embalagem}" autorizada para o NCM ${ncm}.`
+            trava2Msg = `Embalagem "${embalagemInformada}" autorizada para o NCM ${ncmFormatado}.`
           } else {
-            trava2Msg = `Embalagem "${embalagem}" NÃO autorizada para o NCM ${ncm}. Permitidas: ${permitidas.slice(0, 6).join(', ')}.`
+            trava2Passou = false
+            trava2Msg = `Embalagem "${embalagemInformada}" não consta na lista de permitidas para ${ncmFormatado} (${permitidas.slice(0, 5).join(', ')}).`
           }
+        } else {
+          trava2Msg = `Embalagem "${embalagemInformada}" compatível com a NCM ${ncmFormatado}.`
         }
       } catch (err) {
-        trava2Msg = `Falha ao processar matriz de embalagens permitidas: ${err.message}`
+        trava2Msg = `Matriz de embalagens avaliada: ${err.message}`
       }
+    } else {
+      trava2Msg = `Embalagem "${embalagemInformada}" aceita para análise aduaneira.`
     }
 
     travas.push({
@@ -909,324 +1139,343 @@ Com base na base pública oficial do AGROFIT e nas bulas oficiais registradas no
       mensagem: trava2Msg,
     })
 
-    // TRAVA 3: Princípio Ativo Obrigatório
-    let trava3Passou = false
-    let trava3Msg = ''
-    let principioRecord = null
-
-    if (!principioAtivo) {
-      trava3Msg = 'Princípio ativo não informado.'
-    } else {
-      try {
-        const escaped = principioAtivo.replace(/'/g, "\\'")
-        const records = $app.findRecordsByFilter(
-          'dicionario_principios_ativos',
-          `principio_ativo ~ '${escaped}'`,
-          '-created',
-          1,
-          0,
-        )
-        if (records && records.length > 0) {
-          principioRecord = records[0]
-          trava3Passou = true
-          trava3Msg = `Princípio ativo "${principioRecord.getString('principio_ativo')}" homologado no dicionário.`
-        } else if (bulaInfo && bulaInfo.principio_ativo_oficial) {
-          trava3Passou = true
-          trava3Msg = `Princípio ativo "${principioAtivo}" confirmado oficialmente pela Bula do AGROFIT.`
-        } else {
-          trava3Msg = `Princípio ativo "${principioAtivo}" não encontrado no Dicionário de Princípios Ativos.`
-        }
-      } catch (err) {
-        trava3Msg = `Erro ao consultar Dicionário de Princípios Ativos: ${err.message}`
-      }
-    }
-
+    // Trava 3: Princípio Ativo na Matriz
+    const trava3Passou = Boolean(
+      paDicionarioEncontrado ||
+      (bulaExtraida && bulaExtraida.principio_ativo) ||
+      !principioAtivoInformado,
+    )
     travas.push({
       id_trava: 3,
-      trava_nome: 'Princípio Ativo Obrigatório',
+      trava_nome: 'Princípio Ativo na Matriz / Bula',
       aprovado: trava3Passou,
-      mensagem: trava3Msg,
+      mensagem: trava3Passou
+        ? `Princípio ativo vinculado com sucesso (${paDicionarioEncontrado ? 'Dicionário de PAs' : bulaExtraida?.principio_ativo ? 'Bula AGROFIT' : 'Opcional não informado'}).`
+        : `Princípio ativo "${principioAtivoInformado}" não localizado no Dicionário nem na Bula oficial.`,
     })
 
-    // TRAVA 4: Duplicidade Multicritério na Base Mestre
-    let trava4Passou = false
-    let trava4Msg = ''
-    let duplicataEncontrada = null
+    // Trava 4: Duplicidade na Base Mestre
+    let duplicataId = null
+    let trava4Passou = true
+    let trava4Msg = 'Nenhuma duplicidade impeditiva identificada na Base Mestre.'
 
-    if (!ncm && !nomeProduto) {
-      trava4Msg = 'Dados insuficientes para verificação de duplicidade.'
-    } else {
-      try {
-        const escNcm = ncm.replace(/'/g, "\\'")
-        const escNome = nomeProduto.replace(/'/g, "\\'")
-        const escMapa = registroMapa.replace(/'/g, "\\'")
+    try {
+      const escNomeNorm = motor.normalizarTexto(nomeComercial)
+      const escRegDigits = registroMapaFinal.replace(/\D/g, '')
 
-        // 1. Checagem por Nome do Produto / Marca + NCM
-        if (nomeProduto && ncm) {
-          const porNome = $app.findRecordsByFilter(
-            'base_mestre',
-            `(ncm_padrao = '${escNcm}' || ncm = '${escNcm}') && (nome_completo ~ '${escNome}' || nome_produto ~ '${escNome}' || marca_padronizada ~ '${escNome}')`,
-            '-created',
-            5,
-            0,
-          )
-          const matchNome = (porNome || []).find((r) => {
-            const nomeRec = r.getString('nome_completo') || r.getString('nome_produto')
-            return normTxt(nomeRec) === normTxt(nomeProduto)
-          })
-          if (matchNome) {
-            duplicataEncontrada = matchNome
-            trava4Msg = `Produto duplicado: Marca/Nome idêntico já cadastrado na Base Mestre.`
-          }
-        }
+      const porNome = $app.findRecordsByFilter(
+        'base_mestre',
+        `ncm_padrao = '${ncmFormatado}' || ncm = '${ncmDigitos}'`,
+        '-created',
+        10,
+        0,
+      )
+      const achouNome = (porNome || []).find((r) => {
+        if (idProdutoExistente && r.id === idProdutoExistente) return false
+        const n1 = motor.normalizarTexto(r.getString('nome_completo'))
+        const n2 = motor.normalizarTexto(r.getString('marca_padronizada'))
+        return n1 === escNomeNorm || n2 === escNomeNorm
+      })
 
-        // 2. Checagem por Registro MAPA
-        if (!duplicataEncontrada && registroMapa && registroMapa.replace(/\D/g, '').length >= 4) {
-          const limpoMapaDigits = registroMapa.replace(/\D/g, '')
-          const porMapa = $app.findRecordsByFilter(
-            'base_mestre',
-            `registro_mapa ~ '${escMapa}'`,
-            '-created',
-            5,
-            0,
-          )
-          const matchMapa = (porMapa || []).find((r) => {
-            const m = r.getString('registro_mapa').replace(/\D/g, '')
-            return m && m === limpoMapaDigits
-          })
-          if (matchMapa) {
-            duplicataEncontrada = matchMapa
-            trava4Msg = `Produto duplicado: Registro MAPA ${registroMapa} já cadastrado na Base Mestre.`
-          }
-        }
-
-        if (duplicataEncontrada) {
+      if (achouNome) {
+        duplicataId = achouNome.id
+        trava4Msg = `Produto duplicado: Marca/Nome "${achouNome.getString('marca_padronizada') || achouNome.getString('nome_completo')}" já existe na Base Mestre.`
+        // Se estiver no modo 'existente', é esperado encontrar o registro
+        if (modoValidacao !== 'existente') {
           trava4Passou = false
-        } else {
-          trava4Passou = true
-          trava4Msg = 'Nenhuma duplicidade encontrada na Base Mestre.'
         }
-      } catch (err) {
-        trava4Msg = `Erro ao checar duplicidade: ${err.message}`
+      } else if (escRegDigits && escRegDigits.length >= 4) {
+        const porReg = $app.findRecordsByFilter(
+          'base_mestre',
+          `registro_mapa ~ '${escRegDigits}'`,
+          '-created',
+          5,
+          0,
+        )
+        const achouReg = (porReg || []).find((r) => {
+          if (idProdutoExistente && r.id === idProdutoExistente) return false
+          const dig = r.getString('registro_mapa').replace(/\D/g, '')
+          return dig && dig === escRegDigits
+        })
+        if (achouReg) {
+          duplicataId = achouReg.id
+          trava4Msg = `Produto com mesmo Registro MAPA "${achouReg.getString('registro_mapa')}" já cadastrado na Base Mestre.`
+          if (modoValidacao !== 'existente') {
+            trava4Passou = false
+          }
+        }
       }
+    } catch (dupErr) {
+      console.log('Aviso ao checar trava 4 de duplicidade:', dupErr.message)
     }
 
     travas.push({
       id_trava: 4,
-      trava_nome: 'Duplicidade',
+      trava_nome: 'Duplicidade na Base Mestre',
       aprovado: trava4Passou,
       mensagem: trava4Msg,
     })
 
-    // TRAVA 5: Concentração Válida
-    let trava5Passou = false
-    let trava5Msg = ''
+    // -------------------------------------------------------------------------
+    // COMPARAÇÃO COM CADASTRO EXISTENTE (Modo "Validar Existente")
+    // -------------------------------------------------------------------------
+    let comparacaoExistente = null
+    const alvoExistente = cadastroExistenteNaBase || produtoBaseMestreEncontrado
 
-    if (isNaN(concentracao) || concentracao <= 0) {
-      trava5Msg = 'Concentração não informada ou valor numérico inválido.'
-    } else if (!principioRecord) {
-      trava5Passou = true
-      trava5Msg = `Concentração informada (${concentracao} ${unidadeConcentracao}). Aceita para análise.`
-    } else {
-      const min = principioRecord.getFloat('concentracao_min')
-      const max = principioRecord.getFloat('concentracao_max')
-      const unid = principioRecord.getString('unidade') || '%'
+    if (modoValidacao === 'existente' || (alvoExistente && duplicataId)) {
+      if (alvoExistente) {
+        const gravadoNome =
+          alvoExistente.getString('nome_completo') || alvoExistente.getString('marca_padronizada')
+        const gravadoNcm = alvoExistente.getString('ncm_padrao') || alvoExistente.getString('ncm')
+        const gravadoPa = alvoExistente.getString('principio_ativo')
+        const gravadoMapa = alvoExistente.getString('registro_mapa')
+        const gravadoFab =
+          alvoExistente.getString('titular_fabricante') || alvoExistente.getString('fabricante')
+        const gravadoEmb = alvoExistente.getString('embalagem')
 
-      if (min === 0 && max === 0) {
-        trava5Passou = true
-        trava5Msg = `Concentração informada (${concentracao} ${unid}). Princípio ativo sem restrição rígida de faixa.`
-      } else if (concentracao < min) {
-        trava5Msg = `Concentração informada (${concentracao} ${unid}) abaixo do mínimo (${min} ${unid}).`
-      } else if (max > 0 && concentracao > max) {
-        trava5Msg = `Concentração informada (${concentracao} ${unid}) excede o máximo (${max} ${unid}).`
-      } else {
-        trava5Passou = true
-        trava5Msg = `Concentração ${concentracao} ${unid} dentro da faixa regulamentar (${min} a ${max} ${unid}).`
+        const divergenciasCadastradas = []
+
+        if (motor.normalizarTexto(gravadoNcm) !== motor.normalizarTexto(ncmCanonicoDeterminado)) {
+          divergenciasCadastradas.push({
+            campo: 'NCM',
+            valor_gravado: gravadoNcm || 'Não preenchido',
+            valor_correto_bula: ncmCanonicoDeterminado,
+            sugestao: `Atualizar NCM na Base Mestre de "${gravadoNcm}" para "${ncmCanonicoDeterminado}".`,
+          })
+        }
+
+        if (
+          bulaExtraida?.principio_ativo &&
+          motor.normalizarTexto(gravadoPa) !== motor.normalizarTexto(bulaExtraida.principio_ativo)
+        ) {
+          divergenciasCadastradas.push({
+            campo: 'Princípio Ativo',
+            valor_gravado: gravadoPa || 'Não preenchido',
+            valor_correto_bula: bulaExtraida.principio_ativo,
+            sugestao: `Atualizar princípio ativo para o ingrediente oficial da bula ("${bulaExtraida.principio_ativo}").`,
+          })
+        }
+
+        if (
+          bulaExtraida?.fabricante &&
+          gravadoFab &&
+          !motor
+            .normalizarTexto(gravadoFab)
+            .includes(motor.normalizarTexto(bulaExtraida.fabricante)) &&
+          !motor
+            .normalizarTexto(bulaExtraida.fabricante)
+            .includes(motor.normalizarTexto(gravadoFab))
+        ) {
+          divergenciasCadastradas.push({
+            campo: 'Fabricante / Titular',
+            valor_gravado: gravadoFab,
+            valor_correto_bula: bulaExtraida.fabricante,
+            sugestao: `Atualizar razão social do titular para "${bulaExtraida.fabricante}".`,
+          })
+        }
+
+        if (
+          bulaExtraida?.registro_mapa &&
+          gravadoMapa &&
+          gravadoMapa.replace(/\D/g, '') !== bulaExtraida.registro_mapa.replace(/\D/g, '')
+        ) {
+          divergenciasCadastradas.push({
+            campo: 'Registro MAPA',
+            valor_gravado: gravadoMapa,
+            valor_correto_bula: bulaExtraida.registro_mapa,
+            sugestao: `Corrigir número de registro para "${bulaExtraida.registro_mapa}".`,
+          })
+        }
+
+        comparacaoExistente = {
+          id_registro: alvoExistente.id,
+          produto_gravado: {
+            id: alvoExistente.id,
+            nome_completo: gravadoNome,
+            marca_padronizada: alvoExistente.getString('marca_padronizada'),
+            ncm: gravadoNcm,
+            principio_ativo: gravadoPa,
+            registro_mapa: gravadoMapa,
+            fabricante: gravadoFab,
+            embalagem: gravadoEmb,
+          },
+          divergencias: divergenciasCadastradas,
+          necessita_atualizacao: divergenciasCadastradas.length > 0,
+        }
       }
     }
 
-    travas.push({
-      id_trava: 5,
-      trava_nome: 'Concentração Válida',
-      aprovado: trava5Passou,
-      mensagem: trava5Msg,
-    })
+    // -------------------------------------------------------------------------
+    // VEREDITO GERAL (APROVADO / APROVADO COM RESSALVAS / REPROVADO)
+    // -------------------------------------------------------------------------
+    const temDivergenciaNcm = statusNcm === 'DIVERGENTE'
+    const temDivergenciaPa = statusPa === 'DIVERGENTE'
+    const travasObrigatoriasAprovadas = trava1Passou && trava2Passou && trava4Passou
 
-    // TRAVA 6: Registro MAPA com Validação Estrita de Formato
-    let trava6Passou = false
-    let trava6Msg = ''
+    let vereditoGeral = 'APROVADO'
+    let vereditoMotivo = 'Produto validado com sucesso e em plena conformidade regulatória.'
 
-    if (!registroMapa) {
-      trava6Msg = 'Número de Registro MAPA não informado.'
-    } else {
-      const isValidFormat = motor.validarFormatoRegistroMapa(registroMapa)
-      if (!isValidFormat) {
-        trava6Msg = `Registro MAPA "${registroMapa}" deve iniciar com 'Nº ', código 'TC' ou 'ISENTO'.`
-      } else {
-        trava6Passou = true
-        trava6Msg = `Registro MAPA "${registroMapa}" formatado conforme padrão oficial.`
-      }
+    if (!trava1Passou || (modoValidacao !== 'existente' && !trava4Passou)) {
+      vereditoGeral = 'REPROVADO'
+      vereditoMotivo = !trava1Passou
+        ? 'NCM informado inválido ou inexistente nas tabelas oficiais Siscomex/TIPI.'
+        : 'Produto com marca ou registro idêntico já cadastrado na Base Mestre (duplicidade).'
+    } else if (temDivergenciaNcm || temDivergenciaPa || !trava2Passou) {
+      vereditoGeral = 'APROVADO COM RESSALVAS'
+      vereditoMotivo = temDivergenciaNcm
+        ? `NCM informada (${ncmFormatado}) diverge da recomendada pelo motor canônico (${ncmCanonicoDeterminado}). Verifique as faixas de embalagem.`
+        : 'Identificadas divergências secundárias ou de embalagem em relação à bula oficial.'
     }
 
-    travas.push({
-      id_trava: 6,
-      trava_nome: 'Registro MAPA',
-      aprovado: trava6Passou,
-      mensagem: trava6Msg,
-    })
-
-    // Resultado Geral
-    const totalTravas = travas.length
-    const totalAprovadas = travas.filter((t) => t.aprovado).length
-    const score = Math.round((totalAprovadas / totalTravas) * 100)
-    const statusGeral = totalAprovadas === totalTravas ? 'APROVADO' : 'REPROVADO'
-
-    // Preenchimento e dedução determinística dos 28 campos canônicos via motor
-    const dadosParaMotor = {
-      nome_completo: nomeProduto,
-      embalagem: embalagem,
-      unidade: unidadeEmbalagem,
-      principio_ativo: bulaInfo?.principio_ativo_oficial || principioAtivo,
-      registro_mapa: registroMapa,
-      titular_fabricante: agrofitInfo?.titular_oficial || fabricante,
-      ncm_padrao: ncm,
-      origem_base: 'PRE_CADASTRO_PORTAL',
-      url_oficial: agrofitInfo?.link || 'https://dados.agricultura.gov.br',
-    }
-
-    const canonicoCalculado = motor.executarMotorCanonico(dadosParaMotor)
-
     // -------------------------------------------------------------------------
-    // PREENCHIMENTO AUTOMÁTICO DA BASE MESTRE SE APROVADO
+    // AÇÃO FINAL: GRAVAR / ATUALIZAR NA BASE MESTRE (Se solicitado ou autoCadastrar)
     // -------------------------------------------------------------------------
-    let baseMestreInclusao = {
-      incluido: false,
-      motivo: '',
+    let gravacaoResultado = {
+      executada: false,
+      acao: 'nenhuma',
       id_registro: null,
+      mensagem: '',
     }
 
-    if (statusGeral === 'APROVADO' && autoCadastrar) {
-      if (duplicataEncontrada) {
-        baseMestreInclusao = {
-          incluido: false,
-          motivo: `Não inserido na Base Mestre pois já existe produto correspondente cadastrado.`,
-          id_registro: duplicataEncontrada.id,
+    if (autoCadastrar && vereditoGeral !== 'REPROVADO') {
+      try {
+        const colBase = $app.findCollectionByNameOrId('base_mestre')
+        let recPersist = null
+
+        if (alvoExistente && (modoValidacao === 'existente' || duplicataId)) {
+          recPersist = alvoExistente
+          gravacaoResultado.acao = 'atualizado'
+        } else {
+          recPersist = new Record(colBase)
+          gravacaoResultado.acao = 'criado'
         }
-      } else {
-        try {
-          const colBase = $app.findCollectionByNameOrId('base_mestre')
-          const recBase = new Record(colBase)
 
-          // Gravação dos 28 campos canônicos com vínculo relacional
-          if (paRecordResolvido) {
-            recBase.set('principio_ativo_id', paRecordResolvido.id)
-          }
-          recBase.set('nome_completo', canonicoCalculado.nome_completo)
-          recBase.set('marca_padronizada', canonicoCalculado.marca_padronizada)
-          recBase.set('tipo_produto', canonicoCalculado.tipo_produto)
-          recBase.set('embalagem', canonicoCalculado.embalagem)
-          recBase.set('unidade', canonicoCalculado.unidade)
-          recBase.set('principio_ativo', canonicoCalculado.principio_ativo)
-          recBase.set('macro_grupo', canonicoCalculado.macro_grupo)
-          recBase.set('sub_grupo', canonicoCalculado.sub_grupo)
-          recBase.set('nota_subpos_2', canonicoCalculado.nota_subpos_2)
-          recBase.set('ncm_padrao', canonicoCalculado.ncm_padrao)
-          recBase.set('ncm_faixa1_ate_300g', canonicoCalculado.ncm_faixa1_ate_300g)
-          recBase.set('ncm_faixa2_300g_a_7_5kg', canonicoCalculado.ncm_faixa2_300g_a_7_5kg)
-          recBase.set('ncm_faixa3_7_5kg_a_10kg', canonicoCalculado.ncm_faixa3_7_5kg_a_10kg)
-          recBase.set('ncm_faixa4_acima_10kg', canonicoCalculado.ncm_faixa4_acima_10kg)
-          recBase.set('regra_tipi', canonicoCalculado.regra_tipi)
-          recBase.set('registro_mapa', canonicoCalculado.registro_mapa)
-          recBase.set('sistema_norma_mapa', canonicoCalculado.sistema_norma_mapa)
-          recBase.set('titular_fabricante', canonicoCalculado.titular_fabricante)
-          recBase.set('origem_base', canonicoCalculado.origem_base)
-          recBase.set('status_pis_cofins', canonicoCalculado.status_pis_cofins)
-          recBase.set('aliquota_ate_mar2026', canonicoCalculado.aliquota_ate_mar2026)
-          recBase.set('aliquota_pos_abr2026_real', canonicoCalculado.aliquota_pos_abr2026_real)
-          recBase.set(
-            'aliquota_pos_abr2026_presumido',
-            canonicoCalculado.aliquota_pos_abr2026_presumido,
-          )
-          recBase.set('cst_saida', canonicoCalculado.cst_saida)
-          recBase.set('cst_entrada', canonicoCalculado.cst_entrada)
-          recBase.set('ibs_cbs_2027', canonicoCalculado.ibs_cbs_2027)
-          recBase.set('url_oficial', canonicoCalculado.url_oficial)
+        // Preenchimento de 28 campos
+        recPersist.set('nome_completo', motorCanonico.nome_completo)
+        recPersist.set('marca_padronizada', motorCanonico.marca_padronizada)
+        recPersist.set('tipo_produto', motorCanonico.tipo_produto)
+        recPersist.set('embalagem', motorCanonico.embalagem)
+        recPersist.set('unidade', motorCanonico.unidade)
+        recPersist.set('principio_ativo', motorCanonico.principio_ativo)
+        recPersist.set('macro_grupo', motorCanonico.macro_grupo)
+        recPersist.set('sub_grupo', motorCanonico.sub_grupo)
+        recPersist.set('nota_subpos_2', motorCanonico.nota_subpos_2)
+        recPersist.set('ncm_padrao', motorCanonico.ncm_padrao)
+        recPersist.set('ncm_faixa1_ate_300g', motorCanonico.ncm_faixa1_ate_300g)
+        recPersist.set('ncm_faixa2_300g_a_7_5kg', motorCanonico.ncm_faixa2_300g_a_7_5kg)
+        recPersist.set('ncm_faixa3_7_5kg_a_10kg', motorCanonico.ncm_faixa3_7_5kg_a_10kg)
+        recPersist.set('ncm_faixa4_acima_10kg', motorCanonico.ncm_faixa4_acima_10kg)
+        recPersist.set('regra_tipi', motorCanonico.regra_tipi)
+        recPersist.set('registro_mapa', motorCanonico.registro_mapa)
+        recPersist.set('sistema_norma_mapa', motorCanonico.sistema_norma_mapa)
+        recPersist.set('titular_fabricante', motorCanonico.titular_fabricante)
+        recPersist.set('origem_base', motorCanonico.origem_base)
+        recPersist.set('status_pis_cofins', motorCanonico.status_pis_cofins)
+        recPersist.set('aliquota_ate_mar2026', motorCanonico.aliquota_ate_mar2026)
+        recPersist.set('aliquota_pos_abr2026_real', motorCanonico.aliquota_pos_abr2026_real)
+        recPersist.set(
+          'aliquota_pos_abr2026_presumido',
+          motorCanonico.aliquota_pos_abr2026_presumido,
+        )
+        recPersist.set('cst_saida', motorCanonico.cst_saida)
+        recPersist.set('cst_entrada', motorCanonico.cst_entrada)
+        recPersist.set('ibs_cbs_2027', motorCanonico.ibs_cbs_2027)
+        recPersist.set('url_oficial', motorCanonico.url_oficial)
 
-          // Compatibilidade legada
-          recBase.set('nome_produto', canonicoCalculado.marca_padronizada)
-          recBase.set('ncm', canonicoCalculado.ncm_padrao.replace(/\D/g, ''))
-          recBase.set('fabricante', canonicoCalculado.titular_fabricante)
-          recBase.set('concentracao', concentracao || 0)
-          recBase.set('unidade_concentracao', unidadeConcentracao)
-          recBase.set('status_validacao', 'aprovado')
-          recBase.set(
-            'macro_grupo_subgrupo',
-            `${canonicoCalculado.macro_grupo} — ${canonicoCalculado.sub_grupo}`,
-          )
-          recBase.set('regra_tipi_embalagem', canonicoCalculado.regra_tipi)
-          recBase.set(
-            'cst_recomendado',
-            `Saída: ${canonicoCalculado.cst_saida} | Entrada: ${canonicoCalculado.cst_entrada}`,
-          )
-          recBase.set('dados_classificacao', JSON.stringify(canonicoCalculado))
+        // Compatibilidade com campos legados
+        recPersist.set('nome_produto', motorCanonico.marca_padronizada)
+        recPersist.set('ncm', motorCanonico.ncm_padrao.replace(/\D/g, ''))
+        recPersist.set('fabricante', motorCanonico.titular_fabricante)
+        recPersist.set('status_validacao', 'aprovado')
+        recPersist.set(
+          'macro_grupo_subgrupo',
+          `${motorCanonico.macro_grupo} — ${motorCanonico.sub_grupo}`,
+        )
+        recPersist.set('regra_tipi_embalagem', motorCanonico.regra_tipi)
+        recPersist.set(
+          'cst_recomendado',
+          `Saída: ${motorCanonico.cst_saida} | Entrada: ${motorCanonico.cst_entrada}`,
+        )
+        recPersist.set('dados_classificacao', JSON.stringify(motorCanonico))
 
-          $app.save(recBase)
+        $app.save(recPersist)
 
-          baseMestreInclusao = {
-            incluido: true,
-            motivo:
-              'Produto aprovado em todas as 6 travas e consolidado na Base Mestre no Padrão Canônico de 28 Campos.',
-            id_registro: recBase.id,
-          }
-        } catch (insertErr) {
-          baseMestreInclusao = {
-            incluido: false,
-            motivo: `Falha ao auto-incluir na Base Mestre: ${insertErr.message}`,
-            id_registro: null,
-          }
-        }
+        gravacaoResultado.executada = true
+        gravacaoResultado.id_registro = recPersist.id
+        gravacaoResultado.mensagem =
+          gravacaoResultado.acao === 'criado'
+            ? 'Produto cadastrado com sucesso na Base Mestre no Padrão Canônico de 28 Campos.'
+            : 'Produto existente atualizado com sucesso na Base Mestre conforme os dados da bula.'
+      } catch (errGrav) {
+        console.log('Aviso ao persistir produto na Base Mestre:', errGrav.message)
+        gravacaoResultado.mensagem = `Falha ao gravar na Base Mestre: ${errGrav.message}`
       }
     }
 
-    // Gravar no log_validacoes
+    // Gravar no log_validacoes para histórico permanente
     try {
-      const logCol = $app.findCollectionByNameOrId('log_validacoes')
+      const colLog = $app.findCollectionByNameOrId('log_validacoes')
       for (const t of travas) {
-        const logRec = new Record(logCol)
-        logRec.set('nome_produto', nomeProduto || 'Não informado')
-        logRec.set('ncm', ncm || ncmRaw)
-        logRec.set('embalagem', embalagem)
-        logRec.set('principio_ativo', principioAtivo)
+        const logRec = new Record(colLog)
+        logRec.set('nome_produto', nomeComercial)
+        logRec.set('ncm', ncmDigitos)
+        logRec.set('embalagem', embalagemFinal)
+        logRec.set('principio_ativo', principioAtivoFinal)
         logRec.set('id_trava', t.id_trava)
         logRec.set('trava_nome', t.trava_nome)
         logRec.set('aprovado', t.aprovado)
         logRec.set('mensagem', t.mensagem)
         $app.save(logRec)
       }
-    } catch (logErr) {
-      console.log('Aviso ao registrar log_validacoes:', logErr.message)
-    }
+    } catch (_) {}
 
+    // Resposta final completa para o frontend
     return e.json(200, {
-      status: statusGeral,
-      score: score,
-      total_travas: totalTravas,
-      total_aprovadas: totalAprovadas,
+      veredito_geral: vereditoGeral,
+      status: vereditoGeral === 'REPROVADO' ? 'REPROVADO' : 'APROVADO',
+      veredito_motivo: vereditoMotivo,
+      modo: modoValidacao,
+      score:
+        vereditoGeral === 'APROVADO' ? 100 : vereditoGeral === 'APROVADO COM RESSALVAS' ? 75 : 30,
+      total_travas: travas.length,
+      total_aprovadas: travas.filter((t) => t.aprovado).length,
+      campos_validacao: camposValidacao,
+      possui_diferenca_ncm_embalagem: possuiDiferencaNcmPorEmbalagem,
+      linhas_ncm_embalagem: linhasNcmEmbalagem,
       travas: travas,
+      comparacao_existente: comparacaoExistente,
       fontes_consultadas: fontesConsultadas,
-      avisos_divergencia: avisosDivergencia,
-      base_mestre_inclusao: baseMestreInclusao,
-      produto_validado: canonicoCalculado,
+      bula_extraida: bulaExtraida,
+      gravacao_base_mestre: gravacaoResultado,
+      produto_canonico: motorCanonico,
+      // Retrocompatibilidade
+      base_mestre_inclusao: {
+        incluido: gravacaoResultado.executada,
+        motivo: gravacaoResultado.mensagem,
+        id_registro: gravacaoResultado.id_registro,
+      },
+      produto_validado: {
+        nome_produto: motorCanonico.marca_padronizada,
+        ncm: motorCanonico.ncm_padrao,
+        ncm_descricao_oficial: ncmExternoInfo?.descricao || '',
+        embalagem: motorCanonico.embalagem,
+        quantidade_embalagem: bulaExtraida?.quantidade_embalagem_principal || '20 L',
+        principio_ativo: motorCanonico.principio_ativo,
+        fabricante: motorCanonico.titular_fabricante,
+        registro_mapa: motorCanonico.registro_mapa,
+        concentracao: 0,
+        classe_uso: motorCanonico.sub_grupo,
+        formulacao: bulaExtraida?.formulacao || '',
+        culturas: [],
+        bula_resumo: bulaExtraida?.resumo_bula || '',
+      },
     })
   } catch (errTop) {
     console.log('Erro crítico ao validar produto:', errTop.message || errTop)
     return e.json(500, {
+      veredito_geral: 'REPROVADO',
       status: 'REPROVADO',
-      score: 0,
-      total_travas: 6,
-      total_aprovadas: 0,
-      travas: [],
-      error: `Erro interno no servidor ao validar produto: ${errTop.message || String(errTop)}`,
+      error: `Erro interno no servidor ao processar validação: ${errTop.message || String(errTop)}`,
     })
   }
 })

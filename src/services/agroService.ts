@@ -7,6 +7,8 @@ import type {
   LogValidacao,
   RelatorioValidacao,
   ProdutoInput,
+  ValidarCadastroInput,
+  RespostaValidacaoCadastro,
   RespostaSincronizacao,
   HistoricoSincronizacaoRecord,
 } from '@/types/agro'
@@ -82,7 +84,9 @@ export async function obterHistoricoSincronizacaoPorId(id: string) {
 // -----------------------------------------------------------------------------
 // Validação no Servidor (Hook Customizado)
 // -----------------------------------------------------------------------------
-export async function validarProdutoServidor(dados: ProdutoInput): Promise<RelatorioValidacao> {
+export async function validarProdutoServidor(
+  dados: ProdutoInput | ValidarCadastroInput,
+): Promise<RelatorioValidacao & RespostaValidacaoCadastro> {
   const token = pb.authStore.token
   const baseUrl = import.meta.env.VITE_POCKETBASE_URL || ''
 
@@ -106,7 +110,16 @@ export async function validarProdutoServidor(dados: ProdutoInput): Promise<Relat
     throw new Error(msg)
   }
 
-  return (await response.json()) as RelatorioValidacao
+  return (await response.json()) as RelatorioValidacao & RespostaValidacaoCadastro
+}
+
+/**
+ * Validação de cadastro canônica com o contrato exato dos 5 campos
+ */
+export async function validarCadastroProduto(
+  dados: ValidarCadastroInput,
+): Promise<RespostaValidacaoCadastro> {
+  return validarProdutoServidor(dados)
 }
 
 // -----------------------------------------------------------------------------
