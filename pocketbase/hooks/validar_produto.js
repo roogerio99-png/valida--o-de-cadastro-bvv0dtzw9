@@ -569,7 +569,7 @@ routerAdd('POST', '/backend/v1/validar-produto', (e) => {
       executarMotorCanonico: fallbackExecutarMotorCanonico,
     }
 
-    function cleanStr(s) {
+    const cleanStr = function (s) {
       if (!s) return ''
       return String(s)
         .toLowerCase()
@@ -902,6 +902,69 @@ Consulte a base pública oficial do AGROFIT e a BULA oficial registrada no MAPA 
     const motorCanonico = motor.executarMotorCanonico(dadosMotorInput)
     const ncmCanonicoDeterminado = motorCanonico.ncm_padrao
 
+    // Helper para obter a descrição da subposição/família da NCM
+    const descreverGrupoNcm = function (codigo8) {
+      const c = String(codigo8 || '').replace(/\D/g, '')
+      if (c.startsWith('380861') || c.startsWith('380862') || c.startsWith('380869')) {
+        return `${motor.formatarNcmMascara(c)} — Mercadorias da Nota de Subposições 2 do Cap. 38 (por Faixa de Embalagem)`
+      }
+      if (c.startsWith('380891')) {
+        return `${motor.formatarNcmMascara(c)} — Inseticidas, Acaricidas e afins`
+      }
+      if (c.startsWith('380892')) {
+        return `${motor.formatarNcmMascara(c)} — Fungicidas`
+      }
+      if (c.startsWith('380893')) {
+        if (c === '38089359' || c.startsWith('3808935')) {
+          return `${motor.formatarNcmMascara(c)} — Reguladores de Crescimento de Plantas`
+        }
+        return `${motor.formatarNcmMascara(c)} — Herbicidas e Inibidores de Germinação`
+      }
+      if (c.startsWith('380894')) {
+        return `${motor.formatarNcmMascara(c)} — Desinfetantes`
+      }
+      if (c.startsWith('380899')) {
+        return `${motor.formatarNcmMascara(c)} — Nematicidas, Rodenticidas e Outros`
+      }
+      if (
+        c.startsWith('3105') ||
+        c.startsWith('3101') ||
+        c.startsWith('3102') ||
+        c.startsWith('3103') ||
+        c.startsWith('3104')
+      ) {
+        return `${motor.formatarNcmMascara(c)} — Fertilizantes e Adubos (Capítulo 31)`
+      }
+      if (c.startsWith('2520') || c.startsWith('2521') || c.startsWith('2503')) {
+        return `${motor.formatarNcmMascara(c)} — Corretivos e Condicionadores de Solo (Capítulo 25)`
+      }
+      if (c.startsWith('3002')) {
+        return `${motor.formatarNcmMascara(c)} — Inoculantes e Culturas de Microrganismos (Capítulo 30)`
+      }
+      if (c.startsWith('3824')) {
+        return `${motor.formatarNcmMascara(c)} — Adjuvantes e Preparações Químicas Diversas (Capítulo 38)`
+      }
+      return `${motor.formatarNcmMascara(c)} — Classificação Aduaneira Oficial`
+    }
+
+    const ncmCleanInf = ncmDigitos
+    const ncmCleanCanonico = ncmCanonicoDeterminado.replace(/\D/g, '')
+
+    // Determinar coerência de subposição
+    const subposInformada = ncmCleanInf.slice(0, 6)
+    const subposCanonica = ncmCleanCanonico.slice(0, 6)
+    const ncmF1 = motorCanonico.ncm_faixa1_ate_300g.replace(/\D/g, '')
+    const ncmF2 = motorCanonico.ncm_faixa2_300g_a_7_5kg.replace(/\D/g, '')
+    const ncmF3 = motorCanonico.ncm_faixa3_7_5kg_a_10kg.replace(/\D/g, '')
+    const ncmF4 = motorCanonico.ncm_faixa4_acima_10kg.replace(/\D/g, '')
+    const bateFaixaEmbalagem = [ncmF1, ncmF2, ncmF3, ncmF4].includes(ncmCleanInf)
+
+    // Divergência de coerência de classe ocorre quando a NCM informada não confere com o canônico nem com as faixas de embalagem do produto
+    let divergenciaCoerenciaClasseNcm = false
+    if (ncmCleanInf !== ncmCleanCanonico && !bateFaixaEmbalagem) {
+      divergenciaCoerenciaClasseNcm = true
+    }
+
     // -------------------------------------------------------------------------
     // ETAPA 3 — NCM POR EMBALAGEM EM LINHAS DIFERENTES (Requisito Explícito)
     // Se o produto tiver variação de NCM por faixa TIPI, trazer UMA LINHA POR FAIXA/EMBALAGEM
@@ -967,7 +1030,7 @@ Consulte a base pública oficial do AGROFIT e a BULA oficial registrada no MAPA 
     })
 
     // -------------------------------------------------------------------------
-    // TRAVAS DE AUDITORIA (Trava 1 a 4)
+    // TRAVAS DE AUDITORIA (Trava 0 a 4)
     // -------------------------------------------------------------------------
     const travas = []
 
@@ -1352,61 +1415,8 @@ Consulte a base pública oficial do AGROFIT e a BULA oficial registrada no MAPA 
     // -------------------------------------------------------------------------
     // 2.3 NCM (Obrigatório) — Validação Cruzada de NCM & Coerência Classe × Subposição TIPI
     // -------------------------------------------------------------------------
-    // Helper para obter a descrição da subposição/família da NCM
-    function descreverGrupoNcm(codigo8) {
-      const c = String(codigo8 || '').replace(/\D/g, '')
-      if (c.startsWith('380861') || c.startsWith('380862') || c.startsWith('380869')) {
-        return `${motor.formatarNcmMascara(c)} — Mercadorias da Nota de Subposições 2 do Cap. 38 (por Faixa de Embalagem)`
-      }
-      if (c.startsWith('380891')) {
-        return `${motor.formatarNcmMascara(c)} — Inseticidas, Acaricidas e afins`
-      }
-      if (c.startsWith('380892')) {
-        return `${motor.formatarNcmMascara(c)} — Fungicidas`
-      }
-      if (c.startsWith('380893')) {
-        if (c === '38089359' || c.startsWith('3808935')) {
-          return `${motor.formatarNcmMascara(c)} — Reguladores de Crescimento de Plantas`
-        }
-        return `${motor.formatarNcmMascara(c)} — Herbicidas e Inibidores de Germinação`
-      }
-      if (c.startsWith('380894')) {
-        return `${motor.formatarNcmMascara(c)} — Desinfetantes`
-      }
-      if (c.startsWith('380899')) {
-        return `${motor.formatarNcmMascara(c)} — Nematicidas, Rodenticidas e Outros`
-      }
-      if (
-        c.startsWith('3105') ||
-        c.startsWith('3101') ||
-        c.startsWith('3102') ||
-        c.startsWith('3103') ||
-        c.startsWith('3104')
-      ) {
-        return `${motor.formatarNcmMascara(c)} — Fertilizantes e Adubos (Capítulo 31)`
-      }
-      if (c.startsWith('2520') || c.startsWith('2521') || c.startsWith('2503')) {
-        return `${motor.formatarNcmMascara(c)} — Corretivos e Condicionadores de Solo (Capítulo 25)`
-      }
-      if (c.startsWith('3002')) {
-        return `${motor.formatarNcmMascara(c)} — Inoculantes e Culturas de Microrganismos (Capítulo 30)`
-      }
-      if (c.startsWith('3824')) {
-        return `${motor.formatarNcmMascara(c)} — Adjuvantes e Preparações Químicas Diversas (Capítulo 38)`
-      }
-      return `${motor.formatarNcmMascara(c)} — Classificação Aduaneira Oficial`
-    }
-
     let statusNcm = 'OK'
     let explNcm = ''
-    let divergenciaCoerenciaClasseNcm = false
-    const ncmCleanInf = ncmDigitos
-    const ncmCleanCanonico = ncmCanonicoDeterminado.replace(/\D/g, '')
-
-    // Determinar coerência de subposição
-    const subposInformada = ncmCleanInf.slice(0, 6)
-    const subposCanonica = ncmCleanCanonico.slice(0, 6)
-    const ehNotaSubpos2 = motorCanonico.nota_subpos_2 === 'SIM'
 
     if (!trava1Passou) {
       statusNcm = 'DIVERGENTE'
@@ -1414,30 +1424,18 @@ Consulte a base pública oficial do AGROFIT e a BULA oficial registrada no MAPA 
     } else if (ncmCleanInf === ncmCleanCanonico) {
       statusNcm = 'OK'
       explNcm = `NCM informada (${ncmFormatado}) confere com a classificação química e aduaneira recomendada pelo motor canônico para a classe "${motorCanonico.sub_grupo}" e está homologada.`
+    } else if (bateFaixaEmbalagem) {
+      statusNcm = 'OK'
+      explNcm = `NCM informada (${ncmFormatado}) confere com uma das faixas específicas de embalagem do produto conforme tabela TIPI.`
     } else {
-      // Verificar se a NCM informada bate com alguma das faixas de embalagem do motor
-      const ncmF1 = motorCanonico.ncm_faixa1_ate_300g.replace(/\D/g, '')
-      const ncmF2 = motorCanonico.ncm_faixa2_300g_a_7_5kg.replace(/\D/g, '')
-      const ncmF3 = motorCanonico.ncm_faixa3_7_5kg_a_10kg.replace(/\D/g, '')
-      const ncmF4 = motorCanonico.ncm_faixa4_acima_10kg.replace(/\D/g, '')
+      statusNcm = 'DIVERGENTE'
+      const descInf = descreverGrupoNcm(ncmCleanInf)
+      const descCanonica = descreverGrupoNcm(ncmCleanCanonico)
 
-      const bateFaixaEmbalagem = [ncmF1, ncmF2, ncmF3, ncmF4].includes(ncmCleanInf)
-
-      if (bateFaixaEmbalagem) {
-        statusNcm = 'OK'
-        explNcm = `NCM informada (${ncmFormatado}) confere com uma das faixas específicas de embalagem do produto conforme tabela TIPI.`
+      if (subposInformada !== subposCanonica) {
+        explNcm = `Divergência de Classificação Fiscal: A NCM informada (${descInf}) pertence a uma subposição incompatível com a classe agronômica do produto ("${motorCanonico.sub_grupo}"). A NCM correta determinada é ${descCanonica}.`
       } else {
-        statusNcm = 'DIVERGENTE'
-        divergenciaCoerenciaClasseNcm = true
-
-        const descInf = descreverGrupoNcm(ncmCleanInf)
-        const descCanonica = descreverGrupoNcm(ncmCleanCanonico)
-
-        if (subposInformada !== subposCanonica) {
-          explNcm = `Divergência de Classificação Fiscal: A NCM informada (${descInf}) pertence a uma subposição incompatível com a classe agronômica do produto ("${motorCanonico.sub_grupo}"). A NCM correta determinada é ${descCanonica}.`
-        } else {
-          explNcm = `Divergência de Subitem TIPI: NCM informada foi ${ncmFormatado}, mas a classificação canônica para este produto/embalagem é ${ncmCanonicoDeterminado} (${descCanonica}).`
-        }
+        explNcm = `Divergência de Subitem TIPI: NCM informada foi ${ncmFormatado}, mas a classificação canônica para este produto/embalagem é ${ncmCanonicoDeterminado} (${descCanonica}).`
       }
     }
 
@@ -1705,11 +1703,12 @@ Consulte a base pública oficial do AGROFIT e a BULA oficial registrada no MAPA 
       },
     })
   } catch (errTop) {
-    console.log('Erro crítico ao validar produto:', errTop.message || errTop)
+    console.log('Erro crítico ao validar produto:', errTop.message || errTop, errTop.stack || '')
     return e.json(500, {
       veredito_geral: 'REPROVADO',
       status: 'REPROVADO',
       error: `Erro interno no servidor ao processar validação: ${errTop.message || String(errTop)}`,
+      stack: String(errTop.stack || ''),
     })
   }
 })
@@ -1718,6 +1717,10 @@ Consulte a base pública oficial do AGROFIT e a BULA oficial registrada no MAPA 
  * GET /backend/v1/relatorio-duplicidades
  * Retorna grupos de duplicidades identificados na collection base_mestre
  */
+routerAdd('GET', '/backend/v1/ping-teste', (e) => {
+  return e.json(200, { ok: true, timestamp: Date.now() })
+})
+
 routerAdd('GET', '/backend/v1/relatorio-duplicidades', (e) => {
   try {
     const records = $app.findRecordsByFilter('base_mestre', 'id != ""', '-created', 1500, 0) || []
