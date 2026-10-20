@@ -833,172 +833,6 @@ Consulte a base pública oficial do AGROFIT e a BULA oficial registrada no MAPA 
     const ncmCanonicoDeterminado = motorCanonico.ncm_padrao
 
     // -------------------------------------------------------------------------
-    // ETAPA 2 — VALIDAÇÃO CRUZADA CAMPO A CAMPO
-    // Status possíveis: OK | DIVERGENTE | NÃO INFORMADO | NÃO LOCALIZADO
-    // -------------------------------------------------------------------------
-    const camposValidacao = []
-
-    // 2.1 NOME COMERCIAL
-    camposValidacao.push({
-      campo: 'Nome Comercial',
-      chave: 'nome_comercial',
-      obrigatorio: true,
-      informado: nomeComercial,
-      encontrado_bula: bulaExtraida?.nome_comercial_oficial || motorCanonico.marca_padronizada,
-      status: 'OK',
-      explicacao: bulaExtraida?.encontrado
-        ? 'Nome comercial localizado e homologado no bulário oficial.'
-        : 'Nome comercial registrado para auditoria cadastral.',
-    })
-
-    // 2.2 PRINCÍPIO ATIVO (Opcional)
-    let statusPa = 'OK'
-    let explPa = ''
-    const paBula = bulaExtraida?.principio_ativo || ''
-
-    if (!principioAtivoInformado) {
-      statusPa = 'NÃO INFORMADO'
-      explPa = paBula
-        ? `Campo opcional não preenchido. Identificado na bula/AGROFIT: "${paBula}".`
-        : 'Campo opcional não preenchido pelo usuário.'
-    } else if (paBula) {
-      const normPaInf = motor.normalizarTexto(principioAtivoInformado)
-      const normPaBula = motor.normalizarTexto(paBula)
-      if (
-        normPaInf === normPaBula ||
-        normPaInf.includes(normPaBula) ||
-        normPaBula.includes(normPaInf)
-      ) {
-        statusPa = 'OK'
-        explPa = `Princípio ativo informado confere com o ingrediente ativo da bula oficial: "${paBula}".`
-      } else {
-        statusPa = 'DIVERGENTE'
-        explPa = `Divergência: Informado "${principioAtivoInformado}", mas a bula oficial MAPA indica "${paBula}".`
-      }
-    } else {
-      statusPa = 'NÃO LOCALIZADO'
-      explPa = `Princípio ativo "${principioAtivoInformado}" não pôde ser confrontado em bula externa.`
-    }
-
-    camposValidacao.push({
-      campo: 'Princípio Ativo',
-      chave: 'principio_ativo',
-      obrigatorio: false,
-      informado: principioAtivoInformado || 'Não informado',
-      encontrado_bula: paBula || 'Não localizado na bula',
-      status: statusPa,
-      explicacao: explPa,
-    })
-
-    // 2.3 NCM (Obrigatório) — Comparar NCM informada com a NCM canônica do motor químico
-    let statusNcm = 'OK'
-    let explNcm = ''
-    const ncmCleanInf = ncmDigitos
-    const ncmCleanCanonico = ncmCanonicoDeterminado.replace(/\D/g, '')
-
-    if (ncmCleanInf === ncmCleanCanonico) {
-      statusNcm = 'OK'
-      explNcm = `NCM informada (${ncmFormatado}) confere com a classificação química e aduaneira recomendada pelo motor canônico.`
-    } else {
-      // Verificar se a NCM informada bate com alguma das faixas de embalagem do motor
-      const ncmF1 = motorCanonico.ncm_faixa1_ate_300g.replace(/\D/g, '')
-      const ncmF2 = motorCanonico.ncm_faixa2_300g_a_7_5kg.replace(/\D/g, '')
-      const ncmF3 = motorCanonico.ncm_faixa3_7_5kg_a_10kg.replace(/\D/g, '')
-      const ncmF4 = motorCanonico.ncm_faixa4_acima_10kg.replace(/\D/g, '')
-
-      if ([ncmF1, ncmF2, ncmF3, ncmF4].includes(ncmCleanInf)) {
-        statusNcm = 'OK'
-        explNcm = `NCM informada (${ncmFormatado}) confere com uma das faixas específicas de embalagem do produto conforme tabela TIPI.`
-      } else {
-        statusNcm = 'DIVERGENTE'
-        explNcm = `Divergência: NCM informada foi ${ncmFormatado}, mas o motor químico determinou ${ncmCanonicoDeterminado} (Regra: ${motorCanonico.regra_tipi || 'Classificação TIPI'}).`
-      }
-    }
-
-    camposValidacao.push({
-      campo: 'NCM',
-      chave: 'ncm',
-      obrigatorio: true,
-      informado: ncmFormatado,
-      encontrado_bula: ncmCanonicoDeterminado,
-      status: statusNcm,
-      explicacao: explNcm,
-    })
-
-    // 2.4 CÓDIGO MAPA (Opcional)
-    let statusMapa = 'OK'
-    let explMapa = ''
-    const mapaBula = bulaExtraida?.registro_mapa || ''
-
-    if (!codigoMapaInformado) {
-      statusMapa = 'NÃO INFORMADO'
-      explMapa = mapaBula
-        ? `Campo opcional não preenchido. Registro oficial encontrado na bula: "${mapaBula}".`
-        : 'Campo opcional não preenchido pelo usuário.'
-    } else if (mapaBula) {
-      const dInf = codigoMapaInformado.replace(/\D/g, '')
-      const dBula = mapaBula.replace(/\D/g, '')
-      if (dInf && dBula && (dInf === dBula || dInf.endsWith(dBula) || dBula.endsWith(dInf))) {
-        statusMapa = 'OK'
-        explMapa = `Código MAPA informado (${codigoMapaInformado}) confere com o registro oficial da bula (${mapaBula}).`
-      } else {
-        statusMapa = 'DIVERGENTE'
-        explMapa = `Divergência: Informado "${codigoMapaInformado}", mas a bula indica "${mapaBula}".`
-      }
-    } else {
-      statusMapa = 'NÃO LOCALIZADO'
-      explMapa = `Registro MAPA "${codigoMapaInformado}" não localizado na consulta externa.`
-    }
-
-    camposValidacao.push({
-      campo: 'Código MAPA',
-      chave: 'codigo_mapa',
-      obrigatorio: false,
-      informado: codigoMapaInformado || 'Não informado',
-      encontrado_bula: mapaBula || 'Não localizado na bula',
-      status: statusMapa,
-      explicacao: explMapa,
-    })
-
-    // 2.5 FABRICANTE / TITULAR (Retorno da busca)
-    camposValidacao.push({
-      campo: 'Fabricante / Titular',
-      chave: 'fabricante',
-      obrigatorio: false,
-      informado: '(Retorno da Busca Oficial)',
-      encontrado_bula: fabricanteFinal,
-      status: 'OK',
-      explicacao: `Titular oficial identificado na bula/AGROFIT: "${fabricanteFinal}".`,
-    })
-
-    // 2.6 EMBALAGEM E QUANTIDADE (Retorno e conferência)
-    let statusEmb = 'OK'
-    let explEmb = ''
-    const embBula =
-      bulaExtraida?.embalagens_autorizadas && bulaExtraida.embalagens_autorizadas.length > 0
-        ? bulaExtraida.embalagens_autorizadas.join(', ')
-        : bulaExtraida?.embalagem_principal || 'Não informada'
-    const qtdBula = bulaExtraida?.quantidade_embalagem_principal || '20 L'
-
-    if (!embalagemInformada) {
-      statusEmb = 'NÃO INFORMADO'
-      explEmb = `Embalagem não informada. Bula oficial autoriza: ${embBula}. Quantidade sugerida: ${qtdBula}.`
-    } else {
-      statusEmb = 'OK'
-      explEmb = `Embalagem informada: "${embalagemInformada}". Autorizadas na bula oficial: ${embBula}.`
-    }
-
-    camposValidacao.push({
-      campo: 'Embalagem e Quantidade',
-      chave: 'embalagem',
-      obrigatorio: false,
-      informado: embalagemInformada || 'Não informada',
-      encontrado_bula: `${embBula} (Volume/Peso: ${qtdBula})`,
-      status: statusEmb,
-      explicacao: explEmb,
-    })
-
-    // -------------------------------------------------------------------------
     // ETAPA 3 — NCM POR EMBALAGEM EM LINHAS DIFERENTES (Requisito Explícito)
     // Se o produto tiver variação de NCM por faixa TIPI, trazer UMA LINHA POR FAIXA/EMBALAGEM
     // -------------------------------------------------------------------------
@@ -1067,7 +901,7 @@ Consulte a base pública oficial do AGROFIT e a BULA oficial registrada no MAPA 
     // -------------------------------------------------------------------------
     const travas = []
 
-    // Trava 1: NCM Obrigatório e Válido
+    // Trava 1: NCM Obrigatório e Válido (com Fallback Dinâmico BrasilAPI / Siscomex)
     let regraNcmRecord = null
     try {
       const recs = $app.findRecordsByFilter(
@@ -1082,14 +916,82 @@ Consulte a base pública oficial do AGROFIT e a BULA oficial registrada no MAPA 
       }
     } catch (_) {}
 
-    const trava1Passou = Boolean(regraNcmRecord || (ncmExternoInfo && ncmExternoInfo.descricao))
+    // Fallback dinâmico: se a NCM de 8 dígitos não estiver na coleção local,
+    // verifica se a consulta externa (BrasilAPI / Siscomex) já obteve retorno ou tenta novamente
+    let consultaExternaRealizada = Boolean(ncmExternoInfo)
+    let ncmExternoConfirmado = Boolean(ncmExternoInfo && ncmExternoInfo.descricao)
+    let servicoExternoInacessivel = false
+
+    const fonteNcmStatus = (fontesConsultadas.find((f) => f.tipo === 'ncm') || {}).status
+    if (fonteNcmStatus === 'indisponivel') {
+      servicoExternoInacessivel = true
+    }
+
+    // Se não encontrou localmente e ainda não tem confirmação nem erro 404 definitivo
+    if (
+      !regraNcmRecord &&
+      !ncmExternoConfirmado &&
+      !servicoExternoInacessivel &&
+      fonteNcmStatus !== 'nao_encontrado'
+    ) {
+      try {
+        const resNcmFallback = $http.send({
+          url: `https://brasilapi.com.br/api/ncm/v1/${ncmDigitos}`,
+          method: 'GET',
+          headers: {
+            'User-Agent': 'ValidadorAgro/2.0 (Auditoria Fiscal)',
+            Accept: 'application/json',
+          },
+          timeout: 5,
+        })
+        consultaExternaRealizada = true
+        if (resNcmFallback.statusCode === 200) {
+          const bodyNcm =
+            typeof resNcmFallback.json === 'function'
+              ? resNcmFallback.json()
+              : JSON.parse(resNcmFallback.raw || '{}')
+          ncmExternoInfo = {
+            codigo: bodyNcm.codigo || ncmDigitos,
+            descricao: bodyNcm.descricao || '',
+            data_inicio: bodyNcm.data_inicio || '',
+          }
+          ncmExternoConfirmado = true
+        } else if (resNcmFallback.statusCode === 404) {
+          ncmExternoConfirmado = false
+        } else {
+          servicoExternoInacessivel = true
+        }
+      } catch (errHttpFb) {
+        consultaExternaRealizada = true
+        servicoExternoInacessivel = true
+      }
+    }
+
+    let trava1Passou = false
+    let trava1Mensagem = ''
+
+    if (regraNcmRecord) {
+      trava1Passou = true
+      const descLocal =
+        regraNcmRecord.getString('descricao') || 'Classificação homologada na matriz agropecuária'
+      trava1Mensagem = `NCM ${ncmFormatado} válido e homologado na base local TIPI (${descLocal}).`
+    } else if (ncmExternoConfirmado) {
+      trava1Passou = true
+      trava1Mensagem = `NCM ${ncmFormatado} validado via catálogo oficial Siscomex/BrasilAPI: "${ncmExternoInfo.descricao}".`
+    } else if (servicoExternoInacessivel) {
+      // Quando inacessível externamente e não encontrado localmente, não reprova por falta de dados externos: marca como não verificável
+      trava1Passou = true
+      trava1Mensagem = `NCM ${ncmFormatado} com 8 dígitos, não verificável em tempo real (catálogo Siscomex/BrasilAPI indisponível; ausente na matriz local). Aprovado condicionalmente.`
+    } else {
+      trava1Passou = false
+      trava1Mensagem = `NCM ${ncmFormatado} não localizado no catálogo oficial da TIPI/Siscomex (inexistente na base oficial).`
+    }
+
     travas.push({
       id_trava: 1,
       trava_nome: 'NCM Válido (Siscomex / TIPI)',
       aprovado: trava1Passou,
-      mensagem: trava1Passou
-        ? `NCM ${ncmFormatado} válido e homologado no catálogo oficial TIPI (${regraNcmRecord ? regraNcmRecord.getString('descricao') : ncmExternoInfo?.descricao}).`
-        : `NCM ${ncmFormatado} não localizado no catálogo oficial da TIPI/Siscomex.`,
+      mensagem: trava1Mensagem,
     })
 
     // Trava 2: Embalagem vs NCM
@@ -1306,11 +1208,184 @@ Consulte a base pública oficial do AGROFIT e a BULA oficial registrada no MAPA 
     }
 
     // -------------------------------------------------------------------------
+    // ETAPA 2 — VALIDAÇÃO CRUZADA CAMPO A CAMPO
+    // Status possíveis: OK | DIVERGENTE | NÃO INFORMADO | NÃO LOCALIZADO
+    // -------------------------------------------------------------------------
+    const camposValidacao = []
+
+    // 2.1 NOME COMERCIAL
+    camposValidacao.push({
+      campo: 'Nome Comercial',
+      chave: 'nome_comercial',
+      obrigatorio: true,
+      informado: nomeComercial,
+      encontrado_bula: bulaExtraida?.nome_comercial_oficial || motorCanonico.marca_padronizada,
+      status: 'OK',
+      explicacao: bulaExtraida?.encontrado
+        ? 'Nome comercial localizado e homologado no bulário oficial.'
+        : 'Nome comercial registrado para auditoria cadastral.',
+    })
+
+    // 2.2 PRINCÍPIO ATIVO (Opcional)
+    let statusPa = 'OK'
+    let explPa = ''
+    const paBula = bulaExtraida?.principio_ativo || ''
+
+    if (!principioAtivoInformado) {
+      statusPa = 'NÃO INFORMADO'
+      explPa = paBula
+        ? `Campo opcional não preenchido. Identificado na bula/AGROFIT: "${paBula}".`
+        : 'Campo opcional não preenchido pelo usuário.'
+    } else if (paBula) {
+      const normPaInf = motor.normalizarTexto(principioAtivoInformado)
+      const normPaBula = motor.normalizarTexto(paBula)
+      if (
+        normPaInf === normPaBula ||
+        normPaInf.includes(normPaBula) ||
+        normPaBula.includes(normPaInf)
+      ) {
+        statusPa = 'OK'
+        explPa = `Princípio ativo informado confere com o ingrediente ativo da bula oficial: "${paBula}".`
+      } else {
+        statusPa = 'DIVERGENTE'
+        explPa = `Divergência: Informado "${principioAtivoInformado}", mas a bula oficial MAPA indica "${paBula}".`
+      }
+    } else {
+      statusPa = 'NÃO LOCALIZADO'
+      explPa = `Princípio ativo "${principioAtivoInformado}" não pôde ser confrontado em bula externa.`
+    }
+
+    camposValidacao.push({
+      campo: 'Princípio Ativo',
+      chave: 'principio_ativo',
+      obrigatorio: false,
+      informado: principioAtivoInformado || 'Não informado',
+      encontrado_bula: paBula || 'Não localizado na bula',
+      status: statusPa,
+      explicacao: explPa,
+    })
+
+    // 2.3 NCM (Obrigatório) — A linha "NCM" da validação cruzada deve refletir OBRIGATORIAMENTE o resultado da Trava 1:
+    // Se a Trava 1 reprovar, status "DIVERGENTE" com a mesma observação da Trava 1;
+    // Se a NCM divergir da canônica do motor, também "DIVERGENTE"; só então "OK" (CORRETO).
+    let statusNcm = 'OK'
+    let explNcm = ''
+    const ncmCleanInf = ncmDigitos
+    const ncmCleanCanonico = ncmCanonicoDeterminado.replace(/\D/g, '')
+
+    if (!trava1Passou) {
+      statusNcm = 'DIVERGENTE'
+      explNcm = `Trava 1 Reprovada: ${trava1Mensagem}`
+    } else if (ncmCleanInf === ncmCleanCanonico) {
+      statusNcm = 'OK'
+      explNcm = `NCM informada (${ncmFormatado}) confere com a classificação química e aduaneira recomendada pelo motor canônico e está homologada.`
+    } else {
+      // Verificar se a NCM informada bate com alguma das faixas de embalagem do motor
+      const ncmF1 = motorCanonico.ncm_faixa1_ate_300g.replace(/\D/g, '')
+      const ncmF2 = motorCanonico.ncm_faixa2_300g_a_7_5kg.replace(/\D/g, '')
+      const ncmF3 = motorCanonico.ncm_faixa3_7_5kg_a_10kg.replace(/\D/g, '')
+      const ncmF4 = motorCanonico.ncm_faixa4_acima_10kg.replace(/\D/g, '')
+
+      if ([ncmF1, ncmF2, ncmF3, ncmF4].includes(ncmCleanInf)) {
+        statusNcm = 'OK'
+        explNcm = `NCM informada (${ncmFormatado}) confere com uma das faixas específicas de embalagem do produto conforme tabela TIPI.`
+      } else {
+        statusNcm = 'DIVERGENTE'
+        explNcm = `Divergência: NCM informada foi ${ncmFormatado}, mas o motor químico determinou ${ncmCanonicoDeterminado} (Regra: ${motorCanonico.regra_tipi || 'Classificação TIPI'}).`
+      }
+    }
+
+    camposValidacao.push({
+      campo: 'NCM',
+      chave: 'ncm',
+      obrigatorio: true,
+      informado: ncmFormatado,
+      encontrado_bula: ncmCanonicoDeterminado,
+      status: statusNcm,
+      explicacao: explNcm,
+    })
+
+    // 2.4 CÓDIGO MAPA (Opcional)
+    let statusMapa = 'OK'
+    let explMapa = ''
+    const mapaBula = bulaExtraida?.registro_mapa || ''
+
+    if (!codigoMapaInformado) {
+      statusMapa = 'NÃO INFORMADO'
+      explMapa = mapaBula
+        ? `Campo opcional não preenchido. Registro oficial encontrado na bula: "${mapaBula}".`
+        : 'Campo opcional não preenchido pelo usuário.'
+    } else if (mapaBula) {
+      const dInf = codigoMapaInformado.replace(/\D/g, '')
+      const dBula = mapaBula.replace(/\D/g, '')
+      if (dInf && dBula && (dInf === dBula || dInf.endsWith(dBula) || dBula.endsWith(dInf))) {
+        statusMapa = 'OK'
+        explMapa = `Código MAPA informado (${codigoMapaInformado}) confere com o registro oficial da bula (${mapaBula}).`
+      } else {
+        statusMapa = 'DIVERGENTE'
+        explMapa = `Divergência: Informado "${codigoMapaInformado}", mas a bula indica "${mapaBula}".`
+      }
+    } else {
+      statusMapa = 'NÃO LOCALIZADO'
+      explMapa = `Registro MAPA "${codigoMapaInformado}" não localizado na consulta externa.`
+    }
+
+    camposValidacao.push({
+      campo: 'Código MAPA',
+      chave: 'codigo_mapa',
+      obrigatorio: false,
+      informado: codigoMapaInformado || 'Não informado',
+      encontrado_bula: mapaBula || 'Não localizado na bula',
+      status: statusMapa,
+      explicacao: explMapa,
+    })
+
+    // 2.5 FABRICANTE / TITULAR (Retorno da busca)
+    camposValidacao.push({
+      campo: 'Fabricante / Titular',
+      chave: 'fabricante',
+      obrigatorio: false,
+      informado: '(Retorno da Busca Oficial)',
+      encontrado_bula: fabricanteFinal,
+      status: 'OK',
+      explicacao: `Titular oficial identificado na bula/AGROFIT: "${fabricanteFinal}".`,
+    })
+
+    // 2.6 EMBALAGEM E QUANTIDADE (Retorno e conferência)
+    let statusEmb = 'OK'
+    let explEmb = ''
+    const embBula =
+      bulaExtraida?.embalagens_autorizadas && bulaExtraida.embalagens_autorizadas.length > 0
+        ? bulaExtraida.embalagens_autorizadas.join(', ')
+        : bulaExtraida?.embalagem_principal || 'Não informada'
+    const qtdBula = bulaExtraida?.quantidade_embalagem_principal || '20 L'
+
+    if (!embalagemInformada) {
+      statusEmb = 'NÃO INFORMADO'
+      explEmb = `Embalagem não informada. Bula oficial autoriza: ${embBula}. Quantidade sugerida: ${qtdBula}.`
+    } else {
+      statusEmb = 'OK'
+      explEmb = `Embalagem informada: "${embalagemInformada}". Autorizadas na bula oficial: ${embBula}.`
+    }
+
+    camposValidacao.push({
+      campo: 'Embalagem e Quantidade',
+      chave: 'embalagem',
+      obrigatorio: false,
+      informado: embalagemInformada || 'Não informada',
+      encontrado_bula: `${embBula} (Volume/Peso: ${qtdBula})`,
+      status: statusEmb,
+      explicacao: explEmb,
+    })
+
+    // -------------------------------------------------------------------------
     // VEREDITO GERAL (APROVADO / APROVADO COM RESSALVAS / REPROVADO)
+    // Regra: O veredito geral NUNCA pode ser "APROVADO" quando qualquer trava de auditoria está reprovada.
     // -------------------------------------------------------------------------
     const temDivergenciaNcm = statusNcm === 'DIVERGENTE'
     const temDivergenciaPa = statusPa === 'DIVERGENTE'
-    const travasObrigatoriasAprovadas = trava1Passou && trava2Passou && trava4Passou
+    const travasReprovadas = travas.filter((t) => !t.aprovado)
+    const algumaTravaReprovada = travasReprovadas.length > 0
 
     let vereditoGeral = 'APROVADO'
     let vereditoMotivo = 'Produto validado com sucesso e em plena conformidade regulatória.'
@@ -1320,11 +1395,15 @@ Consulte a base pública oficial do AGROFIT e a BULA oficial registrada no MAPA 
       vereditoMotivo = !trava1Passou
         ? 'NCM informado inválido ou inexistente nas tabelas oficiais Siscomex/TIPI.'
         : 'Produto com marca ou registro idêntico já cadastrado na Base Mestre (duplicidade).'
-    } else if (temDivergenciaNcm || temDivergenciaPa || !trava2Passou) {
+    } else if (algumaTravaReprovada) {
+      // Se qualquer outra trava estiver reprovada (ex: Trava 2 Embalagem vs NCM ou Trava 3 PA), nunca APROVADO
+      vereditoGeral = 'APROVADO COM RESSALVAS'
+      vereditoMotivo = `Pendências nas travas de auditoria: ${travasReprovadas.map((t) => t.trava_nome).join(', ')}.`
+    } else if (temDivergenciaNcm || temDivergenciaPa) {
       vereditoGeral = 'APROVADO COM RESSALVAS'
       vereditoMotivo = temDivergenciaNcm
         ? `NCM informada (${ncmFormatado}) diverge da recomendada pelo motor canônico (${ncmCanonicoDeterminado}). Verifique as faixas de embalagem.`
-        : 'Identificadas divergências secundárias ou de embalagem em relação à bula oficial.'
+        : 'Identificadas divergências secundárias de princípio ativo em relação à bula oficial.'
     }
 
     // -------------------------------------------------------------------------
