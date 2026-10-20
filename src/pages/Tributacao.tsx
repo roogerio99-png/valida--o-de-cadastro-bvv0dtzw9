@@ -102,9 +102,17 @@ export default function Tributacao() {
   const carregarListaConversas = async () => {
     try {
       const list = await listarConversas()
-      setConversations(list)
+      const normalizedList = Array.isArray(list)
+        ? list
+        : Array.isArray((list as any)?.items)
+          ? (list as any).items
+          : Array.isArray((list as any)?.conversations)
+            ? (list as any).conversations
+            : []
+      setConversations(normalizedList)
     } catch (err) {
       console.error('Falha ao listar conversas:', err)
+      setConversations([])
     }
   }
 
@@ -115,10 +123,18 @@ export default function Tributacao() {
     setLoadingHistory(true)
     try {
       const msgs = await carregarMensagensConversa(convId)
-      setMessages(msgs)
+      const normalizedMsgs = Array.isArray(msgs)
+        ? msgs
+        : Array.isArray((msgs as any)?.items)
+          ? (msgs as any).items
+          : Array.isArray((msgs as any)?.messages)
+            ? (msgs as any).messages
+            : []
+      setMessages(normalizedMsgs)
     } catch (err) {
       console.error('Erro ao abrir conversa:', err)
       setErrorMessage('Não foi possível carregar o histórico desta conversa.')
+      setMessages([])
     } finally {
       setLoadingHistory(false)
     }
@@ -303,7 +319,7 @@ export default function Tributacao() {
         </div>
 
         <ScrollArea className="flex-1 p-2">
-          {conversations.length === 0 ? (
+          {!Array.isArray(conversations) || conversations.length === 0 ? (
             <div className="p-6 text-center text-xs text-[#5A6D5A]">
               <MessageSquare className="w-7 h-7 mx-auto mb-2 text-emerald-300/60" />
               <p className="font-medium text-[#1C2B1C]">Nenhuma conversa anterior</p>
@@ -434,7 +450,7 @@ export default function Tributacao() {
               <RefreshCw className="w-6 h-6 animate-spin text-emerald-600 mb-2" />
               <p className="text-xs">Carregando histórico de mensagens...</p>
             </div>
-          ) : messages.length === 0 ? (
+          ) : !Array.isArray(messages) || messages.length === 0 ? (
             /* Tela Vazia: Apresentação + Cards com Perguntas Sugeridas */
             <div className="max-w-3xl mx-auto py-4 space-y-6 animate-in fade-in duration-300">
               <div className="text-center space-y-2">
@@ -508,108 +524,111 @@ export default function Tributacao() {
           ) : (
             /* Lista de Mensagens */
             <div className="max-w-3xl mx-auto space-y-5">
-              {messages.map((msg) => {
-                const isUser = msg.role === 'user'
-                return (
-                  <div
-                    key={msg.id}
-                    className={`flex items-start gap-3 ${isUser ? 'justify-end' : 'justify-start'}`}
-                  >
-                    {!isUser && (
-                      <div className="w-8 h-8 rounded-xl bg-gradient-to-tr from-[#0D2811] to-[#1B5E20] flex items-center justify-center text-white flex-shrink-0 shadow-xs mt-1">
-                        <Scale className="w-4 h-4 text-emerald-300" />
-                      </div>
-                    )}
-
+              {Array.isArray(messages) &&
+                messages.map((msg) => {
+                  const isUser = msg.role === 'user'
+                  return (
                     <div
-                      className={`relative max-w-[85%] rounded-2xl px-4 py-3 shadow-xs ${
-                        isUser
-                          ? 'bg-[#1B5E20] text-white rounded-tr-xs'
-                          : 'bg-white border border-[#DCE5DC] text-[#1C2B1C] rounded-tl-xs'
-                      }`}
+                      key={msg.id}
+                      className={`flex items-start gap-3 ${isUser ? 'justify-end' : 'justify-start'}`}
                     >
-                      {/* Conteúdo da Mensagem */}
-                      {isUser ? (
-                        <p className="text-xs whitespace-pre-wrap leading-relaxed">{msg.content}</p>
-                      ) : msg.content ? (
-                        <div className="space-y-3">
-                          <MarkdownRenderer content={msg.content} />
-
-                          {/* Fontes e Citações quando disponíveis */}
-                          {msg.citations && msg.citations.length > 0 && (
-                            <div className="mt-3 pt-2.5 border-t border-emerald-100 text-[11px] text-[#5A6D5A] space-y-1">
-                              <p className="font-semibold text-emerald-900 flex items-center gap-1 text-[11px]">
-                                <Layers className="w-3 h-3 text-[#1B5E20]" />
-                                <span>Fontes de Legislação e Jurisprudência citadas:</span>
-                              </p>
-                              <div className="flex flex-wrap gap-1.5 mt-1">
-                                {msg.citations.map((c, cIdx) => (
-                                  <Badge
-                                    key={cIdx}
-                                    variant="outline"
-                                    className="text-[10px] bg-emerald-50/70 border-emerald-200 text-emerald-800 py-0.5 px-2 font-normal"
-                                  >
-                                    [{c.n || cIdx + 1}] {c.excerpt?.slice(0, 60)}...
-                                  </Badge>
-                                ))}
-                              </div>
-                            </div>
-                          )}
-
-                          {/* Botão de Copiar */}
-                          <div className="flex justify-end pt-1">
-                            <button
-                              onClick={() => handleCopyText(msg.id, msg.content)}
-                              className="text-[10px] text-[#5A6D5A] hover:text-[#1B5E20] flex items-center gap-1 transition-colors px-1.5 py-0.5 rounded hover:bg-emerald-50"
-                              title="Copiar resposta"
-                            >
-                              {copiedId === msg.id ? (
-                                <>
-                                  <Check className="w-3 h-3 text-emerald-600" />
-                                  <span className="text-emerald-600">Copiado</span>
-                                </>
-                              ) : (
-                                <>
-                                  <Copy className="w-3 h-3" />
-                                  <span>Copiar</span>
-                                </>
-                              )}
-                            </button>
-                          </div>
-                        </div>
-                      ) : (
-                        /* Indicador de Digitação (Typing) */
-                        <div className="flex items-center gap-2 py-1 px-1 text-xs text-[#5A6D5A]">
-                          <RefreshCw className="w-3.5 h-3.5 animate-spin text-[#1B5E20]" />
-                          <span className="font-medium animate-pulse">
-                            Consultando jurisprudência do CARF, leis e soluções de consulta...
-                          </span>
+                      {!isUser && (
+                        <div className="w-8 h-8 rounded-xl bg-gradient-to-tr from-[#0D2811] to-[#1B5E20] flex items-center justify-center text-white flex-shrink-0 shadow-xs mt-1">
+                          <Scale className="w-4 h-4 text-emerald-300" />
                         </div>
                       )}
 
-                      {/* Timestamp */}
-                      <span
-                        className={`block text-[9px] mt-1.5 ${
-                          isUser ? 'text-emerald-200/80 text-right' : 'text-[#5A6D5A]'
+                      <div
+                        className={`relative max-w-[85%] rounded-2xl px-4 py-3 shadow-xs ${
+                          isUser
+                            ? 'bg-[#1B5E20] text-white rounded-tr-xs'
+                            : 'bg-white border border-[#DCE5DC] text-[#1C2B1C] rounded-tl-xs'
                         }`}
                       >
-                        {msg.created
-                          ? new Date(msg.created).toLocaleTimeString('pt-BR', {
-                              hour: '2-digit',
-                              minute: '2-digit',
-                            })
-                          : ''}
-                      </span>
-                    </div>
+                        {/* Conteúdo da Mensagem */}
+                        {isUser ? (
+                          <p className="text-xs whitespace-pre-wrap leading-relaxed">
+                            {msg.content}
+                          </p>
+                        ) : msg.content ? (
+                          <div className="space-y-3">
+                            <MarkdownRenderer content={msg.content} />
 
-                    {isUser && (
-                      <div className="w-8 h-8 rounded-xl bg-emerald-100 flex items-center justify-center text-[#1B5E20] flex-shrink-0 shadow-xs mt-1">
-                        <UserIcon className="w-4 h-4 text-[#1B5E20]" />
+                            {/* Fontes e Citações quando disponíveis */}
+                            {msg.citations && msg.citations.length > 0 && (
+                              <div className="mt-3 pt-2.5 border-t border-emerald-100 text-[11px] text-[#5A6D5A] space-y-1">
+                                <p className="font-semibold text-emerald-900 flex items-center gap-1 text-[11px]">
+                                  <Layers className="w-3 h-3 text-[#1B5E20]" />
+                                  <span>Fontes de Legislação e Jurisprudência citadas:</span>
+                                </p>
+                                <div className="flex flex-wrap gap-1.5 mt-1">
+                                  {msg.citations.map((c, cIdx) => (
+                                    <Badge
+                                      key={cIdx}
+                                      variant="outline"
+                                      className="text-[10px] bg-emerald-50/70 border-emerald-200 text-emerald-800 py-0.5 px-2 font-normal"
+                                    >
+                                      [{c.n || cIdx + 1}] {c.excerpt?.slice(0, 60)}...
+                                    </Badge>
+                                  ))}
+                                </div>
+                              </div>
+                            )}
+
+                            {/* Botão de Copiar */}
+                            <div className="flex justify-end pt-1">
+                              <button
+                                onClick={() => handleCopyText(msg.id, msg.content)}
+                                className="text-[10px] text-[#5A6D5A] hover:text-[#1B5E20] flex items-center gap-1 transition-colors px-1.5 py-0.5 rounded hover:bg-emerald-50"
+                                title="Copiar resposta"
+                              >
+                                {copiedId === msg.id ? (
+                                  <>
+                                    <Check className="w-3 h-3 text-emerald-600" />
+                                    <span className="text-emerald-600">Copiado</span>
+                                  </>
+                                ) : (
+                                  <>
+                                    <Copy className="w-3 h-3" />
+                                    <span>Copiar</span>
+                                  </>
+                                )}
+                              </button>
+                            </div>
+                          </div>
+                        ) : (
+                          /* Indicador de Digitação (Typing) */
+                          <div className="flex items-center gap-2 py-1 px-1 text-xs text-[#5A6D5A]">
+                            <RefreshCw className="w-3.5 h-3.5 animate-spin text-[#1B5E20]" />
+                            <span className="font-medium animate-pulse">
+                              Consultando jurisprudência do CARF, leis e soluções de consulta...
+                            </span>
+                          </div>
+                        )}
+
+                        {/* Timestamp */}
+                        <span
+                          className={`block text-[9px] mt-1.5 ${
+                            isUser ? 'text-emerald-200/80 text-right' : 'text-[#5A6D5A]'
+                          }`}
+                        >
+                          {msg.created
+                            ? new Date(msg.created).toLocaleTimeString('pt-BR', {
+                                hour: '2-digit',
+                                minute: '2-digit',
+                              })
+                            : ''}
+                        </span>
                       </div>
-                    )}
-                  </div>
-                )
-              })}
+
+                      {isUser && (
+                        <div className="w-8 h-8 rounded-xl bg-emerald-100 flex items-center justify-center text-[#1B5E20] flex-shrink-0 shadow-xs mt-1">
+                          <UserIcon className="w-4 h-4 text-[#1B5E20]" />
+                        </div>
+                      )}
+                    </div>
+                  )
+                })}
 
               {/* Mensagem de Erro Inline se houver */}
               {errorMessage && (

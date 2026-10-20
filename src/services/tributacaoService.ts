@@ -117,7 +117,14 @@ export async function listarConversas(limit = 40): Promise<ConversaItem[]> {
       return []
     }
     const data = await response.json()
-    return data.conversations || []
+    const rawList = Array.isArray(data)
+      ? data
+      : Array.isArray(data?.conversations)
+        ? data.conversations
+        : Array.isArray(data?.items)
+          ? data.items
+          : []
+    return rawList
   } catch (err) {
     console.error('Erro ao listar conversas tributárias:', err)
     return []
@@ -143,6 +150,12 @@ export async function carregarMensagensConversa(conversationId: string): Promise
     throw new Error(data?.error || 'Falha ao carregar mensagens da conversa.')
   }
 
-  const rawMessages: AgentMessage[] = data.messages || []
+  const rawMessages: AgentMessage[] = Array.isArray(data)
+    ? data
+    : Array.isArray(data?.messages)
+      ? data.messages
+      : Array.isArray(data?.items)
+        ? data.items
+        : []
   return displayableMessages(rawMessages)
 }
