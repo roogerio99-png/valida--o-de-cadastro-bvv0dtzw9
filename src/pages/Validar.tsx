@@ -80,6 +80,7 @@ export default function Validar() {
   // Estados de execução e retorno
   const [loading, setLoading] = useState(false)
   const [progressoIndice, setProgressoIndice] = useState(0)
+  const [erroValidacao, setErroValidacao] = useState<string | null>(null)
   const [savingBaseMestre, setSavingBaseMestre] = useState(false)
   const [resultado, setResultado] = useState<RespostaValidacaoCadastro | null>(null)
   const [salvoComSucesso, setSalvoComSucesso] = useState(false)
@@ -186,6 +187,7 @@ export default function Validar() {
 
     setLoading(true)
     setSalvoComSucesso(false)
+    setErroValidacao(null)
 
     try {
       const payload: ValidarCadastroInput = {
@@ -230,6 +232,7 @@ export default function Validar() {
       }
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : 'Falha ao executar validação de cadastro.'
+      setErroValidacao(msg)
       toast({
         variant: 'destructive',
         title: 'Erro no Motor de Validação',
@@ -423,6 +426,7 @@ export default function Validar() {
     setProdutosBaseMestre([])
     setProdutoExistenteSelecionado(null)
     setResultado(null)
+    setErroValidacao(null)
     setSalvoComSucesso(false)
   }
 
@@ -852,6 +856,48 @@ export default function Validar() {
         {/* COLUNA DIREITA: PAINEL DE VALIDAÇÃO (7 COLUNAS) */}
         {/* ------------------------------------------------------------------ */}
         <div className="lg:col-span-7 space-y-4">
+          {/* Mensagem de Erro de Conexão/Backend em Destaque */}
+          {erroValidacao && (
+            <div className="p-4 rounded-2xl border border-red-300 bg-red-50/90 text-xs shadow-sm animate-in fade-in duration-300">
+              <div className="flex items-start gap-3">
+                <div className="w-8 h-8 rounded-xl bg-red-600 text-white flex items-center justify-center flex-shrink-0 mt-0.5">
+                  <XCircle className="w-5 h-5" />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center justify-between">
+                    <strong className="text-sm font-bold text-red-950">
+                      Falha ao Realizar Consulta
+                    </strong>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => setErroValidacao(null)}
+                      className="h-6 px-2 text-[10px] text-red-700 hover:bg-red-100"
+                    >
+                      Fechar
+                    </Button>
+                  </div>
+                  <p className="text-red-900 mt-1 leading-relaxed">{erroValidacao}</p>
+                  <div className="mt-3 flex items-center gap-2">
+                    <Button
+                      type="button"
+                      size="sm"
+                      onClick={(e) => handleValidar(e)}
+                      className="h-7 text-xs bg-red-700 hover:bg-red-800 text-white font-medium rounded-lg"
+                    >
+                      <RefreshCw className="w-3 h-3 mr-1" />
+                      Tentar Novamente
+                    </Button>
+                    <span className="text-[11px] text-red-700">
+                      O botão "Validar" foi reabilitado e seus dados preenchidos foram preservados.
+                    </span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
           {!resultado ? (
             <div className="bg-white rounded-2xl border border-dashed border-[#DCE5DC] p-12 text-center flex flex-col items-center justify-center min-h-[460px]">
               <div className="w-14 h-14 rounded-2xl bg-emerald-50 text-[#1B5E20] flex items-center justify-center mb-3">
@@ -1314,30 +1360,61 @@ export default function Validar() {
                   </Badge>
                 </div>
                 <div className="space-y-2">
-                  {resultado.fontes_consultadas.map((fonte, idx) => (
-                    <div
-                      key={idx}
-                      className="p-2.5 rounded-xl border border-[#DCE5DC] bg-[#FAFBF8] flex items-start justify-between gap-2 text-xs"
-                    >
-                      <div>
-                        <strong className="text-[#1C2B1C] block font-bold">{fonte.fonte}</strong>
-                        <p className="text-[11px] text-[#5A6D5A] mt-0.5 leading-relaxed">
-                          {fonte.detalhes}
-                        </p>
+                  {resultado.fontes_consultadas.map((fonte, idx) => {
+                    const isIndisponivel = fonte.status === 'indisponivel'
+                    const isNaoEncontrado = fonte.status === 'nao_encontrado'
+                    return (
+                      <div
+                        key={idx}
+                        className={`p-2.5 rounded-xl border flex items-start justify-between gap-2 text-xs transition-colors ${
+                          isIndisponivel
+                            ? 'border-amber-300 bg-amber-50/60'
+                            : isNaoEncontrado
+                              ? 'border-gray-200 bg-gray-50/60'
+                              : 'border-[#DCE5DC] bg-[#FAFBF8]'
+                        }`}
+                      >
+                        <div className="flex-1">
+                          <div className="flex items-center gap-2">
+                            <strong className="text-[#1C2B1C] font-bold">{fonte.fonte}</strong>
+                            {isIndisponivel && (
+                              <Badge className="bg-amber-200 text-amber-900 border-0 text-[10px] font-semibold">
+                                Fonte Indisponível (Modo Contingência)
+                              </Badge>
+                            )}
+                            {isNaoEncontrado && (
+                              <Badge className="bg-gray-200 text-gray-700 border-0 text-[10px]">
+                                Não Localizado
+                              </Badge>
+                            )}
+                            {fonte.status === 'sucesso' && (
+                              <Badge className="bg-emerald-100 text-emerald-800 border-0 text-[10px]">
+                                Conectado
+                              </Badge>
+                            )}
+                          </div>
+                          <p
+                            className={`text-[11px] mt-0.5 leading-relaxed ${
+                              isIndisponivel ? 'text-amber-950' : 'text-[#5A6D5A]'
+                            }`}
+                          >
+                            {fonte.detalhes}
+                          </p>
+                        </div>
+                        {fonte.url && (
+                          <a
+                            href={fonte.url}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="text-[11px] text-[#1B5E20] hover:underline flex items-center gap-1 flex-shrink-0"
+                          >
+                            <span>Portal</span>
+                            <ExternalLink className="w-3 h-3" />
+                          </a>
+                        )}
                       </div>
-                      {fonte.url && (
-                        <a
-                          href={fonte.url}
-                          target="_blank"
-                          rel="noreferrer"
-                          className="text-[11px] text-[#1B5E20] hover:underline flex items-center gap-1 flex-shrink-0"
-                        >
-                          <span>Portal</span>
-                          <ExternalLink className="w-3 h-3" />
-                        </a>
-                      )}
-                    </div>
-                  ))}
+                    )
+                  })}
                 </div>
               </Card>
             </>

@@ -1718,7 +1718,43 @@ Consulte a base pública oficial do AGROFIT e a BULA oficial registrada no MAPA 
  * Retorna grupos de duplicidades identificados na collection base_mestre
  */
 routerAdd('GET', '/backend/v1/ping-teste', (e) => {
-  return e.json(200, { ok: true, timestamp: Date.now() })
+  try {
+    const res = $http.send({
+      url: 'https://validacao-de-cadastro-c8eaa.shrd01.internal.goskip.dev/backend/v1/validar-produto',
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      data: JSON.stringify({
+        nome_comercial: 'FOLICRON',
+        ncm: '38089399',
+        embalagem: 'Bombona 20 L',
+        modo: 'novo',
+        auto_cadastrar: false,
+      }),
+      timeout: 20,
+    })
+    const body = typeof res.json === 'function' ? res.json() : JSON.parse(res.raw || '{}')
+    return e.json(200, {
+      teste_status: res.statusCode,
+      veredito_geral: body.veredito_geral,
+      status: body.status,
+      ncm_canonico: body.produto_canonico?.ncm_padrao,
+      campos: body.campos_validacao?.map((c) => ({
+        campo: c.campo,
+        informado: c.informado,
+        bula: c.encontrado_bula,
+        status: c.status,
+        explicacao: c.explicacao,
+      })),
+      travas: body.travas?.map((t) => ({
+        id: t.id_trava,
+        nome: t.trava_nome,
+        aprovado: t.aprovado,
+        msg: t.mensagem,
+      })),
+    })
+  } catch (err) {
+    return e.json(500, { error: err.message || String(err) })
+  }
 })
 
 routerAdd('GET', '/backend/v1/relatorio-duplicidades', (e) => {
