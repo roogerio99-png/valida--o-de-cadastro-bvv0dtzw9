@@ -179,13 +179,23 @@ export default function SincronizacaoProdutos() {
     setProgressoEstimado(10)
     setEtapaAtual('Conectando aos servidores do MAPA e baixando CSVs oficiais...')
 
-    // Intervalo de animação de progresso suave enquanto aguarda o backend
+    // Intervalo de animação de progresso suave com etapas descritivas
+    let tickCount = 0
     const timer = setInterval(() => {
+      tickCount++
+      if (tickCount === 2) {
+        setEtapaAtual('Processando e classificando produtos no motor determinístico...')
+      } else if (tickCount === 4) {
+        setEtapaAtual('Aplicando Trava 4 de duplicidade e atualizando Base Mestre...')
+      } else if (tickCount === 7) {
+        setEtapaAtual('Consolidando Relatório de Integração e persistindo histórico...')
+      }
+
       setProgressoEstimado((old) => {
-        if (old < 85) return old + 5
+        if (old < 90) return old + 4
         return old
       })
-    }, 1200)
+    }, 1000)
 
     try {
       const resp = await executarSincronizacaoProdutos({
@@ -199,7 +209,8 @@ export default function SincronizacaoProdutos() {
       setEtapaAtual('Sincronização concluída com sucesso!')
       setResultadoAtual(resp)
 
-      const algumErro = resp.fontes.some((f) => f.status === 'indisponivel')
+      const algumErro =
+        Array.isArray(resp.fontes) && resp.fontes.some((f) => f.status === 'indisponivel')
 
       // Abre automaticamente o Relatório de Integração completo na tela
       if (resp.relatorio_integracao) {
@@ -209,21 +220,25 @@ export default function SincronizacaoProdutos() {
           duracaoMs: resp.duracao_ms,
           statusGeral: algumErro ? 'parcial' : 'concluido',
           autoInclusao: resp.auto_inclusao,
-          fontes: resp.fontes,
+          fontes: resp.fontes || [],
           itens: resp.relatorio_integracao.itens || [],
           contadores: resp.relatorio_integracao.contadores,
         })
       }
 
+      const totalBaixado = resp.resumo?.total_baixado ?? 0
+      const novosCad = resp.resumo?.novos_cadastrados ?? 0
+      const duplEvit = resp.resumo?.ignorados_duplicidade ?? 0
+
       if (algumErro) {
         toast({
           title: 'Sincronização Concluída Parcialmente',
-          description: `${resp.resumo.novos_cadastrados} produtos novos incluídos. Relatório detalhado de integração gerado abaixo.`,
+          description: `${novosCad} produtos novos incluídos. Relatório detalhado de integração gerado abaixo.`,
         })
       } else {
         toast({
           title: 'Sincronização Efetuada com Sucesso',
-          description: `${resp.resumo.total_baixado} baixados, ${resp.resumo.novos_cadastrados} novos cadastrados e ${resp.resumo.ignorados_duplicidade} duplicidades evitadas. Relatório disponível abaixo.`,
+          description: `${totalBaixado} processados, ${novosCad} novos cadastrados e ${duplEvit} duplicidades evitadas. Relatório disponível abaixo.`,
         })
       }
 
@@ -232,6 +247,7 @@ export default function SincronizacaoProdutos() {
     } catch (err: unknown) {
       clearInterval(timer)
       setProgressoEstimado(0)
+      setEtapaAtual('')
       const msg = err instanceof Error ? err.message : 'Falha na requisição de sincronização.'
       toast({
         title: 'Falha na Sincronização',

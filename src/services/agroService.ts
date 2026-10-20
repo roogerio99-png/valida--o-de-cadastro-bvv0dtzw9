@@ -19,10 +19,37 @@ export async function executarSincronizacaoProdutos(params?: {
   auto_inclusao?: boolean
   limite_por_fonte?: number
 }): Promise<RespostaSincronizacao> {
-  return pb.send<RespostaSincronizacao>('/backend/v1/sincronizar-produtos', {
+  const token = pb.authStore.token
+  const baseUrl = import.meta.env.VITE_POCKETBASE_URL || ''
+
+  const response = await fetch(`${baseUrl}/backend/v1/sincronizar-produtos`, {
     method: 'POST',
-    body: params || {},
+    headers: {
+      'Content-Type': 'application/json',
+      ...(token ? { Authorization: token } : {}),
+    },
+    body: JSON.stringify(params || {}),
   })
+
+  if (!response.ok) {
+    let msg = `Erro no servidor (HTTP ${response.status})`
+    try {
+      const data = await response.json()
+      if (data?.error || data?.message) {
+        msg = data.error || data.message
+      }
+    } catch (_) {
+      try {
+        const text = await response.text()
+        if (text) msg = text.slice(0, 150)
+      } catch {
+        /* intentionally ignored */
+      }
+    }
+    throw new Error(msg)
+  }
+
+  return (await response.json()) as RespostaSincronizacao
 }
 
 export async function listarHistoricoSincronizacao(params?: {
@@ -48,11 +75,30 @@ export async function obterHistoricoSincronizacaoPorId(id: string) {
 // Validação no Servidor (Hook Customizado)
 // -----------------------------------------------------------------------------
 export async function validarProdutoServidor(dados: ProdutoInput): Promise<RelatorioValidacao> {
-  const response = await pb.send<RelatorioValidacao>('/backend/v1/validar-produto', {
+  const token = pb.authStore.token
+  const baseUrl = import.meta.env.VITE_POCKETBASE_URL || ''
+
+  const response = await fetch(`${baseUrl}/backend/v1/validar-produto`, {
     method: 'POST',
-    body: dados,
+    headers: {
+      'Content-Type': 'application/json',
+      ...(token ? { Authorization: token } : {}),
+    },
+    body: JSON.stringify(dados),
   })
-  return response
+
+  if (!response.ok) {
+    let msg = `Erro na validação (HTTP ${response.status})`
+    try {
+      const data = await response.json()
+      if (data?.error || data?.message) msg = data.error || data.message
+    } catch {
+      /* intentionally ignored */
+    }
+    throw new Error(msg)
+  }
+
+  return (await response.json()) as RelatorioValidacao
 }
 
 // -----------------------------------------------------------------------------
