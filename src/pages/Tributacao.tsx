@@ -36,9 +36,28 @@ import { type DisplayMessage, type AgentCitation } from '@/lib/skipAi'
 
 const SUGGESTED_QUESTIONS = [
   {
-    title: 'Gesso Agrícola (Benefício & NCM)',
-    question: 'O produto gesso agrícola tem benefício de alíquota zero ou é tributado?',
-    tag: 'Consulta de Produto',
+    title: 'Gesso Agrícola c/ NCM 3105.90.90 (Conflito)',
+    question:
+      'Produto: Gesso Agrícola a granel. Código NCM na NF-e: 3105.90.90. Está correto e tem benefício fiscal?',
+    tag: 'Diagnóstico Cruzado',
+  },
+  {
+    title: 'Enxofre Agrícola 90% (NCM 2503.00.90)',
+    question:
+      'Enxofre agrícola pastilhado 90% com NCM 2503.00.90 para corretivo de solo tem alíquota zero?',
+    tag: 'Convergência c/ Alerta',
+  },
+  {
+    title: 'Inoculante Bacillus (3002.49.99)',
+    question:
+      'Inoculante à base de Bacillus megaterium NCM 3002.49.99 tem alíquota zero de PIS/COFINS?',
+    tag: 'Risco COSIT 261/23',
+  },
+  {
+    title: 'Adjuvante / Espalhante (3402.90.29)',
+    question:
+      'Adjuvante de pulverização agrícola sem registro no AGROFIT goza de benefício fiscal em 38.08?',
+    tag: 'COSIT 4/2024',
   },
   {
     title: 'Importação de Defensivos em 2026',
@@ -473,22 +492,39 @@ export default function Tributacao() {
                 </p>
               </div>
 
-              {/* Informação sobre os limites temporais */}
-              <div className="bg-amber-50/80 border border-amber-200/80 rounded-xl p-3.5 flex items-start gap-3 text-xs text-amber-950">
-                <Info className="w-4 h-4 text-[#F57F17] flex-shrink-0 mt-0.5" />
-                <div className="space-y-1">
-                  <p className="font-semibold text-amber-900">
-                    Aviso Importante sobre Vigência e Fundamentação:
-                  </p>
-                  <p className="text-[11px] leading-relaxed text-amber-800">
-                    • <strong>Até 31/03/2026</strong>: vigência histórica da alíquota zero plena
-                    (art. 1º da Lei 10.925/2004).
-                    <br />• <strong>A partir de 01/04/2026</strong>: reoneração residual de 10% da
-                    LC nº 224/2025 (0,925% no não cumulativo, 0,365% no cumulativo e 1,175% na
-                    importação).
-                    <br />• <strong>A partir de 01/01/2027</strong>: vigência plena do IVA Dual (IBS
-                    e CBS pela LC nº 214/2025) com extinção de PIS/COFINS.
-                  </p>
+              {/* Informação sobre o Protocolo de 3 Fases */}
+              <div className="bg-emerald-50/90 border border-emerald-200 rounded-2xl p-4 space-y-2 text-xs text-emerald-950 shadow-xs">
+                <div className="flex items-center gap-2">
+                  <ShieldCheck className="w-4 h-4 text-[#1B5E20]" />
+                  <span className="font-bold text-emerald-950 text-sm">
+                    Protocolo Oficial de Consulta Tributária Agro em 3 Fases
+                  </span>
+                </div>
+                <p className="text-[11px] text-emerald-900 leading-relaxed">
+                  Para garantir 100% de assertividade fiscal sem respostas baseadas em suposições, o
+                  consultor cruza a <strong>Descrição Comercial × NCM (8 dígitos)</strong> e dispara
+                  perguntas dinâmicas antes de emitir a <strong>Matriz dos 4 Pilares</strong> e o{' '}
+                  <strong>Guia de Cadastro ERP</strong> com travas fiscais.
+                </p>
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 pt-1 text-[11px]">
+                  <div className="bg-white/80 p-2 rounded-xl border border-emerald-200/60">
+                    <span className="font-bold text-[#1B5E20] block">Fase A: Triagem</span>
+                    <span className="text-[#5A6D5A]">
+                      Pergunta 1 obrigatória + até 6 fatores contextuais
+                    </span>
+                  </div>
+                  <div className="bg-white/80 p-2 rounded-xl border border-emerald-200/60">
+                    <span className="font-bold text-[#1B5E20] block">Fase B: 4 Pilares</span>
+                    <span className="text-[#5A6D5A]">
+                      MAPA, Embrapa, NCM/TIPI e PIS/COFINS + IBS/CBS
+                    </span>
+                  </div>
+                  <div className="bg-white/80 p-2 rounded-xl border border-emerald-200/60">
+                    <span className="font-bold text-[#1B5E20] block">Fase C: Trava ERP</span>
+                    <span className="text-[#5A6D5A]">
+                      Macro/Sub-Grupo, CST, NCM e texto NF-e infAdFisco
+                    </span>
+                  </div>
                 </div>
               </div>
 
@@ -557,7 +593,12 @@ export default function Tributacao() {
                           </p>
                         ) : msg.content ? (
                           <div className="space-y-3">
-                            <MarkdownRenderer content={msg.content} />
+                            <MarkdownRenderer
+                              content={msg.content}
+                              onOptionClick={(opt) => {
+                                handleSendMessage(opt)
+                              }}
+                            />
 
                             {/* Fontes e Citações quando disponíveis */}
                             {msg.citations && msg.citations.length > 0 && (
@@ -673,7 +714,7 @@ export default function Tributacao() {
                 value={inputMessage}
                 onChange={(e) => setInputMessage(e.target.value)}
                 onKeyDown={handleKeyDown}
-                placeholder="Consulte um produto (ex: gesso agrícola), NCM (ex: 2520.20.90), alíquota zero, LC 224/2025 ou IBS/CBS..."
+                placeholder="Informe a Descrição Comercial e NCM de 8 dígitos (ex: Gesso Agrícola NCM 3105.90.90 ou 'Não sei a NCM')..."
                 rows={1}
                 disabled={isLoading}
                 className="resize-none border-0 shadow-none bg-transparent text-xs sm:text-sm focus-visible:ring-0 min-h-[40px] max-h-[140px] py-2 px-2 text-[#1C2B1C] placeholder:text-[#5A6D5A]"

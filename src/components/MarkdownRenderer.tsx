@@ -3,20 +3,25 @@ import React from 'react'
 interface MarkdownRendererProps {
   content: string
   className?: string
+  onOptionClick?: (optionText: string) => void
 }
 
 /**
  * Lightweight, safe Markdown renderer for chat responses:
  * - Headings (###, ##, #)
- * - Tables (| Header 1 | Header 2 |)
+ * - Tables (| Header 1 | Header 2 |) with support for 4-Pilares styling
  * - Unordered lists (- or *)
  * - Ordered lists (1., 2.)
  * - Blockquotes (>)
  * - Code blocks (``` ... ```) and inline `code`
- * - Bold (**text**), Italic (*text*), Strikethrough (~~text~~)
- * - Highlights and links
+ * - Bold (**text**), Italic (*text*), Links [text](url)
+ * - Clickable questionnaire options (A), B), C), D), E), F)
  */
-export const MarkdownRenderer: React.FC<MarkdownRendererProps> = ({ content, className = '' }) => {
+export const MarkdownRenderer: React.FC<MarkdownRendererProps> = ({
+  content,
+  className = '',
+  onOptionClick,
+}) => {
   const renderedElements = React.useMemo(() => {
     if (!content) return null
 
@@ -25,10 +30,9 @@ export const MarkdownRenderer: React.FC<MarkdownRendererProps> = ({ content, cla
     let i = 0
 
     const renderInline = (text: string): React.ReactNode => {
-      // Split by bold, inline code, italic
       const parts: React.ReactNode[] = []
-      // Regex for `code`, **bold**, *italic*
-      const tokenRegex = /(`[^`]+`|\*\*[^*]+\*\*|\*[^*]+\*|__[^_]+__|_[^_]+_)/g
+      // Tokenizer regex matching links [text](url), `code`, **bold**, *italic*
+      const tokenRegex = /(\[[^\]]+\]\([^)]+\)|`[^`]+`|\*\*[^*]+\*\*|\*[^*]+\*|__[^_]+__|_[^_]+_)/g
       let lastIndex = 0
       let match: RegExpExecArray | null
 
@@ -37,7 +41,25 @@ export const MarkdownRenderer: React.FC<MarkdownRendererProps> = ({ content, cla
           parts.push(text.slice(lastIndex, match.index))
         }
         const token = match[0]
-        if (token.startsWith('`') && token.endsWith('`')) {
+
+        // Link [Title](url)
+        if (token.startsWith('[') && token.includes('](') && token.endsWith(')')) {
+          const closeBracket = token.indexOf('](')
+          const linkText = token.slice(1, closeBracket)
+          const linkUrl = token.slice(closeBracket + 2, -1)
+          parts.push(
+            <a
+              key={match.index}
+              href={linkUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="font-medium text-[#1B5E20] underline underline-offset-2 hover:text-[#0D2811] hover:bg-emerald-50 px-1 py-0.5 rounded transition-colors inline-flex items-center gap-0.5"
+            >
+              {linkText}
+              <span className="text-[10px] opacity-70">↗</span>
+            </a>,
+          )
+        } else if (token.startsWith('`') && token.endsWith('`')) {
           parts.push(
             <code
               key={match.index}
@@ -85,7 +107,6 @@ export const MarkdownRenderer: React.FC<MarkdownRendererProps> = ({ content, cla
         i++
         while (i < lines.length && !lines[i].trim().startsWith('```')) {
           codeLines.push(lines[i])
-          i++
         }
         i++ // skip closing ```
         elements.push(
@@ -134,34 +155,52 @@ export const MarkdownRenderer: React.FC<MarkdownRendererProps> = ({ content, cla
           elements.push(
             <div
               key={`table-${i}`}
-              className="my-3 overflow-x-auto rounded-lg border border-emerald-200/80 shadow-xs bg-white"
+              className="my-3 overflow-x-auto rounded-xl border border-emerald-300/80 shadow-xs bg-white"
             >
               <table className="w-full text-left text-xs border-collapse">
-                <thead className="bg-emerald-50 text-emerald-950 font-semibold border-b border-emerald-200">
+                <thead className="bg-[#1B5E20] text-white font-semibold">
                   <tr>
                     {headerRow.map((h, hIdx) => (
                       <th
                         key={hIdx}
-                        className="px-3 py-2 border-r border-emerald-100 last:border-r-0"
+                        className="px-3.5 py-2.5 border-r border-emerald-700 last:border-r-0 tracking-wide"
                       >
                         {renderInline(h)}
                       </th>
                     ))}
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-emerald-100/60">
-                  {bodyRows.map((r, rIdx) => (
-                    <tr key={rIdx} className={rIdx % 2 === 0 ? 'bg-white' : 'bg-emerald-50/30'}>
-                      {r.map((c, cIdx) => (
-                        <td
-                          key={cIdx}
-                          className="px-3 py-1.5 border-r border-emerald-100/40 last:border-r-0 text-slate-700"
-                        >
-                          {renderInline(c)}
-                        </td>
-                      ))}
-                    </tr>
-                  ))}
+                <tbody className="divide-y divide-emerald-100">
+                  {bodyRows.map((r, rIdx) => {
+                    const isEven = rIdx % 2 === 0
+                    const isPilarHeader =
+                      r[0]?.toLowerCase().includes('pilar') || /^[1-4]\.\s*/.test(r[0] || '')
+                    return (
+                      <tr
+                        key={rIdx}
+                        className={
+                          isPilarHeader
+                            ? isEven
+                              ? 'bg-emerald-50/50 hover:bg-emerald-50'
+                              : 'bg-white hover:bg-emerald-50/40'
+                            : isEven
+                              ? 'bg-white'
+                              : 'bg-[#F9FAF7]'
+                        }
+                      >
+                        {r.map((c, cIdx) => (
+                          <td
+                            key={cIdx}
+                            className={`px-3.5 py-2.5 border-r border-emerald-100/60 last:border-r-0 text-slate-800 ${
+                              cIdx === 0 ? 'font-semibold text-emerald-950 min-w-[140px]' : ''
+                            } ${cIdx === 1 ? 'min-w-[160px]' : 'min-w-[220px]'}`}
+                          >
+                            {renderInline(c)}
+                          </td>
+                        ))}
+                      </tr>
+                    )
+                  })}
                 </tbody>
               </table>
             </div>,
@@ -172,14 +211,38 @@ export const MarkdownRenderer: React.FC<MarkdownRendererProps> = ({ content, cla
 
       // 3. Headings
       if (line.startsWith('### ')) {
+        const title = line.slice(4)
+        const isBloco1 =
+          title.toLowerCase().includes('bloco 1') || title.toLowerCase().includes('síntese')
+        const isBloco2 =
+          title.toLowerCase().includes('bloco 2') || title.toLowerCase().includes('4 pilares')
+        const isBloco3 =
+          title.toLowerCase().includes('bloco 3') ||
+          title.toLowerCase().includes('erp') ||
+          title.toLowerCase().includes('trava')
+
         elements.push(
-          <h4
+          <div
             key={`h4-${i}`}
-            className="text-sm font-bold text-emerald-950 mt-3 mb-1.5 flex items-center gap-1.5"
+            className={`mt-4 mb-2 p-2 rounded-lg flex items-center justify-between ${
+              isBloco1
+                ? 'bg-blue-50 border border-blue-200 text-blue-950 font-bold'
+                : isBloco2
+                  ? 'bg-emerald-50 border border-emerald-200 text-emerald-950 font-bold'
+                  : isBloco3
+                    ? 'bg-amber-50 border border-amber-200 text-amber-950 font-bold'
+                    : 'text-emerald-950 font-bold'
+            }`}
           >
-            <span className="w-1.5 h-1.5 rounded-full bg-emerald-600 inline-block" />
-            {renderInline(line.slice(4))}
-          </h4>,
+            <span className="flex items-center gap-2 text-xs sm:text-sm">
+              <span
+                className={`w-2 h-2 rounded-full ${
+                  isBloco1 ? 'bg-blue-600' : isBloco2 ? 'bg-emerald-600' : 'bg-amber-600'
+                }`}
+              />
+              {renderInline(title)}
+            </span>
+          </div>,
         )
         i++
         continue
@@ -219,7 +282,7 @@ export const MarkdownRenderer: React.FC<MarkdownRendererProps> = ({ content, cla
         elements.push(
           <blockquote
             key={`quote-${i}`}
-            className="my-2.5 border-l-3 border-[#F57F17] bg-amber-50/50 px-3 py-2 text-xs text-amber-950 italic rounded-r-md"
+            className="my-2.5 border-l-4 border-emerald-600 bg-emerald-50/50 px-3.5 py-2 text-xs text-emerald-950 italic rounded-r-md"
           >
             {quoteLines.map((q, qIdx) => (
               <p key={qIdx} className={qIdx > 0 ? 'mt-1' : ''}>
@@ -231,7 +294,33 @@ export const MarkdownRenderer: React.FC<MarkdownRendererProps> = ({ content, cla
         continue
       }
 
-      // 5. Unordered List (- or *)
+      // 5. Clicáveis: Opções de questionário (A) ..., B) ..., C) ..., etc. ou "- (A) ..."
+      const optionMatch = line.trim().match(/^[-*]?\s*([A-F]\))\s+(.+)$/i)
+      if (optionMatch) {
+        const optLetter = optionMatch[1].toUpperCase()
+        const optBody = optionMatch[2]
+        const fullOptionText = `${optLetter} ${optBody}`
+
+        elements.push(
+          <button
+            key={`opt-btn-${i}`}
+            type="button"
+            onClick={() => onOptionClick && onOptionClick(fullOptionText)}
+            className="w-full text-left my-1.5 p-2.5 rounded-xl border border-emerald-200 bg-emerald-50/40 hover:bg-emerald-100 hover:border-[#1B5E20] transition-all flex items-start gap-2.5 text-xs text-emerald-950 group shadow-2xs"
+          >
+            <span className="px-2 py-0.5 rounded-md bg-[#1B5E20] text-white font-bold text-[11px] group-hover:scale-105 transition-transform flex-shrink-0">
+              {optLetter}
+            </span>
+            <span className="flex-1 leading-relaxed text-slate-800 group-hover:text-emerald-950 font-medium">
+              {renderInline(optBody)}
+            </span>
+          </button>,
+        )
+        i++
+        continue
+      }
+
+      // 6. Unordered List (- or *)
       if (/^[-*]\s+/.test(line.trim())) {
         const listItems: string[] = []
         while (i < lines.length && /^[-*]\s+/.test(lines[i].trim())) {
@@ -241,7 +330,7 @@ export const MarkdownRenderer: React.FC<MarkdownRendererProps> = ({ content, cla
         elements.push(
           <ul
             key={`ul-${i}`}
-            className="my-2 space-y-1 pl-4 text-xs list-disc list-outside text-slate-800 marker:text-emerald-600"
+            className="my-2 space-y-1.5 pl-4 text-xs list-disc list-outside text-slate-800 marker:text-emerald-600"
           >
             {listItems.map((item, lIdx) => (
               <li key={lIdx} className="leading-relaxed">
@@ -253,7 +342,7 @@ export const MarkdownRenderer: React.FC<MarkdownRendererProps> = ({ content, cla
         continue
       }
 
-      // 6. Ordered List (1., 2.)
+      // 7. Ordered List (1., 2.)
       if (/^\d+\.\s+/.test(line.trim())) {
         const listItems: string[] = []
         while (i < lines.length && /^\d+\.\s+/.test(lines[i].trim())) {
@@ -275,13 +364,13 @@ export const MarkdownRenderer: React.FC<MarkdownRendererProps> = ({ content, cla
         continue
       }
 
-      // 7. Empty line spacer
+      // 8. Linha vazia
       if (!line.trim()) {
         i++
         continue
       }
 
-      // 8. Normal Paragraph
+      // 9. Parágrafo comum
       elements.push(
         <p key={`p-${i}`} className="my-1.5 text-xs leading-relaxed text-slate-800">
           {renderInline(line)}
@@ -291,7 +380,7 @@ export const MarkdownRenderer: React.FC<MarkdownRendererProps> = ({ content, cla
     }
 
     return elements
-  }, [content])
+  }, [content, onOptionClick])
 
   return <div className={`prose-sm max-w-none space-y-1 ${className}`}>{renderedElements}</div>
 }
