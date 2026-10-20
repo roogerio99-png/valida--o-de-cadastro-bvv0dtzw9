@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-10-20T12:12:04.254Z",
+  "generatedAt": "2026-10-20T14:38:17.457Z",
   "collections": [
     {
       "name": "users",
@@ -254,6 +254,42 @@
           "required": false,
           "system": false,
           "autodateTriggers": ["onCreate", "onUpdate"]
+        },
+        {
+          "name": "origem_base",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "macro_grupo_subgrupo",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "regra_tipi_embalagem",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "cst_recomendado",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "ibs_cbs_2027",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "dados_classificacao",
+          "type": "json",
+          "required": false,
+          "system": false
         }
       ],
       "indexes": [
@@ -420,6 +456,90 @@
         }
       ],
       "indexes": ["CREATE INDEX idx_log_validacoes_data ON log_validacoes (data_validacao DESC)"]
+    },
+    {
+      "name": "sincronizacao_historico",
+      "type": "base",
+      "apiRules": {
+        "list": "@request.auth.id != ''",
+        "view": "@request.auth.id != ''",
+        "create": "@request.auth.id != ''",
+        "update": "@request.auth.id != ''",
+        "delete": "@request.auth.id != ''"
+      },
+      "fields": [
+        {
+          "name": "fontes_executadas",
+          "type": "json",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "auto_inclusao",
+          "type": "bool",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "total_baixado",
+          "type": "number",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "novos_cadastrados",
+          "type": "number",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "atualizados",
+          "type": "number",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "ignorados_duplicidade",
+          "type": "number",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "detalhes_fontes",
+          "type": "json",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "duracao_ms",
+          "type": "number",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "status_geral",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "created",
+          "type": "autodate",
+          "required": false,
+          "system": false,
+          "autodateTriggers": ["onCreate"]
+        },
+        {
+          "name": "updated",
+          "type": "autodate",
+          "required": false,
+          "system": false,
+          "autodateTriggers": ["onCreate", "onUpdate"]
+        }
+      ],
+      "indexes": [
+        "CREATE INDEX idx_sincronizacao_historico_data ON sincronizacao_historico (created DESC)"
+      ]
     }
   ]
 }

@@ -7,7 +7,38 @@ import type {
   LogValidacao,
   RelatorioValidacao,
   ProdutoInput,
+  RespostaSincronizacao,
+  HistoricoSincronizacaoRecord,
 } from '@/types/agro'
+
+// -----------------------------------------------------------------------------
+// Sincronização de Produtos Oficiais (MAPA / AGROFIT / SIPEAGRO)
+// -----------------------------------------------------------------------------
+export async function executarSincronizacaoProdutos(params?: {
+  fontes?: string[]
+  auto_inclusao?: boolean
+  limite_por_fonte?: number
+}): Promise<RespostaSincronizacao> {
+  return pb.send<RespostaSincronizacao>('/backend/v1/sincronizar-produtos', {
+    method: 'POST',
+    body: params || {},
+  })
+}
+
+export async function listarHistoricoSincronizacao(params?: {
+  page?: number
+  perPage?: number
+  sort?: string
+}) {
+  const page = params?.page || 1
+  const perPage = params?.perPage || 20
+  const sort = params?.sort || '-created'
+  return pb
+    .collection('sincronizacao_historico')
+    .getList<HistoricoSincronizacaoRecord>(page, perPage, {
+      sort,
+    })
+}
 
 // -----------------------------------------------------------------------------
 // Validação no Servidor (Hook Customizado)

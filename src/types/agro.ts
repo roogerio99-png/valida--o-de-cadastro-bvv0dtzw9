@@ -144,3 +144,79 @@ export interface RelatorioDuplicidades {
   total_produtos_duplicados: number
   grupos: GrupoDuplicidade[]
 }
+
+// -----------------------------------------------------------------------------
+// Sincronização de Produtos Oficiais (MAPA / AGROFIT / SIPEAGRO)
+// -----------------------------------------------------------------------------
+export type OrigemFonteSincronizacao = 'AGROFIT_FORMULADO' | 'AGROFIT_TECNICO' | 'SIPEAGRO'
+
+export interface DetalheFonteSincronizacao {
+  fonte: OrigemFonteSincronizacao
+  nome: string
+  url: string
+  portalUrl: string
+  status: 'pendente' | 'baixando' | 'processando' | 'concluido' | 'indisponivel'
+  mensagem: string
+  total_baixado: number
+  novos_cadastrados: number
+  atualizados: number
+  ignorados_duplicidade: number
+  itens_amostra?: {
+    nome: string
+    registro_mapa: string
+    ncm_padrao: string
+    principio_ativo: string
+    pertence_nota_subpos_2: string
+    cst_recomendado: string
+  }[]
+}
+
+export interface ProdutoClassificadoSincronizacao {
+  origem_base: string
+  numero_registro_mapa: string
+  marcas_comerciais: string
+  titular_registro: string
+  principio_ativo_garantias: string
+  classe_uso?: string
+  macro_grupo_subgrupo: string
+  pertence_nota_subpos_2: 'SIM' | 'NÃO'
+  ncm_padrao: string
+  ncm_faixa1_ate_300g: string
+  ncm_faixa2_300g_a_7_5kg: string
+  ncm_faixa3_7_5kg_a_10kg: string
+  ncm_faixa4_acima_10kg: string
+  regra_tipi_embalagem: string
+  enquadramento_pis_cofins: string
+  cst_recomendado: string
+  ibs_cbs_2027: string
+  match_matriz_local: boolean
+}
+
+export interface RespostaSincronizacao {
+  sucesso: boolean
+  historico_id?: string | null
+  duracao_ms: number
+  auto_inclusao: boolean
+  resumo: {
+    total_baixado: number
+    novos_cadastrados: number
+    atualizados: number
+    ignorados_duplicidade: number
+  }
+  fontes: DetalheFonteSincronizacao[]
+  amostra_produtos: ProdutoClassificadoSincronizacao[]
+}
+
+export interface HistoricoSincronizacaoRecord extends RecordModel {
+  fontes_executadas: string[] | string
+  auto_inclusao: boolean
+  total_baixado: number
+  novos_cadastrados: number
+  atualizados: number
+  ignorados_duplicidade: number
+  detalhes_fontes: DetalheFonteSincronizacao[] | string
+  duracao_ms: number
+  status_geral: 'concluido' | 'parcial' | 'falha_total'
+  created: string
+  updated: string
+}

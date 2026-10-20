@@ -23,6 +23,7 @@ import Parametrizacao from '@/pages/Parametrizacao'
 import Tributacao from '@/pages/Tributacao'
 import Importar from '@/pages/Importar'
 import Configuracoes from '@/pages/Configuracoes'
+import SincronizacaoProdutos from '@/pages/SincronizacaoProdutos'
 import NotFound from '@/pages/NotFound'
 
 const App = () => (
@@ -48,6 +49,7 @@ const App = () => (
             <Route path="/" element={<Navigate to="/dashboard" replace />} />
             <Route path="/dashboard" element={<Dashboard />} />
             <Route path="/validar" element={<Validar />} />
+            <Route path="/sincronizacao" element={<SincronizacaoProdutos />} />
             <Route path="/regras" element={<Regras />} />
             <Route path="/principios-ativos" element={<PrincipiosAtivos />} />
             <Route path="/base-mestre" element={<BaseMestre />} />
