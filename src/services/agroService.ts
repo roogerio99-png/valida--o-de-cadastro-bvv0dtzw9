@@ -40,6 +40,10 @@ export async function listarHistoricoSincronizacao(params?: {
     })
 }
 
+export async function obterHistoricoSincronizacaoPorId(id: string) {
+  return pb.collection('sincronizacao_historico').getOne<HistoricoSincronizacaoRecord>(id)
+}
+
 // -----------------------------------------------------------------------------
 // Validação no Servidor (Hook Customizado)
 // -----------------------------------------------------------------------------

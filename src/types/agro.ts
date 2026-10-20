@@ -150,6 +150,52 @@ export interface RelatorioDuplicidades {
 // -----------------------------------------------------------------------------
 export type OrigemFonteSincronizacao = 'AGROFIT_FORMULADO' | 'AGROFIT_TECNICO' | 'SIPEAGRO'
 
+export type DesfechoIntegracao = 'IMPORTADO' | 'JA_EXISTENTE' | 'ATUALIZADO' | 'DESCARTADO'
+
+export interface ItemRelatorioIntegracao {
+  fonte: OrigemFonteSincronizacao | string
+  fonte_nome: string
+  registro_mapa: string
+  marca: string
+  titular: string
+  principio_ativo: string
+  ncm: string
+  desfecho: DesfechoIntegracao
+  motivo: string
+}
+
+export interface ContadoresDesfecho {
+  geral: {
+    total: number
+    importado: number
+    ja_existente: number
+    atualizado: number
+    descartado: number
+  }
+  por_fonte: Record<
+    string,
+    {
+      total: number
+      importado: number
+      ja_existente: number
+      atualizado: number
+      descartado: number
+    }
+  >
+  por_criterio_duplicidade?: {
+    registro_mapa: number
+    nome_ncm: number
+    ncm_pa_fabricante: number
+    outro: number
+  }
+}
+
+export interface RelatorioIntegracaoCompleto {
+  total_itens: number
+  contadores: ContadoresDesfecho
+  itens: ItemRelatorioIntegracao[]
+}
+
 export interface DetalheFonteSincronizacao {
   fonte: OrigemFonteSincronizacao
   nome: string
@@ -161,6 +207,7 @@ export interface DetalheFonteSincronizacao {
   novos_cadastrados: number
   atualizados: number
   ignorados_duplicidade: number
+  descartados?: number
   itens_amostra?: {
     nome: string
     registro_mapa: string
@@ -202,9 +249,11 @@ export interface RespostaSincronizacao {
     novos_cadastrados: number
     atualizados: number
     ignorados_duplicidade: number
+    descartados?: number
   }
   fontes: DetalheFonteSincronizacao[]
   amostra_produtos: ProdutoClassificadoSincronizacao[]
+  relatorio_integracao?: RelatorioIntegracaoCompleto
 }
 
 export interface HistoricoSincronizacaoRecord extends RecordModel {
@@ -217,6 +266,8 @@ export interface HistoricoSincronizacaoRecord extends RecordModel {
   detalhes_fontes: DetalheFonteSincronizacao[] | string
   duracao_ms: number
   status_geral: 'concluido' | 'parcial' | 'falha_total'
+  itens_relatorio?: ItemRelatorioIntegracao[] | string
+  contadores_desfecho?: ContadoresDesfecho | string
   created: string
   updated: string
 }

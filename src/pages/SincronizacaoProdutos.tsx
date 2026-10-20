@@ -37,12 +37,19 @@ import {
   TableRow,
 } from '@/components/ui/table'
 import { useToast } from '@/hooks/use-toast'
-import { executarSincronizacaoProdutos, listarHistoricoSincronizacao } from '@/services/agroService'
+import {
+  executarSincronizacaoProdutos,
+  listarHistoricoSincronizacao,
+  obterHistoricoSincronizacaoPorId,
+} from '@/services/agroService'
+import { PainelRelatorioIntegracao } from '@/components/PainelRelatorioIntegracao'
 import type {
   RespostaSincronizacao,
   DetalheFonteSincronizacao,
   HistoricoSincronizacaoRecord,
   OrigemFonteSincronizacao,
+  ItemRelatorioIntegracao,
+  ContadoresDesfecho,
 } from '@/types/agro'
 
 const FONTES_DISPONIVEIS: {
@@ -102,6 +109,18 @@ export default function SincronizacaoProdutos() {
   const [etapaAtual, setEtapaAtual] = useState<string>('')
   const [progressoEstimado, setProgressoEstimado] = useState<number>(0)
   const [resultadoAtual, setResultadoAtual] = useState<RespostaSincronizacao | null>(null)
+
+  // Estado para visualização do Relatório de Integração (seja da execução atual ou reaberto do histórico)
+  const [relatorioAtivo, setRelatorioAtivo] = useState<{
+    titulo: string
+    dataHora: string
+    duracaoMs: number
+    statusGeral: string
+    autoInclusao: boolean
+    fontes: DetalheFonteSincronizacao[]
+    itens: ItemRelatorioIntegracao[]
+    contadores?: ContadoresDesfecho
+  } | null>(null)
 
   // Histórico anterior persistido no banco
   const [historico, setHistorico] = useState<HistoricoSincronizacaoRecord[]>([])
@@ -182,15 +201,29 @@ export default function SincronizacaoProdutos() {
 
       const algumErro = resp.fontes.some((f) => f.status === 'indisponivel')
 
+      // Abre automaticamente o Relatório de Integração completo na tela
+      if (resp.relatorio_integracao) {
+        setRelatorioAtivo({
+          titulo: 'Relatório de Integração — Execução Atual',
+          dataHora: new Date().toISOString(),
+          duracaoMs: resp.duracao_ms,
+          statusGeral: algumErro ? 'parcial' : 'concluido',
+          autoInclusao: resp.auto_inclusao,
+          fontes: resp.fontes,
+          itens: resp.relatorio_integracao.itens || [],
+          contadores: resp.relatorio_integracao.contadores,
+        })
+      }
+
       if (algumErro) {
         toast({
           title: 'Sincronização Concluída Parcialmente',
-          description: `${resp.resumo.novos_cadastrados} produtos novos incluídos. Uma ou mais fontes estavam indisponíveis.`,
+          description: `${resp.resumo.novos_cadastrados} produtos novos incluídos. Relatório detalhado de integração gerado abaixo.`,
         })
       } else {
         toast({
           title: 'Sincronização Efetuada com Sucesso',
-          description: `${resp.resumo.total_baixado} baixados, ${resp.resumo.novos_cadastrados} novos cadastrados e ${resp.resumo.ignorados_duplicidade} duplicidades evitadas.`,
+          description: `${resp.resumo.total_baixado} baixados, ${resp.resumo.novos_cadastrados} novos cadastrados e ${resp.resumo.ignorados_duplicidade} duplicidades evitadas. Relatório disponível abaixo.`,
         })
       }
 
@@ -256,6 +289,45 @@ export default function SincronizacaoProdutos() {
       }
     }
     return fallback
+  }
+
+  // Reabrir relatório a partir de um registro do histórico
+  const handleAbrirRelatorioHistorico = async (h: HistoricoSincronizacaoRecord) => {
+    try {
+      // Se já tem os campos no registro local
+      let recCompleto = h
+      if (!h.itens_relatorio) {
+        recCompleto = await obterHistoricoSincronizacaoPorId(h.id)
+      }
+
+      const itens = safeParseJson<ItemRelatorioIntegracao[]>(recCompleto.itens_relatorio, [])
+      const contadores = safeParseJson<ContadoresDesfecho | undefined>(
+        recCompleto.contadores_desfecho,
+        undefined,
+      )
+      const fontes = safeParseJson<DetalheFonteSincronizacao[]>(recCompleto.detalhes_fontes, [])
+
+      setRelatorioAtivo({
+        titulo: `Relatório de Integração — Execução de ${new Date(recCompleto.created).toLocaleString('pt-BR')}`,
+        dataHora: recCompleto.created,
+        duracaoMs: recCompleto.duracao_ms,
+        statusGeral: recCompleto.status_geral,
+        autoInclusao: recCompleto.auto_inclusao,
+        fontes: fontes,
+        itens: itens,
+        contadores: contadores,
+      })
+
+      // Scroll suave até o relatório
+      window.scrollTo({ top: 350, behavior: 'smooth' })
+    } catch (err: unknown) {
+      console.log('Erro ao reabrir relatório:', err)
+      toast({
+        title: 'Erro ao abrir relatório',
+        description: 'Não foi possível carregar os detalhes desta execução.',
+        variant: 'destructive',
+      })
+    }
   }
 
   return (
@@ -453,9 +525,26 @@ export default function SincronizacaoProdutos() {
       )}
 
       {/* ------------------------------------------------------------------ */}
-      {/* RESULTADO DA ÚLTIMA SINCRONIZAÇÃO */}
+      {/* RELATÓRIO DE INTEGRAÇÃO DETALHADO (COMPONENTE PRINCIPAL SOLICITADO) */}
       {/* ------------------------------------------------------------------ */}
-      {resultadoAtual && (
+      {relatorioAtivo && (
+        <PainelRelatorioIntegracao
+          titulo={relatorioAtivo.titulo}
+          dataHora={relatorioAtivo.dataHora}
+          duracaoMs={relatorioAtivo.duracaoMs}
+          statusGeral={relatorioAtivo.statusGeral}
+          autoInclusao={relatorioAtivo.autoInclusao}
+          fontes={relatorioAtivo.fontes}
+          itens={relatorioAtivo.itens}
+          contadores={relatorioAtivo.contadores}
+          onFechar={() => setRelatorioAtivo(null)}
+        />
+      )}
+
+      {/* ------------------------------------------------------------------ */}
+      {/* RESULTADO DA ÚLTIMA SINCRONIZAÇÃO (RESUMO COMPLEMENTAR) */}
+      {/* ------------------------------------------------------------------ */}
+      {resultadoAtual && !relatorioAtivo && (
         <div className="space-y-6 animate-in fade-in-50 duration-300">
           {/* Métricas Principais */}
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
@@ -516,141 +605,28 @@ export default function SincronizacaoProdutos() {
             </Card>
           </div>
 
-          {/* Detalhamento por Fonte */}
-          <Card className="border-[#DCE5DC] bg-white shadow-sm">
-            <CardHeader className="py-4 px-6 border-b border-[#DCE5DC]">
-              <CardTitle className="text-base font-bold text-[#1C2B1C]">
-                Status Individual por Fonte Governamental
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="p-0">
-              <Table>
-                <TableHeader>
-                  <TableRow className="bg-[#FAFBF9]">
-                    <TableHead>Fonte Oficial</TableHead>
-                    <TableHead>Status</TableHead>
-                    <TableHead className="text-right">Baixados</TableHead>
-                    <TableHead className="text-right">Novos Base Mestre</TableHead>
-                    <TableHead className="text-right">Duplicidade Evitada</TableHead>
-                    <TableHead className="text-right">Links</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {resultadoAtual.fontes.map((f) => (
-                    <TableRow key={f.fonte}>
-                      <TableCell className="font-medium text-[#1C2B1C]">
-                        <div>
-                          <p className="font-semibold">{f.nome}</p>
-                          <p className="text-xs text-[#5A6D5A]">{f.mensagem}</p>
-                        </div>
-                      </TableCell>
-                      <TableCell>{renderStatusFonte(f.status)}</TableCell>
-                      <TableCell className="text-right font-mono font-medium">
-                        {f.total_baixado}
-                      </TableCell>
-                      <TableCell className="text-right font-mono font-medium text-emerald-700">
-                        {f.novos_cadastrados}
-                      </TableCell>
-                      <TableCell className="text-right font-mono font-medium text-amber-700">
-                        {f.ignorados_duplicidade}
-                      </TableCell>
-                      <TableCell className="text-right">
-                        <div className="flex items-center justify-end gap-2">
-                          <a
-                            href={f.portalUrl}
-                            target="_blank"
-                            rel="noreferrer"
-                            className="inline-flex items-center gap-1 text-xs text-[#1B5E20] hover:underline"
-                          >
-                            <span>Portal</span>
-                            <ExternalLink className="w-3 h-3" />
-                          </a>
-                        </div>
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            </CardContent>
-          </Card>
-
-          {/* Amostra dos Produtos Classificados Deterministicamente */}
-          {resultadoAtual.amostra_produtos && resultadoAtual.amostra_produtos.length > 0 && (
-            <Card className="border-[#DCE5DC] bg-white shadow-sm">
-              <CardHeader className="py-4 px-6 border-b border-[#DCE5DC] flex flex-row items-center justify-between">
-                <div>
-                  <CardTitle className="text-base font-bold text-[#1C2B1C] flex items-center gap-2">
-                    <Database className="w-4 h-4 text-[#1B5E20]" />
-                    Amostra de Produtos Classificados pelo Motor Oficial
-                  </CardTitle>
-                  <CardDescription className="text-xs text-[#5A6D5A]">
-                    Exibição dos primeiros produtos processados com aplicação de NCM padrão, faixas
-                    TIPI e alíquotas fiscais.
-                  </CardDescription>
-                </div>
-              </CardHeader>
-              <CardContent className="p-0 overflow-x-auto">
-                <Table>
-                  <TableHeader>
-                    <TableRow className="bg-[#FAFBF9]">
-                      <TableHead>Produto / Marca</TableHead>
-                      <TableHead>Registro MAPA</TableHead>
-                      <TableHead>Origem</TableHead>
-                      <TableHead>Princípio Ativo / Garantias</TableHead>
-                      <TableHead>NCM Padrão</TableHead>
-                      <TableHead>Nota Subpos. 2</TableHead>
-                      <TableHead>CST Recomendado</TableHead>
-                      <TableHead>Reforma IBS/CBS 2027</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {resultadoAtual.amostra_produtos.map((p, idx) => (
-                      <TableRow key={idx}>
-                        <TableCell className="font-semibold text-[#1C2B1C] max-w-[200px] truncate">
-                          {p.marcas_comerciais}
-                        </TableCell>
-                        <TableCell className="font-mono text-xs text-[#5A6D5A]">
-                          {p.numero_registro_mapa || 'N/D'}
-                        </TableCell>
-                        <TableCell>
-                          <Badge variant="outline" className="text-[10px]">
-                            {p.origem_base}
-                          </Badge>
-                        </TableCell>
-                        <TableCell className="text-xs text-[#1C2B1C] max-w-[200px] truncate">
-                          {p.principio_ativo_garantias}
-                        </TableCell>
-                        <TableCell className="font-mono font-bold text-xs text-emerald-800">
-                          {p.ncm_padrao}
-                        </TableCell>
-                        <TableCell>
-                          {p.pertence_nota_subpos_2 === 'SIM' ? (
-                            <Badge className="bg-amber-100 text-amber-800 border-amber-300 text-[10px]">
-                              SIM (Cap. 38)
-                            </Badge>
-                          ) : (
-                            <span className="text-xs text-gray-400">NÃO</span>
-                          )}
-                        </TableCell>
-                        <TableCell
-                          className="text-xs text-[#5A6D5A] max-w-[220px] truncate"
-                          title={p.cst_recomendado}
-                        >
-                          {p.cst_recomendado}
-                        </TableCell>
-                        <TableCell
-                          className="text-xs text-[#5A6D5A] max-w-[180px] truncate"
-                          title={p.ibs_cbs_2027}
-                        >
-                          {p.ibs_cbs_2027}
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              </CardContent>
-            </Card>
-          )}
+          <div className="flex justify-end">
+            <Button
+              onClick={() => {
+                if (resultadoAtual.relatorio_integracao) {
+                  setRelatorioAtivo({
+                    titulo: 'Relatório de Integração — Execução Atual',
+                    dataHora: new Date().toISOString(),
+                    duracaoMs: resultadoAtual.duracao_ms,
+                    statusGeral: 'concluido',
+                    autoInclusao: resultadoAtual.auto_inclusao,
+                    fontes: resultadoAtual.fontes,
+                    itens: resultadoAtual.relatorio_integracao.itens || [],
+                    contadores: resultadoAtual.relatorio_integracao.contadores,
+                  })
+                }
+              }}
+              className="bg-[#1B5E20] hover:bg-[#2E7D32] text-white flex items-center gap-2"
+            >
+              <FileSpreadsheet className="w-4 h-4" />
+              Ver Relatório de Integração Detalhado
+            </Button>
+          </div>
         </div>
       )}
 
@@ -778,14 +754,34 @@ export default function SincronizacaoProdutos() {
                         </TableCell>
                       </TableRow>
 
-                      {/* Linha expandida com detalhes das fontes */}
+                      {/* Linha expandida com detalhes das fontes e botão de reabrir relatório */}
                       {isExpanded && (
                         <TableRow className="bg-[#FAFBF9]/80">
                           <TableCell colSpan={9} className="p-4">
-                            <div className="space-y-3">
-                              <p className="text-xs font-bold text-[#1C2B1C]">
-                                Detalhamento por Fonte Governamental na Execução:
-                              </p>
+                            <div className="space-y-4">
+                              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-2 border-b border-[#DCE5DC]">
+                                <div>
+                                  <p className="text-xs font-bold text-[#1C2B1C]">
+                                    Detalhamento por Fonte Governamental na Execução
+                                  </p>
+                                  <p className="text-[11px] text-[#5A6D5A]">
+                                    Clique no botão ao lado para abrir o Relatório de Integração
+                                    completo item a item gravado nesta sincronização.
+                                  </p>
+                                </div>
+                                <Button
+                                  size="sm"
+                                  onClick={(e) => {
+                                    e.stopPropagation()
+                                    handleAbrirRelatorioHistorico(h)
+                                  }}
+                                  className="bg-[#1B5E20] hover:bg-[#2E7D32] text-white text-xs h-8 flex items-center gap-1.5 shadow-sm font-semibold"
+                                >
+                                  <FileSpreadsheet className="w-3.5 h-3.5" />
+                                  Abrir Relatório de Integração desta Execução
+                                </Button>
+                              </div>
+
                               <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
                                 {detalhes.map((df, dfIdx) => (
                                   <div

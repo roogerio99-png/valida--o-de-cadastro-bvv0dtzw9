@@ -12,8 +12,12 @@
  * - Nota de Subposições 2 do Cap. 38 TIPI (SC COSIT 98.042/2022)
  * - Fallbacks específicos para AGROFIT Formulados, Técnicos e SIPEAGRO
  * - Enquadramento tributário (PIS/COFINS, CST e Reforma Tributária IBS/CBS LC 214/2025)
- * - Trava 4 (duplicidade) obrigatória antes de auto-inclusão na base_mestre e dicionario_principios_ativos
- * - Persistência do histórico na collection sincronizacao_historico
+ * - Trava 4 (duplicidade) obrigatória com detecção de desfechos:
+ *   - IMPORTADO: novo produto inserido na base_mestre
+ *   - JA_EXISTENTE: cadastro já existente na base_mestre com indicação do critério da Trava 4
+ *   - ATUALIZADO: já existia mas tinha dados faltantes preenchidos pelo MAPA
+ *   - DESCARTADO: registro incompleto ou inválido com motivo
+ * - Persistência do histórico e RELATÓRIO DE INTEGRAÇÃO COMPLETO na collection sincronizacao_historico
  */
 
 routerAdd('POST', '/backend/v1/sincronizar-produtos', (e) => {
@@ -130,9 +134,10 @@ routerAdd('POST', '/backend/v1/sincronizar-produtos', (e) => {
   // Carregar produtos existentes na base_mestre para trava de duplicidade
   let produtosExistentes = []
   try {
-    const records = $app.findRecordsByFilter('base_mestre', 'id != ""', '-created', 2000, 0) || []
+    const records = $app.findRecordsByFilter('base_mestre', 'id != ""', '-created', 3000, 0) || []
     produtosExistentes = records.map((r) => ({
       id: r.id,
+      recordObj: r,
       nome_produto: r.getString('nome_produto'),
       nomeNorm: normTxt(r.getString('nome_produto')),
       ncm: cleanNcm(r.getString('ncm')),
@@ -141,6 +146,8 @@ routerAdd('POST', '/backend/v1/sincronizar-produtos', (e) => {
       principio_ativo: r.getString('principio_ativo'),
       paNorm: normTxt(r.getString('principio_ativo')),
       fabricante: r.getString('fabricante'),
+      cst_recomendado: r.getString('cst_recomendado'),
+      ibs_cbs_2027: r.getString('ibs_cbs_2027'),
     }))
   } catch (err) {
     console.log('Aviso ao carregar base_mestre existente:', err.message)
@@ -197,7 +204,6 @@ routerAdd('POST', '/backend/v1/sincronizar-produtos', (e) => {
   function parseCsvLinhas(rawText, maxLinhas) {
     if (!rawText) return []
 
-    // Detecção das primeiras 5 linhas
     const linhas = rawText.split(/\r\n|\n|\r/).filter((l) => l.trim().length > 0)
     if (linhas.length < 2) return []
 
@@ -215,7 +221,6 @@ routerAdd('POST', '/backend/v1/sincronizar-produtos', (e) => {
       delim = '\t'
     }
 
-    // Dividir linha respeitando aspas simples/duplas
     function splitLine(line, delimiter) {
       const result = []
       let cur = ''
@@ -366,7 +371,7 @@ routerAdd('POST', '/backend/v1/sincronizar-produtos', (e) => {
     let ncmFaixa4 = '' // > 10kg/L
     let regraTipiEmbalagem = ''
     let macroGrupoSubgrupo = ''
-    let regimeTipo = 'beneficiado' // 'tributado_integral' ou 'beneficiado' ou 'condicional'
+    let regimeTipo = 'beneficiado'
 
     if (origem === 'AGROFIT_TECNICO') {
       macroGrupoSubgrupo = 'AGROFIT — Produto Técnico (Lei nº 14.785/2023)'
@@ -389,7 +394,6 @@ routerAdd('POST', '/backend/v1/sincronizar-produtos', (e) => {
       ncmFaixa4 = ncmPadrao
     } else if (origem === 'SIPEAGRO') {
       regimeTipo = 'condicional'
-      // (a) Inoculantes fixadores de N
       if (
         paUpper.includes('INOCULANTE') ||
         paUpper.includes('BRADYRHIZOBIUM') ||
@@ -407,7 +411,6 @@ routerAdd('POST', '/backend/v1/sincronizar-produtos', (e) => {
         ncmFaixa4 = '3002.49.99'
         regraTipiEmbalagem = 'Culturas de microrganismos para fixação biológica de N2'
         regimeTipo = 'beneficiado'
-        // (b) Solubilizadores
       } else if (
         paUpper.includes('MEGATERIUM') ||
         paUpper.includes('SOLUBILIZADOR') ||
@@ -423,7 +426,6 @@ routerAdd('POST', '/backend/v1/sincronizar-produtos', (e) => {
         ncmFaixa4 = '3002.49.99'
         regraTipiEmbalagem = 'Biológicos promotores de crescimento e solubilização'
         regimeTipo = 'tributado_integral'
-        // (c) Corretivos
       } else if (
         paUpper.includes('CORRETIVO') ||
         paUpper.includes('CALCARIO') ||
@@ -448,7 +450,6 @@ routerAdd('POST', '/backend/v1/sincronizar-produtos', (e) => {
         ncmFaixa3 = ncmPadrao
         ncmFaixa4 = ncmPadrao
         regimeTipo = 'condicional'
-        // (d) Padrão Fertilizante
       } else {
         macroGrupoSubgrupo = 'Fertilizantes Minerais e Orgânicos (IN 39/2018)'
         regraTipiEmbalagem =
@@ -479,9 +480,9 @@ routerAdd('POST', '/backend/v1/sincronizar-produtos', (e) => {
         macroGrupoSubgrupo =
           'Defensivos — Moléculas da Nota de Subposições 2 Cap. 38 TIPI (SC COSIT 98.042/2022)'
         ncmPadrao = '3808.62.90'
-        ncmFaixa1 = '3808.61.00' // <= 300g/mL
-        ncmFaixa2 = '3808.62.90' // 300g a 7,5kg/L
-        ncmFaixa3 = '3808.69.90' // > 7,5kg/L
+        ncmFaixa1 = '3808.61.00'
+        ncmFaixa2 = '3808.62.90'
+        ncmFaixa3 = '3808.69.90'
         ncmFaixa4 = '3808.69.90'
       } else if (classeUpper.includes('HERBICIDA') || paUpper.includes('HERBICIDA')) {
         if (paUpper.includes('2,4-D') || paUpper.includes('2-4 D') || paUpper.includes('MCPA')) {
@@ -535,7 +536,6 @@ routerAdd('POST', '/backend/v1/sincronizar-produtos', (e) => {
         ncmFaixa3 = ncmPadrao
         ncmFaixa4 = ncmPadrao
       } else {
-        // Demais (Inseticidas, Acaricidas, etc.)
         if (paUpper.includes('ACEFATO') || paUpper.includes('THURINGIENSIS')) {
           ncmPadrao = '3808.91.91'
         } else if (paUpper.includes('CIPERMETRINA') || paUpper.includes('CYPERMETHRIN')) {
@@ -550,7 +550,6 @@ routerAdd('POST', '/backend/v1/sincronizar-produtos', (e) => {
       }
     }
 
-    // 4. Regime Tributário (Strings Literais Conforme Especificação Oficial)
     let enquadramentoPisCofins = ''
     let cstRecomendado = ''
     let ibsCbs2027 = ''
@@ -566,7 +565,6 @@ routerAdd('POST', '/backend/v1/sincronizar-produtos', (e) => {
       cstRecomendado = 'Saída: CST 06 (c/ Ajuste M220/M620 pós-Abr/26) | Entrada Revenda: CST 73'
       ibsCbs2027 = 'Redução de 60% + Diferimento (Art. 138 e Anexo IX LC 214/2025)'
     } else {
-      // Beneficiado
       enquadramentoPisCofins =
         '0,00% (Lei nº 10.925/2004) até Mar/2026; 0,925% (LC nº 224/2025) Real / 0,365% (LC nº 224/2025) Presumido pós-Abr/2026'
       cstRecomendado = 'Saída: CST 06 (c/ Ajuste M220/M620 pós-Abr/26) | Entrada Revenda: CST 73'
@@ -595,13 +593,15 @@ routerAdd('POST', '/backend/v1/sincronizar-produtos', (e) => {
     }
   }
 
-  // Trava 4: Checar duplicidade contra base_mestre
+  // Trava 4: Checar duplicidade contra base_mestre com detalhamento do critério
   function verificarDuplicidade(p) {
     const nomeNorm = normTxt(p.marcas_comerciais)
     const ncmClean = cleanNcm(p.ncm_padrao)
     const mapaDigits = String(p.numero_registro_mapa || '').replace(/\D/g, '')
+    const paNorm = normTxt(p.principio_ativo_garantias)
+    const fabNorm = normTxt(p.titular_registro)
 
-    // 1. Registro MAPA
+    // 1. Registro MAPA (Trava 4 - Critério A)
     if (mapaDigits && mapaDigits.length >= 4) {
       const matchMapa = produtosExistentes.find(
         (ex) => ex.mapaDigits && ex.mapaDigits === mapaDigits,
@@ -609,13 +609,14 @@ routerAdd('POST', '/backend/v1/sincronizar-produtos', (e) => {
       if (matchMapa) {
         return {
           duplicado: true,
-          motivo: `Registro MAPA ${matchMapa.registro_mapa} já cadastrado no produto "${matchMapa.nome_produto}".`,
+          criterio: 'registro_mapa',
+          motivo: `Critério Trava 4 (Registro MAPA): Registro ${matchMapa.registro_mapa} já cadastrado no produto "${matchMapa.nome_produto}".`,
           registroExistente: matchMapa,
         }
       }
     }
 
-    // 2. Nome normalizado + NCM
+    // 2. Nome normalizado + NCM (Trava 4 - Critério B)
     if (nomeNorm && ncmClean) {
       const matchNomeNcm = produtosExistentes.find(
         (ex) => ex.nomeNorm === nomeNorm && ex.ncm === ncmClean,
@@ -623,8 +624,28 @@ routerAdd('POST', '/backend/v1/sincronizar-produtos', (e) => {
       if (matchNomeNcm) {
         return {
           duplicado: true,
-          motivo: `Nome de produto e NCM idênticos ao produto "${matchNomeNcm.nome_produto}".`,
+          criterio: 'nome_ncm',
+          motivo: `Critério Trava 4 (Nome + NCM): Nome do produto e NCM idênticos ao produto "${matchNomeNcm.nome_produto}".`,
           registroExistente: matchNomeNcm,
+        }
+      }
+    }
+
+    // 3. NCM + Princípio Ativo + Fabricante (Trava 4 - Critério C)
+    if (ncmClean && paNorm && fabNorm && fabNorm.length >= 3) {
+      const matchTriplice = produtosExistentes.find(
+        (ex) =>
+          ex.ncm === ncmClean &&
+          ex.paNorm &&
+          ex.paNorm === paNorm &&
+          normTxt(ex.fabricante) === fabNorm,
+      )
+      if (matchTriplice) {
+        return {
+          duplicado: true,
+          criterio: 'ncm_pa_fabricante',
+          motivo: `Critério Trava 4 (NCM + P.A. + Fabricante): Combinação NCM, Princípio Ativo e Fabricante idêntica ao produto "${matchTriplice.nome_produto}".`,
+          registroExistente: matchTriplice,
         }
       }
     }
@@ -633,14 +654,37 @@ routerAdd('POST', '/backend/v1/sincronizar-produtos', (e) => {
   }
 
   // -------------------------------------------------------------------------
-  // EXECUÇÃO DA SINCRONIZAÇÃO POR FONTE
+  // EXECUÇÃO DA SINCRONIZAÇÃO POR FONTE COM RELATÓRIO DE INTEGRAÇÃO DETALHADO
   // -------------------------------------------------------------------------
   const detalhesFontes = []
   let totalBaixadoGeral = 0
   let novosCadastradosGeral = 0
   let atualizadosGeral = 0
   let ignoradosDuplicidadeGeral = 0
+  let descartadosGeral = 0
   const produtosAmostraProcessados = []
+
+  // Itens detalhados do Relatório de Integração (acumulados para persistência e resposta)
+  const itensRelatorio = []
+  const maxItensRelatorioPersistir = 2000
+
+  // Contadores agregados por Fonte × Desfecho (sempre completos e exatos)
+  const contadoresDesfecho = {
+    geral: {
+      total: 0,
+      importado: 0,
+      ja_existente: 0,
+      atualizado: 0,
+      descartado: 0,
+    },
+    por_fonte: {},
+    por_criterio_duplicidade: {
+      registro_mapa: 0,
+      nome_ncm: 0,
+      ncm_pa_fabricante: 0,
+      outro: 0,
+    },
+  }
 
   const colBaseMestre = $app.findCollectionByNameOrId('base_mestre')
   const colDicionarioPa = $app.findCollectionByNameOrId('dicionario_principios_ativos')
@@ -650,17 +694,26 @@ routerAdd('POST', '/backend/v1/sincronizar-produtos', (e) => {
     const cfg = configFontes[fonteKey]
     if (!cfg) continue
 
+    contadoresDesfecho.por_fonte[fonteKey] = {
+      total: 0,
+      importado: 0,
+      ja_existente: 0,
+      atualizado: 0,
+      descartado: 0,
+    }
+
     const detalhe = {
       fonte: fonteKey,
       nome: cfg.nome,
       url: cfg.url,
       portalUrl: cfg.portalUrl,
-      status: 'pendente', // 'sucesso' | 'indisponivel' | 'processado'
+      status: 'pendente',
       mensagem: '',
       total_baixado: 0,
       novos_cadastrados: 0,
       atualizados: 0,
       ignorados_duplicidade: 0,
+      descartados: 0,
       itens_amostra: [],
     }
 
@@ -677,6 +730,8 @@ routerAdd('POST', '/backend/v1/sincronizar-produtos', (e) => {
     const rows = parseCsvLinhas(resDl.conteudo, maxItensPorFonte)
     detalhe.total_baixado = rows.length
     totalBaixadoGeral += rows.length
+    contadoresDesfecho.geral.total += rows.length
+    contadoresDesfecho.por_fonte[fonteKey].total += rows.length
 
     if (rows.length === 0) {
       detalhe.status = 'concluido'
@@ -688,12 +743,35 @@ routerAdd('POST', '/backend/v1/sincronizar-produtos', (e) => {
     detalhe.status = 'concluido'
     detalhe.mensagem = `${rows.length} produtos baixados do portal oficial do MAPA.`
 
-    // Classificação e Inclusão
+    // Processamento item a item com registro de desfecho
     for (let i = 0; i < rows.length; i++) {
       const row = rows[i]
       const classif = classificarProduto(fonteKey, row)
-      if (!classif.marcas_comerciais) continue
 
+      // Validação de descarte para registros sem identificação mínima
+      if (!classif.marcas_comerciais || classif.marcas_comerciais.trim().length === 0) {
+        detalhe.descartados++
+        descartadosGeral++
+        contadoresDesfecho.geral.descartado++
+        contadoresDesfecho.por_fonte[fonteKey].descartado++
+
+        if (itensRelatorio.length < maxItensRelatorioPersistir) {
+          itensRelatorio.push({
+            fonte: fonteKey,
+            fonte_nome: cfg.nome,
+            registro_mapa: classif.numero_registro_mapa || 'N/D',
+            marca: 'Não identificada',
+            titular: classif.titular_registro || 'Não informado',
+            principio_ativo: classif.principio_ativo_garantias || 'N/D',
+            ncm: classif.ncm_padrao || 'N/D',
+            desfecho: 'DESCARTADO',
+            motivo: 'Registro incompleto: Nome comercial/marca ausente no CSV oficial.',
+          })
+        }
+        continue
+      }
+
+      // Amostra compacta para visualização
       if (detalhe.itens_amostra.length < 5) {
         detalhe.itens_amostra.push({
           nome: classif.marcas_comerciais,
@@ -709,15 +787,108 @@ routerAdd('POST', '/backend/v1/sincronizar-produtos', (e) => {
         produtosAmostraProcessados.push(classif)
       }
 
-      // Trava 4 de Duplicidade
+      // Checagem da Trava 4 de Duplicidade
       const dup = verificarDuplicidade(classif)
+
       if (dup.duplicado) {
-        detalhe.ignorados_duplicidade++
-        ignoradosDuplicidadeGeral++
+        const regExistente = dup.registroExistente
+
+        // Verificar se é possível ATUALIZAR dados faltantes no cadastro existente
+        let atualizouDadosFaltantes = false
+        if (regExistente && regExistente.recordObj && autoCadastrar) {
+          const recObj = regExistente.recordObj
+          let houveModificacao = false
+
+          if (!recObj.getString('registro_mapa') && classif.numero_registro_mapa) {
+            recObj.set('registro_mapa', classif.numero_registro_mapa)
+            houveModificacao = true
+          }
+          if (
+            (!recObj.getString('fabricante') ||
+              recObj.getString('fabricante') === 'Não Informado') &&
+            classif.titular_registro &&
+            classif.titular_registro !== 'Não informado'
+          ) {
+            recObj.set('fabricante', classif.titular_registro)
+            houveModificacao = true
+          }
+          if (!recObj.getString('cst_recomendado') && classif.cst_recomendado) {
+            recObj.set('cst_recomendado', classif.cst_recomendado)
+            houveModificacao = true
+          }
+          if (!recObj.getString('ibs_cbs_2027') && classif.ibs_cbs_2027) {
+            recObj.set('ibs_cbs_2027', classif.ibs_cbs_2027)
+            houveModificacao = true
+          }
+          if (!recObj.getString('origem_base') && classif.origem_base) {
+            recObj.set('origem_base', classif.origem_base)
+            houveModificacao = true
+          }
+
+          if (houveModificacao) {
+            try {
+              $app.save(recObj)
+              atualizouDadosFaltantes = true
+            } catch (upErr) {
+              console.log('Aviso ao atualizar registro existente:', upErr.message)
+            }
+          }
+        }
+
+        if (atualizouDadosFaltantes) {
+          detalhe.atualizados++
+          atualizadosGeral++
+          contadoresDesfecho.geral.atualizado++
+          contadoresDesfecho.por_fonte[fonteKey].atualizado++
+
+          if (itensRelatorio.length < maxItensRelatorioPersistir) {
+            itensRelatorio.push({
+              fonte: fonteKey,
+              fonte_nome: cfg.nome,
+              registro_mapa: classif.numero_registro_mapa || regExistente.registro_mapa || 'N/D',
+              marca: classif.marcas_comerciais,
+              titular: classif.titular_registro,
+              principio_ativo: classif.principio_ativo_garantias,
+              ncm: classif.ncm_padrao,
+              desfecho: 'ATUALIZADO',
+              motivo: `Cadastro já existia na Base Mestre ("${regExistente.nome_produto}"). Dados tributários/regulatórios faltantes foram enriquecidos pelo MAPA.`,
+            })
+          }
+        } else {
+          detalhe.ignorados_duplicidade++
+          ignoradosDuplicidadeGeral++
+          contadoresDesfecho.geral.ja_existente++
+          contadoresDesfecho.por_fonte[fonteKey].ja_existente++
+
+          const critKey = dup.criterio || 'outro'
+          if (contadoresDesfecho.por_criterio_duplicidade[critKey] !== undefined) {
+            contadoresDesfecho.por_criterio_duplicidade[critKey]++
+          } else {
+            contadoresDesfecho.por_criterio_duplicidade.outro++
+          }
+
+          if (itensRelatorio.length < maxItensRelatorioPersistir) {
+            itensRelatorio.push({
+              fonte: fonteKey,
+              fonte_nome: cfg.nome,
+              registro_mapa: classif.numero_registro_mapa || 'N/D',
+              marca: classif.marcas_comerciais,
+              titular: classif.titular_registro,
+              principio_ativo: classif.principio_ativo_garantias,
+              ncm: classif.ncm_padrao,
+              desfecho: 'JA_EXISTENTE',
+              motivo: dup.motivo,
+            })
+          }
+        }
         continue
       }
 
-      // Auto-inclusão na base_mestre e dicionário se habilitado
+      // Registro inédito — Gravação na base_mestre (ou simulação se auto_inclusao false)
+      let desfechoFinal = 'IMPORTADO'
+      let motivoFinal =
+        'Produto novo importado e gravado com sucesso na Base Mestre com classificação tributária completa.'
+
       if (autoCadastrar) {
         try {
           // 1. Inserir na base_mestre
@@ -741,10 +912,13 @@ routerAdd('POST', '/backend/v1/sincronizar-produtos', (e) => {
 
           detalhe.novos_cadastrados++
           novosCadastradosGeral++
+          contadoresDesfecho.geral.importado++
+          contadoresDesfecho.por_fonte[fonteKey].importado++
 
           // Atualizar lista em memória para evitar duplicatas dentro do mesmo lote
           produtosExistentes.push({
             id: recBase.id,
+            recordObj: recBase,
             nome_produto: classif.marcas_comerciais,
             nomeNorm: normTxt(classif.marcas_comerciais),
             ncm: cleanNcm(classif.ncm_padrao),
@@ -753,6 +927,8 @@ routerAdd('POST', '/backend/v1/sincronizar-produtos', (e) => {
             principio_ativo: classif.principio_ativo_garantias,
             paNorm: normTxt(classif.principio_ativo_garantias),
             fabricante: classif.titular_registro,
+            cst_recomendado: classif.cst_recomendado,
+            ibs_cbs_2027: classif.ibs_cbs_2027,
           })
 
           // 2. Auto-enriquecimento do Dicionário de Princípios Ativos se inédito
@@ -783,11 +959,35 @@ routerAdd('POST', '/backend/v1/sincronizar-produtos', (e) => {
           }
         } catch (saveErr) {
           console.log('Erro ao auto-incluir produto sincronizado:', saveErr.message)
+          desfechoFinal = 'DESCARTADO'
+          motivoFinal = `Erro ao salvar no banco de dados: ${saveErr.message}`
+          detalhe.descartados++
+          descartadosGeral++
+          contadoresDesfecho.geral.descartado++
+          contadoresDesfecho.por_fonte[fonteKey].descartado++
         }
       } else {
-        // Se auto-cadastro desligado, contabiliza apenas como analisado
+        // Se auto-cadastro desligado, contabiliza apenas como analisado / simulado
         detalhe.novos_cadastrados++
         novosCadastradosGeral++
+        contadoresDesfecho.geral.importado++
+        contadoresDesfecho.por_fonte[fonteKey].importado++
+        motivoFinal =
+          'Produto novo aprovado pelo motor determinístico (simulação: auto-inclusão desativada).'
+      }
+
+      if (itensRelatorio.length < maxItensRelatorioPersistir) {
+        itensRelatorio.push({
+          fonte: fonteKey,
+          fonte_nome: cfg.nome,
+          registro_mapa: classif.numero_registro_mapa || 'N/D',
+          marca: classif.marcas_comerciais,
+          titular: classif.titular_registro,
+          principio_ativo: classif.principio_ativo_garantias,
+          ncm: classif.ncm_padrao,
+          desfecho: desfechoFinal,
+          motivo: motivoFinal,
+        })
       }
     }
 
@@ -797,7 +997,7 @@ routerAdd('POST', '/backend/v1/sincronizar-produtos', (e) => {
   const duracaoMs = Date.now() - startTime
 
   // -------------------------------------------------------------------------
-  // Persistir Histórico na collection sincronizacao_historico
+  // Persistir Histórico e Relatório de Integração na collection sincronizacao_historico
   // -------------------------------------------------------------------------
   let historicoId = null
   try {
@@ -811,6 +1011,11 @@ routerAdd('POST', '/backend/v1/sincronizar-produtos', (e) => {
     recHist.set('ignorados_duplicidade', ignoradosDuplicidadeGeral)
     recHist.set('detalhes_fontes', JSON.stringify(detalhesFontes))
     recHist.set('duracao_ms', duracaoMs)
+
+    // Novos campos do Relatório de Integração
+    recHist.set('itens_relatorio', JSON.stringify(itensRelatorio))
+    recHist.set('contadores_desfecho', JSON.stringify(contadoresDesfecho))
+
     const algumSucesso = detalhesFontes.some((d) => d.status === 'concluido')
     const todasFalharam = detalhesFontes.every((d) => d.status === 'indisponivel')
     recHist.set(
@@ -833,8 +1038,14 @@ routerAdd('POST', '/backend/v1/sincronizar-produtos', (e) => {
       novos_cadastrados: novosCadastradosGeral,
       atualizados: atualizadosGeral,
       ignorados_duplicidade: ignoradosDuplicidadeGeral,
+      descartados: descartadosGeral,
     },
     fontes: detalhesFontes,
     amostra_produtos: produtosAmostraProcessados,
+    relatorio_integracao: {
+      total_itens: itensRelatorio.length,
+      contadores: contadoresDesfecho,
+      itens: itensRelatorio,
+    },
   })
 })

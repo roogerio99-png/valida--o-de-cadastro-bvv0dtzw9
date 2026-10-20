@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-10-20T14:38:17.457Z",
+  "generatedAt": "2026-10-20T14:55:19.058Z",
   "collections": [
     {
       "name": "users",
@@ -535,6 +535,18 @@
           "required": false,
           "system": false,
           "autodateTriggers": ["onCreate", "onUpdate"]
+        },
+        {
+          "name": "itens_relatorio",
+          "type": "json",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "contadores_desfecho",
+          "type": "json",
+          "required": false,
+          "system": false
         }
       ],
       "indexes": [
