@@ -457,35 +457,60 @@ export default function Importar() {
           paLimpo = 'Não Informado'
         }
 
-        // 4. VALIDAÇÃO DE NCM
-        if (!ncmLimpo) {
-          rejeitados.push({
-            linhaOriginal: originalLineNum,
-            linhaLote: idx + 1,
-            motivo: 'NCM obrigatório ausente.',
-            categoria: 'NCM Ausente',
-            campo: 'NCM',
-            valor: rawNcm || 'vazio',
-            dados: row,
-          })
-          return
+        // Fabricante: extraído da coluna Fabricante; onde a planilha não traz, gravar "Não Informado"
+        // Higienização defensiva preventiva para o limite de 500 caracteres
+        let fabLimpo = fab.trim() || 'Não Informado'
+        if (fabLimpo.length > 500) {
+          fabLimpo = fabLimpo.slice(0, 500)
         }
 
-        if (ncmLimpo.length !== 8) {
+        // 4. VALIDAÇÃO E DEDUÇÃO DETERMINÍSTICA DE NCM
+        let ncmEfetivo = ncmLimpo
+
+        // Se o NCM estiver ausente, tentar dedução pelo motor determinístico se houver princípio ativo / indícios
+        if (!ncmEfetivo) {
+          const canonicoPrevio = executarMotorCanonicoFrontend({
+            nome_completo: trimmedNome,
+            embalagem: embalagemLimpa || '1X20L (20 L)',
+            unidade: unid || 'L',
+            principio_ativo: paLimpo || trimmedNome,
+            registro_mapa: mapaLimpo,
+            titular_fabricante: fabLimpo,
+            origem_base: 'PLANILHA_IMPORTACAO',
+          })
+
+          const deduzidoDigits = canonicoPrevio.ncm_padrao
+            ? canonicoPrevio.ncm_padrao.replace(/\D/g, '')
+            : ''
+
+          if (deduzidoDigits && deduzidoDigits.length === 8 && deduzidoDigits !== '38089999') {
+            ncmEfetivo = deduzidoDigits
+          } else {
+            rejeitados.push({
+              linhaOriginal: originalLineNum,
+              linhaLote: idx + 1,
+              motivo: 'NCM obrigatório ausente.',
+              categoria: 'NCM Ausente',
+              campo: 'NCM',
+              valor: rawNcm || 'vazio',
+              dados: row,
+            })
+            return
+          }
+        }
+
+        if (ncmEfetivo.length !== 8) {
           rejeitados.push({
             linhaOriginal: originalLineNum,
             linhaLote: idx + 1,
-            motivo: `NCM "${ncmLimpo}" possui ${ncmLimpo.length} dígitos. O padrão TIPI exige 8 dígitos numéricos.`,
+            motivo: `NCM "${ncmEfetivo}" possui ${ncmEfetivo.length} dígitos. O padrão TIPI exige 8 dígitos numéricos.`,
             categoria: 'NCM com Dígitos Inválidos',
             campo: 'NCM',
-            valor: ncmLimpo,
+            valor: ncmEfetivo,
             dados: row,
           })
           return
         }
-
-        // Fabricante: extraído da coluna Fabricante; onde a planilha não traz, gravar "Não Informado"
-        const fabLimpo = fab.trim() || 'Não Informado'
 
         // Executar Motor Químico-Aduaneiro e Tributário Determinístico para gerar os 28 campos
         const canonico = executarMotorCanonicoFrontend({
@@ -495,7 +520,7 @@ export default function Importar() {
           principio_ativo: paLimpo || trimmedNome,
           registro_mapa: mapaLimpo,
           titular_fabricante: fabLimpo,
-          ncm_padrao: ncmLimpo,
+          ncm_padrao: ncmEfetivo,
           origem_base: 'PLANILHA_IMPORTACAO',
         })
 

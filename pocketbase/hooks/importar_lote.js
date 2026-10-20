@@ -341,28 +341,29 @@ routerAdd('POST', '/backend/v1/importar-lote', (e) => {
           // Higienização e truncamento defensivo para os limites do schema da matriz
           let macroSub =
             String(data.macro_grupo_subgrupo_padrao || '').trim() || 'Defensivos — Herbicida'
-          if (macroSub.length > 255) macroSub = macroSub.slice(0, 255)
+          if (macroSub.length > 500) macroSub = macroSub.slice(0, 500)
 
-          const regraTipi =
+          let regraTipi =
             String(data.regra_tipi_embalagem || '').trim() ||
             (nota2 === 'SIM'
               ? 'Nota de Subposições 2 Cap. 38 TIPI (SC COSIT 98.042/2022)'
               : 'Posição 38.08 TIPI')
+          if (regraTipi.length > 500) regraTipi = regraTipi.slice(0, 500)
 
           let sisMapa =
             String(data.sistema_registro_mapa || '').trim() ||
             'AGROFIT/MAPA — Produto Formulado (Lei nº 14.785/2023)'
-          if (sisMapa.length > 255) sisMapa = sisMapa.slice(0, 255)
+          if (sisMapa.length > 500) sisMapa = sisMapa.slice(0, 500)
 
           let pisCofins =
             String(data.enquadramento_pis_cofins || '').trim() ||
             'Beneficiado (Lei 10.925/04): 0% até Mar/26 | 0,925% Real pós-Abr/26'
-          if (pisCofins.length > 255) pisCofins = pisCofins.slice(0, 255)
+          if (pisCofins.length > 500) pisCofins = pisCofins.slice(0, 500)
 
           let cstRec =
             String(data.cst_recomendado || '').trim() ||
             'Saída: CST 06 (c/ Ajuste M220/M620) | Entrada: CST 73'
-          if (cstRec.length > 255) cstRec = cstRec.slice(0, 255)
+          if (cstRec.length > 500) cstRec = cstRec.slice(0, 500)
 
           // Chave do P.A. (máx 255)
           const chaveTruncada = chaveUpper.length > 255 ? chaveUpper.slice(0, 255) : chaveUpper
@@ -480,42 +481,157 @@ routerAdd('POST', '/backend/v1/importar-lote', (e) => {
             continue
           }
 
-          // NCM obrigatório e válido
-          const rawNcm = String(data.ncm_padrao || data.ncm || '').trim()
-          const digitsNcm = rawNcm.replace(/\D/g, '')
-          if (!digitsNcm || digitsNcm.length !== 8) {
-            registrarErro(
-              rowNum,
-              i + 1,
-              digitsNcm ? 'NCM com Dígitos Inválidos' : 'NCM Ausente',
-              digitsNcm
-                ? `Código NCM "${rawNcm}" possui ${digitsNcm.length} dígitos. O padrão TIPI exige 8 dígitos numéricos.`
-                : 'NCM do produto é obrigatório.',
-              'ncm',
-              rawNcm || 'vazio',
-              data,
-            )
-            continue
-          }
-
           const marcaPadronizada =
             String(data.marca_padronizada || '').trim() || sanitizarMarca(nomeCompleto)
-          const ncmMascara = fmtNcmMascara(digitsNcm)
           const embLimpa = String(data.embalagem || '1X20L (20 L)').trim()
           const unidadeFinal = normalizarUnidade(data.unidade, embLimpa)
           const macroFinal = String(data.macro_grupo || 'Defensivos').trim()
           const subFinal = String(data.sub_grupo || 'Herbicida').trim()
           const tipoFinal = normalizarTipoProduto(data.tipo_produto, macroFinal, subFinal)
           const regMapaFormatado = sanitizarMapa(data.registro_mapa)
-          const titularFinal =
+
+          // Higienização defensiva de titular_fabricante / fabricante:
+          // Trunca no limite real (500) preservando o início do texto onde reside o nome do titular
+          let titularFinal =
             String(data.titular_fabricante || data.fabricante || 'Não Informado').trim() ||
             'Não Informado'
+          if (titularFinal.length > 500) {
+            titularFinal = titularFinal.slice(0, 500)
+          }
 
           const paDeclarado = String(data.principio_ativo || marcaPadronizada).trim()
           let nota2 = normalizarNotaSubpos2(data.nota_subpos_2)
           if (verificarNota2Molecula(paDeclarado, nomeCompleto)) {
             nota2 = 'SIM'
           }
+
+          // NCM obrigatório: se ausente ou incompleto, tentar dedução pelo motor químico-aduaneiro antes de recusar
+          let rawNcm = String(data.ncm_padrao || data.ncm || '').trim()
+          let digitsNcm = rawNcm.replace(/\D/g, '')
+
+          if (!digitsNcm || digitsNcm.length !== 8) {
+            // Tentativa de dedução determinística se possui princípio ativo ou tipo industrial/técnico
+            const paUpper = paDeclarado.toUpperCase()
+            const isTecnico =
+              tipoFinal === 'Produto Técnico Industrial' ||
+              paUpper.includes('TECNICO') ||
+              paUpper.includes('TÉCNICO') ||
+              regMapaFormatado.startsWith('TC') ||
+              nomeCompleto.toUpperCase().includes('TECNICO') ||
+              nomeCompleto.toUpperCase().includes('TÉCNICO')
+
+            let deduzido = ''
+
+            // 1. Verificar se o princípio ativo já tem NCM padrão ou granel na matriz dicionario_principios_ativos
+            if (paDeclarado) {
+              const escPa = paUpper.replace(/'/g, "\\'")
+              const paRows =
+                txApp.findRecordsByFilter(
+                  'dicionario_principios_ativos',
+                  `principio_ativo_chave = '${escPa}' || principio_ativo = '${escPa}'`,
+                  '-created',
+                  1,
+                  0,
+                ) || []
+              if (paRows.length > 0) {
+                const rowPa = paRows[0]
+                const ncmMatriz = isTecnico
+                  ? rowPa.getString('ncm_granel_tecnico') ||
+                    rowPa.getString('ncm_padrao_referencia')
+                  : rowPa.getString('ncm_padrao_referencia') ||
+                    rowPa.getString('ncm_granel_tecnico')
+                const d = String(ncmMatriz || '').replace(/\D/g, '')
+                if (d.length === 8) deduzido = d
+              }
+            }
+
+            // 2. Se não encontrou na matriz, rodar motor canônico químico-aduaneiro
+            if (!deduzido) {
+              if (nota2 === 'SIM') {
+                deduzido = isTecnico ? '38086990' : '38086290'
+              } else if (tipoFinal === 'Fertilizante Mineral / Organomineral') {
+                deduzido = '31059090'
+              } else if (tipoFinal === 'Corretivo / Condicionador de Solo') {
+                deduzido = paUpper.includes('GESSO') ? '25201019' : '25210000'
+              } else if (tipoFinal === 'Inoculante / Biológico') {
+                deduzido = '30024999'
+              } else if (tipoFinal === 'Adjuvante / Espalhante Adesivo') {
+                deduzido = '38249989'
+              } else if (isTecnico) {
+                if (subFinal.includes('Fungicida') || paUpper.includes('FUNGICIDA')) {
+                  deduzido = '38089220'
+                } else if (subFinal.includes('Inseticida') || paUpper.includes('INSETICIDA')) {
+                  deduzido = '38089120'
+                } else {
+                  deduzido = '38089319' // Herbicida técnico
+                }
+              } else {
+                // Formulado comercial
+                if (subFinal.includes('Fungicida') || paUpper.includes('FUNGICIDA')) {
+                  deduzido = paUpper.includes('MANCOZEB') ? '38089293' : '38089299'
+                } else if (subFinal.includes('Inseticida') || paUpper.includes('INSETICIDA')) {
+                  deduzido =
+                    paUpper.includes('ACEFATO') || paUpper.includes('THURINGIENSIS')
+                      ? '38089191'
+                      : paUpper.includes('CIPERMETRINA')
+                        ? '38089192'
+                        : '38089199'
+                } else if (subFinal.includes('Regulador') || paUpper.includes('REGULADOR')) {
+                  deduzido = '38089359'
+                } else if (subFinal.includes('Nematicida') || paUpper.includes('NEMATICIDA')) {
+                  deduzido = '38089995'
+                } else {
+                  if (
+                    paUpper.includes('2,4-D') ||
+                    paUpper.includes('2-4 D') ||
+                    paUpper.includes('MCPA')
+                  ) {
+                    deduzido = '38089322'
+                  } else if (paUpper.includes('ATRAZINA') || paUpper.includes('DIURON')) {
+                    deduzido = '38089323'
+                  } else if (paUpper.includes('GLIFOSATO') || paUpper.includes('GLYPHOSATE')) {
+                    deduzido = '38089324'
+                  } else if (
+                    paUpper.includes('IMAZETAPIR') ||
+                    paUpper.includes('CLORIMURON') ||
+                    paUpper.includes('METSULFURON') ||
+                    paUpper.includes('NICOSULFURON')
+                  ) {
+                    deduzido = '38089327'
+                  } else if (
+                    paUpper.includes('AMETRINA') ||
+                    paUpper.includes('HEXAZINONA') ||
+                    paUpper.includes('METRIBUZIM') ||
+                    paUpper.includes('METRIBUZIN')
+                  ) {
+                    deduzido = '38089328'
+                  } else {
+                    deduzido = '38089329'
+                  }
+                }
+              }
+            }
+
+            if (deduzido && deduzido.length === 8) {
+              digitsNcm = deduzido
+              rawNcm = fmtNcmMascara(deduzido)
+            } else {
+              registrarErro(
+                rowNum,
+                i + 1,
+                digitsNcm ? 'NCM com Dígitos Inválidos' : 'NCM Ausente',
+                digitsNcm
+                  ? `Código NCM "${rawNcm}" possui ${digitsNcm.length} dígitos. O padrão TIPI exige 8 dígitos numéricos.`
+                  : 'NCM do produto é obrigatório (tentativa de dedução canônica sem correspondência taxativa).',
+                'ncm',
+                rawNcm || 'vazio',
+                data,
+              )
+              continue
+            }
+          }
+
+          const ncmMascara = fmtNcmMascara(digitsNcm)
 
           // Resolução do Princípio Ativo na Matriz (FK principio_ativo_id) garantindo Dual-Sync sem órfãos
           let paRecordId = String(data.principio_ativo_id || '').trim()
