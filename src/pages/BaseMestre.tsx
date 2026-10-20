@@ -72,6 +72,7 @@ export default function BaseMestre() {
   const [tipoProdutoFilter, setTipoProdutoFilter] = useState<string>('todos')
   const [nota2Filter, setNota2Filter] = useState<string>('todos')
   const [statusPisFilter, setStatusPisFilter] = useState<string>('todos')
+  const [paIdFilter, setPaIdFilter] = useState<string>('')
   const [, startTransition] = useTransition()
 
   // Seleção múltipla para exportação / exclusão em lote
@@ -109,14 +110,26 @@ export default function BaseMestre() {
     }))
   }
 
+  // Capturar filtro de principio_ativo_id via URL query string (?paId=... ou ?principio_ativo_id=...)
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search)
+    const urlPaId = params.get('paId') || params.get('principio_ativo_id')
+    if (urlPaId) {
+      setPaIdFilter(urlPaId)
+    }
+  }, [])
+
   const carregarProdutos = async () => {
     setLoading(true)
     try {
       const filters: string[] = []
+      if (paIdFilter) {
+        filters.push(`principio_ativo_id = '${paIdFilter.replace(/'/g, "\\'")}'`)
+      }
       if (search.trim()) {
         const clean = search.trim().replace(/'/g, "\\'")
         filters.push(
-          `(nome_completo ~ '${clean}' || marca_padronizada ~ '${clean}' || registro_mapa ~ '${clean}' || ncm_padrao ~ '${clean}' || titular_fabricante ~ '${clean}')`,
+          `(nome_completo ~ '${clean}' || marca_padronizada ~ '${clean}' || registro_mapa ~ '${clean}' || ncm_padrao ~ '${clean}' || titular_fabricante ~ '${clean}' || principio_ativo ~ '${clean}')`,
         )
       }
       if (macroGrupoFilter !== 'todos') {
@@ -262,7 +275,7 @@ export default function BaseMestre() {
 
   useEffect(() => {
     carregarProdutos()
-  }, [page, search, macroGrupoFilter, tipoProdutoFilter, nota2Filter, statusPisFilter])
+  }, [page, search, macroGrupoFilter, tipoProdutoFilter, nota2Filter, statusPisFilter, paIdFilter])
 
   useRealtime('base_mestre', () => carregarProdutos())
 
@@ -437,6 +450,28 @@ export default function BaseMestre() {
 
   return (
     <div className="space-y-6 animate-in fade-in-up duration-300">
+      {paIdFilter && (
+        <div className="p-3 bg-emerald-50 border border-emerald-200 rounded-lg flex items-center justify-between text-xs text-emerald-900">
+          <div className="flex items-center gap-2">
+            <span className="font-semibold">Filtrando por Princípio Ativo ID:</span>
+            <code className="bg-white px-2 py-0.5 rounded border border-emerald-300 font-mono text-[11px]">
+              {paIdFilter}
+            </code>
+          </div>
+          <Button
+            size="sm"
+            variant="outline"
+            className="h-7 text-xs border-emerald-300 hover:bg-emerald-100"
+            onClick={() => {
+              setPaIdFilter('')
+              window.history.replaceState({}, '', '/base-mestre')
+            }}
+          >
+            Limpar Filtro de Princípio Ativo
+          </Button>
+        </div>
+      )}
+
       {/* Top Header */}
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
         <div>

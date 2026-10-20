@@ -213,7 +213,7 @@ export async function listarPrincipiosAtivos(params?: {
 }) {
   const page = params?.page || 1
   const perPage = params?.perPage || 50
-  const sort = params?.sort || 'principio_ativo'
+  const sort = params?.sort || 'principio_ativo_chave'
   return pb
     .collection('dicionario_principios_ativos')
     .getList<DicionarioPrincipioAtivo>(page, perPage, {
@@ -223,15 +223,95 @@ export async function listarPrincipiosAtivos(params?: {
 }
 
 export async function criarPrincipioAtivo(data: Partial<DicionarioPrincipioAtivo>) {
-  return pb.collection('dicionario_principios_ativos').create<DicionarioPrincipioAtivo>(data)
+  const chave = (data.principio_ativo_chave || data.principio_ativo || '').trim().toUpperCase()
+  const payload = {
+    ...data,
+    principio_ativo_chave: chave,
+    principio_ativo: chave,
+  }
+  return pb.collection('dicionario_principios_ativos').create<DicionarioPrincipioAtivo>(payload)
 }
 
 export async function atualizarPrincipioAtivo(id: string, data: Partial<DicionarioPrincipioAtivo>) {
-  return pb.collection('dicionario_principios_ativos').update<DicionarioPrincipioAtivo>(id, data)
+  const payload = { ...data }
+  if (payload.principio_ativo_chave || payload.principio_ativo) {
+    const chave = (payload.principio_ativo_chave || payload.principio_ativo || '')
+      .trim()
+      .toUpperCase()
+    payload.principio_ativo_chave = chave
+    payload.principio_ativo = chave
+  }
+  return pb.collection('dicionario_principios_ativos').update<DicionarioPrincipioAtivo>(id, payload)
 }
 
 export async function excluirPrincipioAtivo(id: string) {
   return pb.collection('dicionario_principios_ativos').delete(id)
+}
+
+/**
+ * Conta em tempo real quantos produtos da base_mestre estão vinculados a este princípio ativo
+ */
+export async function contarProdutosVinculadosAoPrincipioAtivo(paId: string): Promise<number> {
+  try {
+    const res = await pb.collection('base_mestre').getList(1, 1, {
+      filter: `principio_ativo_id = "${paId}"`,
+      fields: 'id',
+    })
+    return res.totalItems
+  } catch (_) {
+    return 0
+  }
+}
+
+/**
+ * Propaga as regras canônicas de um princípio ativo para todos os produtos vinculados em cascata
+ */
+export async function sincronizarPrincipioAtivoEmCascata(id: string): Promise<{
+  sucesso: boolean
+  mensagem: string
+  total_vinculados: number
+  atualizados: number
+}> {
+  return await pb.send<{
+    sucesso: boolean
+    mensagem: string
+    total_vinculados: number
+    atualizados: number
+  }>(`/backend/v1/sincronizar-pa-cascata/${encodeURIComponent(id)}`, {
+    method: 'POST',
+  })
+}
+
+/**
+ * Pipeline Dual-Sync Atômico (Seção 5 da especificação técnica 2.5.0)
+ */
+export async function importarNovoCadastroDualSync(dados: {
+  nome_comercial_portal: string
+  principio_ativo_declarado: string
+  numero_registro_mapa: string
+  classe_agronomica?: string
+  titular_registro?: string
+  embalagem_comercial?: string
+  unidade_medida?: string
+  origem_portal?: string
+  url_publicacao_dou?: string
+  simular_falha_ncm?: boolean
+}) {
+  return await pb.send<{
+    sucesso: boolean
+    mensagem: string
+    principio_ativo_id: string
+    principio_ativo_chave: string
+    principio_ativo_novo_criado: boolean
+    produto_mestre_id: string
+    produto_mestre_nome: string
+    registro_mapa: string
+    ncm_padrao: string
+    cst_saida: string
+  }>('/backend/v1/importar-novo-cadastro', {
+    method: 'POST',
+    body: dados,
+  })
 }
 
 // -----------------------------------------------------------------------------

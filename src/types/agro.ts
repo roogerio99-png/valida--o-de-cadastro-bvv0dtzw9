@@ -10,15 +10,34 @@ export interface RegraNcmEmbalagem extends RecordModel {
 }
 
 export interface DicionarioPrincipioAtivo extends RecordModel {
-  principio_ativo: string
-  classe: string
-  grupo_quimico: string
-  concentracao_min: number
-  concentracao_max: number
-  unidade: string
-  status: string
+  // Contrato Canônico de 13 Campos Químico-Fiscais (v2.5.0)
+  principio_ativo_chave: string
+  macro_grupo_subgrupo_padrao: string
+  nota_subpos_2: 'SIM' | 'NÃO'
+  ncm_padrao_referencia: string
+  ncm_faixa1_ate_300g: string
+  ncm_faixa2_300g_a_7_5kg: string
+  ncm_faixa3_7_5kg_a_10kg: string
+  ncm_faixa4_acima_10kg: string
+  ncm_granel_tecnico: string
+  regra_tipi_embalagem: string
+  sistema_registro_mapa: string
+  enquadramento_pis_cofins: string
+  cst_recomendado: string
+
+  // Legado e compatibilidade
+  principio_ativo?: string
+  classe?: string
+  grupo_quimico?: string
+  concentracao_min?: number
+  concentracao_max?: number
+  unidade?: string
+  status?: string
   created: string
   updated: string
+
+  // Campo calculado/enriquecido no cliente
+  total_produtos_vinculados?: number
 }
 
 export type StatusValidacao = 'aprovado' | 'reprovado' | 'pendente'
@@ -37,7 +56,8 @@ export type TipoProdutoCanonico =
 export type UnidadeFisicaCanonica = 'L' | 'KG' | 'SC' | 'UN' | 'DOSES'
 
 export interface BaseMestreProduto extends RecordModel {
-  // Contrato Canônico de 28 Campos (v2.4.0)
+  // Contrato Canônico de 28 Campos (v2.4.0) + FK Matriz de PAs
+  principio_ativo_id?: string
   nome_completo?: string
   marca_padronizada?: string
   tipo_produto?: TipoProdutoCanonico

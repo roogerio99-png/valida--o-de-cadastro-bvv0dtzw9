@@ -1316,22 +1316,40 @@ routerAdd('POST', '/backend/v1/sincronizar-produtos', (e) => {
                 fabNorm: normTxt(canonico.titular_fabricante),
               })
 
-              // Auto-enriquecimento do Dicionário de Princípios Ativos se inédito
+              // Auto-enriquecimento do Dicionário de Princípios Ativos se inédito (13 Campos Canônicos)
+              let paVinculadoId = null
               if (canonico.principio_ativo) {
-                const paLimpo = canonico.principio_ativo.trim()
+                const paLimpo = canonico.principio_ativo.trim().toUpperCase()
                 const paNorm = normTxt(paLimpo)
-                const jaNoDic = matrizLocalPa.some((m) => m.norm === paNorm)
-                if (!jaNoDic && paLimpo.length >= 3 && paLimpo.length <= 150) {
+                const achadoNoDic = matrizLocalPa.find((m) => m.norm === paNorm)
+                if (achadoNoDic) {
+                  paVinculadoId = achadoNoDic.id
+                } else if (paLimpo.length >= 3 && paLimpo.length <= 150) {
                   try {
                     const recPa = new Record(colDicionarioPa)
+                    recPa.set('principio_ativo_chave', paLimpo)
+                    recPa.set(
+                      'macro_grupo_subgrupo_padrao',
+                      `${canonico.macro_grupo} — ${canonico.sub_grupo}`,
+                    )
+                    recPa.set('nota_subpos_2', canonico.nota_subpos_2)
+                    recPa.set('ncm_padrao_referencia', canonico.ncm_padrao)
+                    recPa.set('ncm_faixa1_ate_300g', canonico.ncm_faixa1_ate_300g)
+                    recPa.set('ncm_faixa2_300g_a_7_5kg', canonico.ncm_faixa2_300g_a_7_5kg)
+                    recPa.set('ncm_faixa3_7_5kg_a_10kg', canonico.ncm_faixa3_7_5kg_a_10kg)
+                    recPa.set('ncm_faixa4_acima_10kg', canonico.ncm_faixa4_acima_10kg)
+                    recPa.set('ncm_granel_tecnico', canonico.ncm_faixa4_acima_10kg)
+                    recPa.set('regra_tipi_embalagem', canonico.regra_tipi)
+                    recPa.set('sistema_registro_mapa', canonico.sistema_norma_mapa)
+                    recPa.set('enquadramento_pis_cofins', canonico.status_pis_cofins)
+                    recPa.set(
+                      'cst_recomendado',
+                      `Saída: ${canonico.cst_saida} | Entrada: ${canonico.cst_entrada}`,
+                    )
                     recPa.set('principio_ativo', paLimpo)
-                    recPa.set('classe', canonico.sub_grupo || canonico.macro_grupo)
-                    recPa.set('grupo_quimico', `Classificação MAPA / ${fonteKey}`)
-                    recPa.set('concentracao_min', 0)
-                    recPa.set('concentracao_max', 0)
-                    recPa.set('unidade', '%')
                     recPa.set('status', 'Ativo')
                     $app.save(recPa)
+                    paVinculadoId = recPa.id
                     matrizLocalPa.push({
                       id: recPa.id,
                       principio_ativo: paLimpo,
@@ -1341,6 +1359,14 @@ routerAdd('POST', '/backend/v1/sincronizar-produtos', (e) => {
                     })
                   } catch (_) {}
                 }
+              }
+
+              // Se obtivemos o ID do princípio ativo, atualizar o produto recBase com a FK principio_ativo_id
+              if (paVinculadoId && !recBase.getString('principio_ativo_id')) {
+                try {
+                  recBase.set('principio_ativo_id', paVinculadoId)
+                  $app.save(recBase)
+                } catch (_) {}
               }
             } catch (saveErr) {
               console.log('Erro ao auto-incluir produto canônico:', saveErr.message)

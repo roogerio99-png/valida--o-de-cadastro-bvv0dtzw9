@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-10-20T16:58:48.144Z",
+  "generatedAt": "2026-10-20T18:03:29.634Z",
   "collections": [
     {
       "name": "users",
@@ -162,10 +162,90 @@
           "required": false,
           "system": false,
           "autodateTriggers": ["onCreate", "onUpdate"]
+        },
+        {
+          "name": "principio_ativo_chave",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "macro_grupo_subgrupo_padrao",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "nota_subpos_2",
+          "type": "select",
+          "required": false,
+          "system": false,
+          "selectValues": ["SIM", "NÃO"]
+        },
+        {
+          "name": "ncm_padrao_referencia",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "ncm_faixa1_ate_300g",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "ncm_faixa2_300g_a_7_5kg",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "ncm_faixa3_7_5kg_a_10kg",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "ncm_faixa4_acima_10kg",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "ncm_granel_tecnico",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "regra_tipi_embalagem",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "sistema_registro_mapa",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "enquadramento_pis_cofins",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "cst_recomendado",
+          "type": "text",
+          "required": false,
+          "system": false
         }
       ],
       "indexes": [
-        "CREATE INDEX idx_dicionario_pa ON dicionario_principios_ativos (principio_ativo)"
+        "CREATE INDEX `idx_matriz_pa_chave` ON `dicionario_principios_ativos` (principio_ativo_chave)",
+        "CREATE INDEX `idx_matriz_nota2` ON `dicionario_principios_ativos` (nota_subpos_2)"
       ]
     },
     {
@@ -435,13 +515,21 @@
           "type": "text",
           "required": false,
           "system": false
+        },
+        {
+          "name": "principio_ativo_id",
+          "type": "relation",
+          "required": false,
+          "system": false,
+          "collectionRef": "dicionario_principios_ativos"
         }
       ],
       "indexes": [
         "CREATE INDEX `idx_cadmestre_regmapa` ON `base_mestre` (registro_mapa)",
         "CREATE INDEX `idx_cadmestre_marca_pad` ON `base_mestre` (marca_padronizada)",
         "CREATE INDEX `idx_cadmestre_ncm_padrao` ON `base_mestre` (ncm_padrao)",
-        "CREATE INDEX `idx_cadmestre_macro` ON `base_mestre` (macro_grupo)"
+        "CREATE INDEX `idx_cadmestre_macro` ON `base_mestre` (macro_grupo)",
+        "CREATE INDEX `idx_cadmestre_pa_id` ON `base_mestre` (principio_ativo_id)"
       ]
     },
     {

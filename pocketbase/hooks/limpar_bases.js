@@ -73,8 +73,19 @@ routerAdd('POST', '/backend/v1/limpar-bases', (e) => {
     }
   }
 
-  // 2. Limpeza de dicionario_principios_ativos
+  // 2. Limpeza de dicionario_principios_ativos (respeitando ON DELETE RESTRICT)
   if (limparPrincipios) {
+    // Se a base_mestre NÃO foi limpa nesta mesma chamada, verificar se existem produtos vinculados
+    if (!limparBaseMestre) {
+      const totalProdutosRestantes = $app.countRecords('base_mestre')
+      if (totalProdutosRestantes > 0) {
+        return e.json(400, {
+          sucesso: false,
+          error: `Restrição de integridade (ON DELETE RESTRICT): Não é permitido limpar a Matriz de Princípios Ativos enquanto houver ${totalProdutosRestantes} produto(s) cadastrado(s) na Base Mestre. Limpe a Base Mestre primeiro ou selecione "Limpar Todas as Bases".`,
+        })
+      }
+    }
+
     try {
       apagadosDicionarioPa = $app.countRecords('dicionario_principios_ativos')
     } catch (_) {
@@ -86,7 +97,6 @@ routerAdd('POST', '/backend/v1/limpar-bases', (e) => {
       $app.truncateCollection(colPa)
     } catch (err) {
       console.log('Aviso ao truncar dicionario_principios_ativos:', err.message)
-      // Fallback para DELETE via query se truncate falhar
       try {
         $app.db().newQuery('DELETE FROM dicionario_principios_ativos').execute()
       } catch (sqlErr) {

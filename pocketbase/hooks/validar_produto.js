@@ -576,6 +576,77 @@ routerAdd('POST', '/backend/v1/validar-produto', (e) => {
       registroMapa = motor.sanitizarRegistroMapa(registroMapa)
     }
 
+    // Resolver ou criar Princípio Ativo na Matriz (13 campos canônicos) para garantir vínculo relacional 1:N
+    let paRecordResolvido = null
+    const paNomeUpper = String(principioAtivo || nomeProduto)
+      .toUpperCase()
+      .trim()
+    if (paNomeUpper) {
+      try {
+        const colPaMatriz = $app.findCollectionByNameOrId('dicionario_principios_ativos')
+        const escPa = paNomeUpper.replace(/'/g, "\\'")
+        const pasExistentes = $app.findRecordsByFilter(
+          'dicionario_principios_ativos',
+          `principio_ativo_chave = '${escPa}' || principio_ativo = '${escPa}'`,
+          '-created',
+          1,
+          0,
+        )
+        if (pasExistentes && pasExistentes.length > 0) {
+          paRecordResolvido = pasExistentes[0]
+        } else if (autoCadastrar) {
+          // Criar na matriz com 13 campos canônicos
+          const novoPa = new Record(colPaMatriz)
+          const isNota2 = motor.verificarNotaSubpos2(paNomeUpper, nomeProduto)
+          const nota2Val = isNota2 ? 'SIM' : 'NÃO'
+
+          let macroSub = 'Defensivos — Herbicida'
+          let ncmRef = '3808.93.29'
+          let ncmF1 = '3808.93.29'
+          let ncmF2 = '3808.93.29'
+          let ncmF3 = '3808.93.29'
+          let ncmF4 = '3808.93.29'
+          let ncmGranel = '3808.93.19'
+          let regTipi = 'Posição 38.08 TIPI: Embalagem comercial agrícola'
+          let sisMapa = 'AGROFIT/MAPA — Produto Formulado (Lei nº 14.785/2023)'
+          let regimePis = 'Beneficiado (Lei 10.925/04): 0% até Mar/26 | 0,925% Real pós-Abr/26'
+          let cstStr = 'Saída: CST 06 (c/ Ajuste M220/M620) | Entrada: CST 73'
+
+          if (isNota2) {
+            macroSub = 'Defensivos — Inseticida / Acaricida'
+            ncmRef = '3808.62.90'
+            ncmF1 = '3808.61.00'
+            ncmF2 = '3808.62.90'
+            ncmF3 = '3808.69.90'
+            ncmF4 = '3808.69.90'
+            ncmGranel = '3808.69.90'
+            regTipi = 'Nota de Subposições 2 Cap. 38 TIPI (SC COSIT 98.042/2022)'
+          }
+
+          novoPa.set('principio_ativo_chave', paNomeUpper)
+          novoPa.set('macro_grupo_subgrupo_padrao', macroSub)
+          novoPa.set('nota_subpos_2', nota2Val)
+          novoPa.set('ncm_padrao_referencia', motor.formatarNcmMascara(ncmRef))
+          novoPa.set('ncm_faixa1_ate_300g', motor.formatarNcmMascara(ncmF1))
+          novoPa.set('ncm_faixa2_300g_a_7_5kg', motor.formatarNcmMascara(ncmF2))
+          novoPa.set('ncm_faixa3_7_5kg_a_10kg', motor.formatarNcmMascara(ncmF3))
+          novoPa.set('ncm_faixa4_acima_10kg', motor.formatarNcmMascara(ncmF4))
+          novoPa.set('ncm_granel_tecnico', motor.formatarNcmMascara(ncmGranel))
+          novoPa.set('regra_tipi_embalagem', regTipi)
+          novoPa.set('sistema_registro_mapa', sisMapa)
+          novoPa.set('enquadramento_pis_cofins', regimePis)
+          novoPa.set('cst_recomendado', cstStr)
+          novoPa.set('principio_ativo', paNomeUpper)
+          novoPa.set('status', 'Ativo')
+
+          $app.save(novoPa)
+          paRecordResolvido = novoPa
+        }
+      } catch (errPa) {
+        console.log('Aviso ao resolver princípio ativo na matriz:', errPa.message)
+      }
+    }
+
     // -------------------------------------------------------------------------
     // AUDITORIA AMPLIADA: CONSULTAS EXTERNAS
     // -------------------------------------------------------------------------
@@ -1046,7 +1117,10 @@ Com base na base pública oficial do AGROFIT e nas bulas oficiais registradas no
           const colBase = $app.findCollectionByNameOrId('base_mestre')
           const recBase = new Record(colBase)
 
-          // Gravação dos 28 campos canônicos
+          // Gravação dos 28 campos canônicos com vínculo relacional
+          if (paRecordResolvido) {
+            recBase.set('principio_ativo_id', paRecordResolvido.id)
+          }
           recBase.set('nome_completo', canonicoCalculado.nome_completo)
           recBase.set('marca_padronizada', canonicoCalculado.marca_padronizada)
           recBase.set('tipo_produto', canonicoCalculado.tipo_produto)

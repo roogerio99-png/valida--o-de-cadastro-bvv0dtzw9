@@ -26,7 +26,7 @@ import {
   type ItemErroImportacao,
   type ResultadoImportacaoLote,
 } from '@/services/agroService'
-import { executarMotorCanonicoFrontend } from '@/lib/motorCanonico'
+import { executarMotorCanonicoFrontend, formatarNcmMascara } from '@/lib/motorCanonico'
 
 interface ZoneConfig {
   id: string
@@ -661,30 +661,94 @@ export default function Importar() {
       // ZONA 3: dicionario_principios_ativos
       // ------------------------------------------------------------------
       else if (targetCol === 'dicionario_principios_ativos') {
-        const pa = getFieldValue(row, [
-          'principio_ativo_composicao_chave',
+        // Mapeamento Canônico dos 13 Campos da Aba 4 (Matriz de Princípios Ativos v2.5.0)
+        const paChave = getFieldValue(row, [
+          'principio_ativo_chave',
           'principio_ativo',
-          'principio ativo',
+          'princípio ativo',
+          'princípio ativo / composição / garantia',
+          'ingrediente ativo',
           'molecula',
-          'nome',
+          'ativo',
         ])
-        const grupo = getFieldValue(row, [
+        const macroSub = getFieldValue(row, [
+          'macro_grupo_subgrupo_padrao',
+          'macro-grupo e sub-grupo padrão',
           'macro_grupo_e_sub_grupo_oficial',
-          'grupo_quimico',
-          'grupo',
+          'macro_grupo',
           'classe',
         ])
-        const regraReg = getFieldValue(row, [
+        const nota2Raw = getFieldValue(row, [
+          'nota_subpos_2',
+          'nota subpos. 2 cap. 38?',
+          'nota 2',
+          'subpos 2',
+        ])
+        const ncmRef = getFieldValue(row, [
+          'ncm_padrao_referencia',
+          'ncm padrão (> 10kg/l)',
+          'ncm_padrao',
+          'ncm',
+        ])
+        const ncmF1 = getFieldValue(row, [
+          'ncm_faixa1_ate_300g',
+          'ncm faixa 1 (≤ 300g/ml)',
+          'ncm_f1',
+          'faixa 1',
+        ])
+        const ncmF2 = getFieldValue(row, [
+          'ncm_faixa2_300g_a_7_5kg',
+          'ncm faixa 2 (300g a 7,5kg/l)',
+          'ncm_f2',
+          'faixa 2',
+        ])
+        const ncmF3 = getFieldValue(row, [
+          'ncm_faixa3_7_5kg_a_10kg',
+          'ncm faixa 3 (7,5kg a 10kg/l)',
+          'ncm_f3',
+          'faixa 3',
+        ])
+        const ncmF4 = getFieldValue(row, [
+          'ncm_faixa4_acima_10kg',
+          'ncm faixa 4 (> 10kg/l)',
+          'ncm_f4',
+          'faixa 4',
+        ])
+        const ncmGranel = getFieldValue(row, [
+          'ncm_granel_tecnico',
+          'ncm granel / produto técnico',
+          'ncm_granel',
+          'granel',
+        ])
+        const regraTipi = getFieldValue(row, [
+          'regra_tipi_embalagem',
+          'regra de embalagem tipi',
+          'regra_tipi',
+          'fundamentacao tipi',
+        ])
+        const sisMapa = getFieldValue(row, [
+          'sistema_registro_mapa',
+          'sistema de registro mapa',
+          'norma mapa',
           'regra_tipo_de_registro_mapa',
-          'status',
-          'enquadramento',
+        ])
+        const pisCofins = getFieldValue(row, [
+          'enquadramento_pis_cofins',
+          'enquadramento pis/cofins',
+          'status_pis_cofins',
+          'pis_cofins',
+        ])
+        const cstRec = getFieldValue(row, [
+          'cst_recomendado',
+          'cst recomendado (saída / entrada)',
+          'cst',
         ])
 
-        if (!pa) {
+        if (!paChave) {
           rejeitados.push({
             linhaOriginal: originalLineNum,
             linhaLote: idx + 1,
-            motivo: 'Nome da molécula ou princípio ativo não informado.',
+            motivo: 'Nome do princípio ativo / chave canônica não informado.',
             categoria: 'Princípio Ativo Ausente',
             campo: 'Principio Ativo',
             valor: '',
@@ -693,16 +757,56 @@ export default function Importar() {
           return
         }
 
+        const chaveUpper = paChave.trim().toUpperCase()
+        const nota2Norm = nota2Raw.toUpperCase().includes('SIM') ? 'SIM' : 'NÃO'
+
+        const ncmPadraoNorm = cleanNcm(ncmRef)
+          ? formatarNcmMascara(cleanNcm(ncmRef))
+          : nota2Norm === 'SIM'
+            ? '3808.62.90'
+            : '3808.93.29'
+        const ncmF1Norm = cleanNcm(ncmF1)
+          ? formatarNcmMascara(cleanNcm(ncmF1))
+          : nota2Norm === 'SIM'
+            ? '3808.61.00'
+            : ncmPadraoNorm
+        const ncmF2Norm = cleanNcm(ncmF2) ? formatarNcmMascara(cleanNcm(ncmF2)) : ncmPadraoNorm
+        const ncmF3Norm = cleanNcm(ncmF3) ? formatarNcmMascara(cleanNcm(ncmF3)) : ncmPadraoNorm
+        const ncmF4Norm = cleanNcm(ncmF4) ? formatarNcmMascara(cleanNcm(ncmF4)) : ncmPadraoNorm
+        const ncmGranelNorm = cleanNcm(ncmGranel)
+          ? formatarNcmMascara(cleanNcm(ncmGranel))
+          : nota2Norm === 'SIM'
+            ? '3808.69.90'
+            : '3808.93.19'
+
         validos.push({
           originalLine: originalLineNum,
           data: {
-            principio_ativo: pa,
-            classe: grupo.includes('—') ? grupo.split('—')[0].trim() : 'Agropecuário',
-            grupo_quimico: grupo.includes('—') ? grupo.split('—')[1].trim() : grupo,
+            principio_ativo_chave: chaveUpper,
+            macro_grupo_subgrupo_padrao: macroSub || 'Defensivos — Herbicida',
+            nota_subpos_2: nota2Norm,
+            ncm_padrao_referencia: ncmPadraoNorm,
+            ncm_faixa1_ate_300g: ncmF1Norm,
+            ncm_faixa2_300g_a_7_5kg: ncmF2Norm,
+            ncm_faixa3_7_5kg_a_10kg: ncmF3Norm,
+            ncm_faixa4_acima_10kg: ncmF4Norm,
+            ncm_granel_tecnico: ncmGranelNorm,
+            regra_tipi_embalagem:
+              regraTipi ||
+              (nota2Norm === 'SIM' ? 'Nota de Subposições 2 Cap. 38 TIPI' : 'Posição 38.08 TIPI'),
+            sistema_registro_mapa:
+              sisMapa || 'AGROFIT/MAPA — Produto Formulado (Lei nº 14.785/2023)',
+            enquadramento_pis_cofins:
+              pisCofins || 'Beneficiado (Lei 10.925/04): 0% até Mar/26 | 0,925% Real pós-Abr/26',
+            cst_recomendado: cstRec || 'Saída: CST 06 (c/ Ajuste M220/M620) | Entrada: CST 73',
+            // Legado
+            principio_ativo: chaveUpper,
+            classe: macroSub.includes('—') ? macroSub.split('—')[1].trim() : 'Defensivos',
+            grupo_quimico: 'Importação Aba 4 Matriz',
             concentracao_min: 0,
             concentracao_max: 0,
             unidade: '%',
-            status: regraReg || 'Ativo',
+            status: 'Ativo',
           },
         })
       }
