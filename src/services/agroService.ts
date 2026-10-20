@@ -51,6 +51,19 @@ export async function excluirProdutoBaseMestre(id: string) {
 }
 
 // -----------------------------------------------------------------------------
+// Relatório de Duplicidades no Servidor
+// -----------------------------------------------------------------------------
+export async function obterRelatorioDuplicidades() {
+  return pb.send<{
+    total_grupos: number
+    total_produtos_duplicados: number
+    grupos: import('@/types/agro').GrupoDuplicidade[]
+  }>('/backend/v1/relatorio-duplicidades', {
+    method: 'GET',
+  })
+}
+
+// -----------------------------------------------------------------------------
 // Regras NCM × Embalagem
 // -----------------------------------------------------------------------------
 export async function listarRegrasNcm(params?: {

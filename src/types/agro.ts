@@ -100,3 +100,18 @@ export interface ProdutoInput {
   concentracao: number
   unidade_concentracao?: string
 }
+
+export interface GrupoDuplicidade {
+  id: string
+  criterio: string
+  criterio_tipo: 'ncm_pa' | 'registro_mapa' | 'nome_ncm'
+  chave: string
+  total_ocorrencias: number
+  registros: BaseMestreProduto[]
+}
+
+export interface RelatorioDuplicidades {
+  total_grupos: number
+  total_produtos_duplicados: number
+  grupos: GrupoDuplicidade[]
+}

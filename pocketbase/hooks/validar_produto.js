@@ -188,32 +188,120 @@ routerAdd('POST', '/backend/v1/validar-produto', (e) => {
   })
 
   // -------------------------------------------------------------------------
-  // TRAVA 4: Duplicidade (mesmo NCM + principio_ativo + fabricante em base_mestre)
+  // TRAVA 4: Duplicidade Multicritério na Base Mestre
+  // Critérios de detecção:
+  // (a) Tríplice exata: NCM + Princípio Ativo + Fabricante (quando fabricante informado)
+  // (b) Nome de produto normalizado + NCM
+  // (c) Registro MAPA + NCM (quando registro MAPA for numérico com >= 4 dígitos)
+  // (d) NCM + Princípio Ativo homologado
   // -------------------------------------------------------------------------
   let trava4Passou = false
   let trava4Msg = ''
+  let duplicataEncontrada = null
+  let motivoDuplicidade = ''
 
-  if (!ncm || !principioAtivo || !fabricante) {
-    trava4Msg =
-      'Dados insuficientes para checagem de duplicidade (requer NCM, Princípio Ativo e Fabricante).'
+  // Função interna de normalização de texto simples no Goja
+  const normTxt = (s) =>
+    String(s || '')
+      .toLowerCase()
+      .replace(/[\u0300-\u036f]/g, '')
+      .replace(/[^a-z0-9]/g, '')
+
+  if (!ncm && !nomeProduto) {
+    trava4Msg = 'Dados insuficientes para verificação de duplicidade (NCM ou Nome ausente).'
   } else {
     try {
+      const escNcm = ncm.replace(/'/g, "\\'")
+      const escNome = nomeProduto.replace(/'/g, "\\'")
       const escPa = principioAtivo.replace(/'/g, "\\'")
       const escFab = fabricante.replace(/'/g, "\\'")
-      const records = $app.findRecordsByFilter(
-        'base_mestre',
-        `ncm = '${ncm}' && principio_ativo ~ '${escPa}' && fabricante ~ '${escFab}'`,
-        '-created',
-        1,
-        0,
-      )
-      if (records && records.length > 0) {
-        const prodExistente = records[0].getString('nome_produto')
-        trava4Msg = `Produto duplicado detectado na Base Mestre: "${prodExistente}" possui o mesmo NCM, Princípio Ativo e Fabricante.`
+      const escMapa = registroMapa.replace(/'/g, "\\'")
+
+      // 1. Checagem por Nome do Produto + NCM
+      if (nomeProduto && ncm) {
+        const porNome = $app.findRecordsByFilter(
+          'base_mestre',
+          `ncm = '${escNcm}' && nome_produto ~ '${escNome}'`,
+          '-created',
+          5,
+          0,
+        )
+        const matchNome = (porNome || []).find((r) => {
+          return normTxt(r.getString('nome_produto')) === normTxt(nomeProduto)
+        })
+        if (matchNome) {
+          duplicataEncontrada = matchNome
+          motivoDuplicidade = `Nome de produto normalizado idêntico ("${matchNome.getString('nome_produto')}") com mesmo NCM ${ncm}.`
+        }
+      }
+
+      // 2. Checagem por Registro MAPA + NCM
+      if (!duplicataEncontrada && registroMapa && registroMapa.replace(/\D/g, '').length >= 4) {
+        const limpoMapa = registroMapa.trim()
+        const porMapa = $app.findRecordsByFilter(
+          'base_mestre',
+          `registro_mapa ~ '${escMapa}'`,
+          '-created',
+          5,
+          0,
+        )
+        const matchMapa = (porMapa || []).find((r) => {
+          const m1 = r.getString('registro_mapa').replace(/\D/g, '')
+          const m2 = limpoMapa.replace(/\D/g, '')
+          return m1 && m2 && m1 === m2
+        })
+        if (matchMapa) {
+          duplicataEncontrada = matchMapa
+          motivoDuplicidade = `Registro MAPA ${matchMapa.getString('registro_mapa')} já cadastrado no produto "${matchMapa.getString('nome_produto')}".`
+        }
+      }
+
+      // 3. Checagem por Tríplice (NCM + Princípio Ativo + Fabricante) se fabricante informado
+      if (
+        !duplicataEncontrada &&
+        ncm &&
+        principioAtivo &&
+        fabricante &&
+        fabricante !== 'Não Informado'
+      ) {
+        const porTriplice = $app.findRecordsByFilter(
+          'base_mestre',
+          `ncm = '${escNcm}' && principio_ativo ~ '${escPa}' && fabricante ~ '${escFab}'`,
+          '-created',
+          1,
+          0,
+        )
+        if (porTriplice && porTriplice.length > 0) {
+          duplicataEncontrada = porTriplice[0]
+          motivoDuplicidade = `Combinação NCM + Princípio Ativo + Fabricante idêntica ao produto "${duplicataEncontrada.getString('nome_produto')}".`
+        }
+      }
+
+      // 4. Checagem por NCM + Princípio Ativo idêntico (quando fabricante não informado ou ambos sem fab)
+      if (!duplicataEncontrada && ncm && principioAtivo && principioAtivo !== 'Não Informado') {
+        const porPa = $app.findRecordsByFilter(
+          'base_mestre',
+          `ncm = '${escNcm}' && principio_ativo ~ '${escPa}'`,
+          '-created',
+          5,
+          0,
+        )
+        const matchPa = (porPa || []).find((r) => {
+          return normTxt(r.getString('principio_ativo')) === normTxt(principioAtivo)
+        })
+        if (matchPa) {
+          duplicataEncontrada = matchPa
+          motivoDuplicidade = `NCM ${ncm} e Princípio Ativo idêntico ao produto existente "${matchPa.getString('nome_produto')}".`
+        }
+      }
+
+      if (duplicataEncontrada) {
+        trava4Passou = false
+        trava4Msg = `Produto duplicado detectado na Base Mestre: ${motivoDuplicidade}`
       } else {
         trava4Passou = true
         trava4Msg =
-          'Nenhuma duplicidade encontrada na Base Mestre para o conjunto NCM + Princípio Ativo + Fabricante.'
+          'Nenhuma duplicidade encontrada na Base Mestre pelos critérios de NCM, Nome, MAPA e Fabricante.'
       }
     } catch (err) {
       trava4Msg = `Erro ao checar duplicidade na Base Mestre: ${err.message}`
@@ -370,4 +458,141 @@ routerAdd('POST', '/backend/v1/validar-produto', (e) => {
       concentracao: concentracao,
     },
   })
+})
+
+/**
+ * GET /backend/v1/relatorio-duplicidades
+ * Retorna os grupos de duplicidades identificados na collection base_mestre pelos critérios:
+ * (a) NCM + Princípio Ativo normalizado
+ * (b) Registro MAPA repetido para produtos/NCMs
+ * (c) Nome de produto normalizado + NCM
+ */
+routerAdd('GET', '/backend/v1/relatorio-duplicidades', (e) => {
+  try {
+    // Buscar todos os registros da base_mestre (limit 1500)
+    const records = $app.findRecordsByFilter('base_mestre', 'id != ""', '-created', 1500, 0) || []
+
+    const norm = (s) =>
+      String(s || '')
+        .toLowerCase()
+        .replace(/[\u0300-\u036f]/g, '')
+        .replace(/[^a-z0-9]/g, '')
+
+    const simplifyRecord = (r) => ({
+      id: r.id,
+      nome_produto: r.getString('nome_produto'),
+      ncm: r.getString('ncm'),
+      embalagem: r.getString('embalagem'),
+      principio_ativo: r.getString('principio_ativo'),
+      fabricante: r.getString('fabricante'),
+      registro_mapa: r.getString('registro_mapa'),
+      concentracao: r.getFloat('concentracao'),
+      unidade_concentracao: r.getString('unidade_concentracao'),
+      status_validacao: r.getString('status_validacao'),
+      created: r.getString('created'),
+    })
+
+    // Mapas de agrupamento
+    const gruposMap = {}
+
+    for (let i = 0; i < records.length; i++) {
+      const rec = records[i]
+      const id = rec.id
+      const ncm = String(rec.getString('ncm') || '').replace(/\D/g, '')
+      const nome = rec.getString('nome_produto')
+      const nomeNorm = norm(nome)
+      const pa = rec.getString('principio_ativo')
+      const paNorm = norm(pa)
+      const mapa = rec.getString('registro_mapa')
+      const mapaDigits = mapa.replace(/\D/g, '')
+
+      const item = simplifyRecord(rec)
+
+      // Critério C: Nome do Produto Normalizado + NCM
+      if (nomeNorm && ncm && ncm.length === 8) {
+        const key = `c_nome_ncm:${nomeNorm}_${ncm}`
+        if (!gruposMap[key]) {
+          gruposMap[key] = {
+            id: key,
+            criterio: 'Nome do Produto Normalizado + NCM',
+            criterio_tipo: 'nome_ncm',
+            chave: `${nome} (NCM ${ncm})`,
+            registros: [],
+          }
+        }
+        gruposMap[key].registros.push(item)
+      }
+
+      // Critério B: Registro MAPA repetido (quando possui pelo menos 4 dígitos)
+      if (mapaDigits.length >= 4) {
+        const key = `b_mapa:${mapaDigits}`
+        if (!gruposMap[key]) {
+          gruposMap[key] = {
+            id: key,
+            criterio: 'Registro MAPA Duplicado',
+            criterio_tipo: 'registro_mapa',
+            chave: `MAPA ${mapa}`,
+            registros: [],
+          }
+        }
+        gruposMap[key].registros.push(item)
+      }
+
+      // Critério A: NCM + Princípio Ativo Normalizado
+      if (ncm && ncm.length === 8 && paNorm && paNorm !== 'naoinformado' && paNorm !== 'padrao') {
+        const key = `a_ncm_pa:${ncm}_${paNorm}`
+        if (!gruposMap[key]) {
+          gruposMap[key] = {
+            id: key,
+            criterio: 'NCM + Princípio Ativo',
+            criterio_tipo: 'ncm_pa',
+            chave: `NCM ${ncm} + ${pa}`,
+            registros: [],
+          }
+        }
+        gruposMap[key].registros.push(item)
+      }
+    }
+
+    // Filtrar apenas grupos que tenham 2 ou mais registros
+    const gruposDuplicados = []
+    const idsProdutosDuplicados = {}
+
+    for (const k in gruposMap) {
+      const g = gruposMap[k]
+      // Desduplicar registros dentro do mesmo grupo por id
+      const uniqueRegs = []
+      const seenIds = {}
+      for (let j = 0; j < g.registros.length; j++) {
+        const r = g.registros[j]
+        if (!seenIds[r.id]) {
+          seenIds[r.id] = true
+          uniqueRegs.push(r)
+        }
+      }
+
+      if (uniqueRegs.length > 1) {
+        g.registros = uniqueRegs
+        g.total_ocorrencias = uniqueRegs.length
+        gruposDuplicados.push(g)
+
+        uniqueRegs.forEach((r) => {
+          idsProdutosDuplicados[r.id] = true
+        })
+      }
+    }
+
+    // Ordenar grupos pelo número de ocorrências desc
+    gruposDuplicados.sort((a, b) => b.total_ocorrencias - a.total_ocorrencias)
+
+    return e.json(200, {
+      total_grupos: gruposDuplicados.length,
+      total_produtos_duplicados: Object.keys(idsProdutosDuplicados).length,
+      grupos: gruposDuplicados,
+    })
+  } catch (err) {
+    return e.json(500, {
+      error: 'Erro ao analisar duplicidades na Base Mestre: ' + err.message,
+    })
+  }
 })

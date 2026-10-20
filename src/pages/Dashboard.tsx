@@ -12,6 +12,7 @@ import {
   CheckCircle,
   XCircle,
   FileSpreadsheet,
+  Copy,
 } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -19,6 +20,7 @@ import { Badge } from '@/components/ui/badge'
 import pb from '@/lib/pocketbase/client'
 import { useRealtime } from '@/hooks/use-realtime'
 import type { LogValidacao } from '@/types/agro'
+import { obterRelatorioDuplicidades } from '@/services/agroService'
 import {
   BarChart,
   Bar,
@@ -41,6 +43,8 @@ export default function Dashboard() {
   const [totalRegras, setTotalRegras] = useState<number>(0)
   const [totalPrincipios, setTotalPrincipios] = useState<number>(0)
   const [totalTravasDisparadas, setTotalTravasDisparadas] = useState<number>(0)
+  const [totalDuplicados, setTotalDuplicados] = useState<number>(0)
+  const [totalGruposDuplicados, setTotalGruposDuplicados] = useState<number>(0)
   const [recentLogs, setRecentLogs] = useState<LogValidacao[]>([])
   const [ncmBarData, setNcmBarData] = useState<{ capitulo: string; quantidade: number }[]>([])
   const [statusPieData, setStatusPieData] = useState<{ name: string; value: number }[]>([
@@ -64,6 +68,15 @@ export default function Dashboard() {
       setTotalRegras(resRegras.totalItems)
       setTotalPrincipios(resPrincipios.totalItems)
       setTotalTravasDisparadas(resTravasFalhas.totalItems)
+
+      // 1.1 Consulta de duplicidades no servidor
+      try {
+        const dupRes = await obterRelatorioDuplicidades()
+        setTotalDuplicados(dupRes.total_produtos_duplicados || 0)
+        setTotalGruposDuplicados(dupRes.total_grupos || 0)
+      } catch (dupErr) {
+        console.warn('Erro ao carregar indicador de duplicidades:', dupErr)
+      }
 
       // 2. Logs recentes
       const logsRes = await pb.collection('log_validacoes').getList<LogValidacao>(1, 6, {
@@ -164,9 +177,9 @@ export default function Dashboard() {
       </div>
 
       {/* ------------------------------------------------------------------ */}
-      {/* 4 CARDS DE KPIS */}
+      {/* 5 CARDS DE KPIS (INCLUINDO DUPLICIDADES) */}
       {/* ------------------------------------------------------------------ */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
         <Card className="rounded-2xl border-[#DCE5DC] bg-white shadow-sm hover:shadow-md transition-all duration-200">
           <CardHeader className="flex flex-row items-center justify-between pb-2 space-y-0">
             <CardTitle className="text-xs font-semibold uppercase tracking-wider text-[#5A6D5A]">
@@ -185,6 +198,44 @@ export default function Dashboard() {
                 <TrendingUp className="w-3 h-3 mr-0.5" /> Base Mestre
               </span>
               <span>sincronizada</span>
+            </p>
+          </CardContent>
+        </Card>
+
+        {/* CARD PRODUTOS EM DUPLICIDADE */}
+        <Card
+          onClick={() => navigate('/base-mestre')}
+          className={`rounded-2xl border transition-all duration-200 cursor-pointer shadow-sm hover:shadow-md ${
+            totalDuplicados > 0
+              ? 'border-amber-300 bg-amber-50/30 hover:border-amber-400'
+              : 'border-[#DCE5DC] bg-white'
+          }`}
+        >
+          <CardHeader className="flex flex-row items-center justify-between pb-2 space-y-0">
+            <CardTitle className="text-xs font-semibold uppercase tracking-wider text-[#5A6D5A]">
+              Em Duplicidade
+            </CardTitle>
+            <div
+              className={`w-9 h-9 rounded-xl flex items-center justify-center ${
+                totalDuplicados > 0 ? 'bg-amber-100 text-amber-800' : 'bg-emerald-50 text-[#1B5E20]'
+              }`}
+            >
+              <Copy className="w-5 h-5" />
+            </div>
+          </CardHeader>
+          <CardContent>
+            <div
+              className={`text-2xl font-bold ${
+                totalDuplicados > 0 ? 'text-amber-800' : 'text-[#1C2B1C]'
+              }`}
+            >
+              {loading ? '...' : totalDuplicados.toLocaleString('pt-BR')}
+            </div>
+            <p className="text-xs text-[#5A6D5A] mt-1 flex items-center justify-between">
+              <span>{totalGruposDuplicados} grupos detectados</span>
+              <span className="text-[10px] text-amber-700 font-semibold underline">
+                Ver análise
+              </span>
             </p>
           </CardContent>
         </Card>

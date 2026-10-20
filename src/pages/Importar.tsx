@@ -91,7 +91,16 @@ const DROP_ZONES: ZoneConfig[] = [
     title: '4. Base Mestre de Produtos',
     subtitle: 'Catálogo mestre consolidado da empresa com histórico de produtos.',
     targetCollection: 'base_mestre',
-    expectedHeaders: ['CODIGO', 'DESCRICAO', 'NCM', 'EMBALAGEM', 'PRINCIPIO ATIVO'],
+    expectedHeaders: [
+      'CÓDIGO',
+      'DESCRIÇÃO',
+      'NCM OFICIAL EXATA',
+      'EMBALAGEM DETECTADA',
+      'PA OFICIAL CORRETO',
+      'MAPA OFICIAL LIMPO',
+      'FABRICANTE',
+      'PESO/VOL UNIT',
+    ],
     sampleDescription: 'Popula a trava 4 para prevenção contra duplicidade cadastral',
   },
 ]
@@ -258,38 +267,58 @@ export default function Importar() {
       // ZONA 4 ou ZONA 1: base_mestre
       // ------------------------------------------------------------------
       if (targetCol === 'base_mestre') {
-        const nome = getFieldValue(row, [
+        // Prioridade de colunas para mapeamento exato da Aba 4 e Aba 1:
+        // Código: 'codigo', 'cod', 'codigo_produto', 'id'
+        // Descrição -> nome_produto: 'descricao', 'nome_produto', 'nome_do_produto', 'produto', 'item'
+        // NCM Oficial Exata -> ncm: 'ncm_oficial_exata', 'ncm_exata', 'ncm_oficial', 'ncm', 'classificacao_fiscal'
+        // Embalagem Detectada -> embalagem: 'embalagem_detectada', 'embalagem', 'tipo_embalagem', 'emb', 'recipiente'
+        // PA Oficial Correto -> principio_ativo: 'pa_oficial_correto', 'pa_oficial', 'principio_ativo', 'principio_ativo_composicao_chave', 'pa'
+        // MAPA Oficial Limpo -> registro_mapa: 'mapa_oficial_limpo', 'mapa_oficial', 'registro_mapa', 'codigo_mapa', 'mapa', 'sipeagro', 'agrofit'
+        // Fabricante -> fabricante: 'fabricante', 'empresa', 'titular', 'marca', 'fornecedor'
+        // Peso/Vol Unit -> concentracao/unidade: 'peso_vol_unit_kg_l', 'peso_vol_unit', 'peso_vol', 'concentracao', 'volume', 'peso'
+        // Unidade: 'unid_embalagem', 'unidade_concentracao', 'unid_erp', 'unidade', 'unid'
+
+        const codigo = getFieldValue(row, ['codigo', 'cod', 'codigo_produto', 'id'])
+        const rawNome = getFieldValue(row, [
           'descricao',
+          'descricao_produto',
           'nome_produto',
           'nome produto',
           'produto',
-          'nome',
           'item',
+          'nome',
         ])
-        const codigo = getFieldValue(row, ['codigo', 'cod', 'id'])
-        const ncmLimpo = cleanNcm(
-          getFieldValue(row, ['ncm_oficial_exata', 'ncm exata', 'ncm', 'classificacao_fiscal']),
-        )
+        const rawNcm = getFieldValue(row, [
+          'ncm_oficial_exata',
+          'ncm exata',
+          'ncm_oficial',
+          'ncm',
+          'classificacao_fiscal',
+        ])
+        const ncmLimpo = cleanNcm(rawNcm)
         const emb = getFieldValue(row, [
           'embalagem_detectada',
+          'embalagem detectada',
           'embalagem',
-          'emb',
           'tipo_embalagem',
+          'emb',
           'recipiente',
         ])
         const pa = getFieldValue(row, [
           'pa_oficial_correto',
+          'pa oficial correto',
+          'pa_oficial',
           'principio_ativo',
           'principio ativo',
           'pa',
           'ingrediente',
           'molecula',
-          'pa_cadastrado_original',
         ])
         const fab = getFieldValue(row, ['fabricante', 'empresa', 'titular', 'marca', 'fornecedor'])
         const mapa = getFieldValue(row, [
           'mapa_oficial_limpo',
-          'mapa_oficial_detalhado',
+          'mapa oficial limpo',
+          'mapa_oficial',
           'registro_mapa',
           'registro mapa',
           'codigo_mapa',
@@ -300,6 +329,7 @@ export default function Importar() {
         const pesoVol = cleanNumber(
           getFieldValue(row, [
             'peso_vol_unit_kg_l',
+            'peso_vol_unit',
             'peso_vol',
             'concentracao',
             'teor',
@@ -308,31 +338,143 @@ export default function Importar() {
           ]),
         )
         const unid =
-          getFieldValue(row, ['unid_embalagem', 'unidade_concentracao', 'unidade', 'unid']) || 'L'
+          getFieldValue(row, [
+            'unid_embalagem',
+            'unidade_concentracao',
+            'unid_erp',
+            'unidade',
+            'unid',
+          ]) || 'L'
 
-        // Validação de obrigatoriedade
-        // Rejeitar apenas se não houver NENHUM nome ou descrição válida identificando o produto
-        if (!nome && !codigo) {
+        // 1. REJEITAR LINHAS DE CABEÇALHOS OU INFORMAÇÕES GERAIS
+        const allText = Object.values(row).join(' ').trim()
+        const lowerAll = allText.toLowerCase()
+
+        if (
+          lowerAll.includes('como usar:') ||
+          lowerAll.includes('produtos em valida') ||
+          lowerAll.includes('total de produtos') ||
+          lowerAll.includes('regras oficiais da tipi') ||
+          lowerAll.includes('resumo quantitativo') ||
+          lowerAll.includes('relação nominal') ||
+          lowerAll.includes('relacao nominal') ||
+          lowerAll.includes('categoria de divergência') ||
+          lowerAll.includes('categoria de divergencia')
+        ) {
           rejeitados.push({
             linhaOriginal: originalLineNum,
             linhaLote: idx + 1,
-            motivo: 'Linha sem Nome ou Descrição do Produto.',
-            categoria: 'Nome/Descrição Ausente',
-            campo: 'Descricao',
-            valor: '',
+            motivo: 'Linha de instruções, notas ou cabeçalho informativo ignorada.',
+            categoria: 'Linha Informativa / Cabeçalho',
+            campo: 'Linha',
+            valor: allText.slice(0, 60),
             dados: row,
           })
           return
         }
 
-        const nomeFinal = nome || `Produto ${codigo}`
+        // 2. REJEITAR SE O NOME DO PRODUTO FOR NÚMERO PURO (ex: "1", "2", contadores de linha ou índice)
+        const trimmedNome = rawNome.trim()
+        const isNumericNome = /^\d+$/.test(trimmedNome)
 
-        // Se NCM foi informado, mas não tem 8 dígitos (ex: 4 dígitos ou lixo)
-        if (ncmLimpo && ncmLimpo.length !== 8) {
+        if (!trimmedNome || isNumericNome) {
           rejeitados.push({
             linhaOriginal: originalLineNum,
             linhaLote: idx + 1,
-            motivo: `NCM "${ncmLimpo}" possui ${ncmLimpo.length} dígitos. O padrão TIPI exige 8 dígitos.`,
+            motivo: isNumericNome
+              ? `Descrição "${trimmedNome}" é numérica (número de linha/índice). Nome de produto válido é obrigatório.`
+              : 'Linha sem Descrição ou Nome do Produto.',
+            categoria: isNumericNome
+              ? 'Descrição Numérica (Linha de Tabela)'
+              : 'Nome/Descrição Ausente',
+            campo: 'Descricao',
+            valor: trimmedNome,
+            dados: row,
+          })
+          return
+        }
+
+        // Se o nome_produto for exatamente "Código", "Codigo", "Produto", etc. (cabeçalho repetido no meio)
+        if (
+          ['codigo', 'código', 'descricao', 'descrição', 'produto', 'item'].includes(
+            normalize(trimmedNome),
+          )
+        ) {
+          rejeitados.push({
+            linhaOriginal: originalLineNum,
+            linhaLote: idx + 1,
+            motivo: `Linha de cabeçalho duplicada no corpo da planilha ("${trimmedNome}").`,
+            categoria: 'Cabeçalho Duplicado',
+            campo: 'Descricao',
+            valor: trimmedNome,
+            dados: row,
+          })
+          return
+        }
+
+        // 3. REJEITAR OU LIMPAR SE CAMPOS DE DADOS RECEBERAM TEXTO DE NOTA TIPI OU INSTRUÇÃO
+        const isTextoTipi = (s: string) => {
+          const l = s.toLowerCase()
+          return (
+            l.includes('posição 38.08 tipi') ||
+            l.includes('posicao 38.08 tipi') ||
+            l.includes('nota 2 seção vi tipi') ||
+            l.includes('nota 2 secao vi tipi') ||
+            l.includes('cap. 31 tipi') ||
+            l.includes('cap. 25 tipi') ||
+            l.includes('regra geral tipi') ||
+            l.includes('nota subpos.') ||
+            l.includes('sc cosit')
+          )
+        }
+
+        const isTextoInstrucaoMapa = (s: string) => {
+          const l = s.toLowerCase()
+          return (
+            l.includes('registro numérico agrofit obrigatório') ||
+            l.includes('registro numerico agrofit obrigatorio') ||
+            l.includes('registro sipeagro obrigatório') ||
+            l.includes('registro sipeagro obrigatorio') ||
+            l.includes('vincular registro da marca comercial')
+          )
+        }
+
+        // Se a embalagem ou registro MAPA contiver nota TIPI/instrução pura
+        let embalagemLimpa = emb.trim()
+        if (isTextoTipi(embalagemLimpa)) {
+          embalagemLimpa = 'Padrão'
+        }
+
+        let mapaLimpo = mapa.trim()
+        if (isTextoInstrucaoMapa(mapaLimpo) || isTextoTipi(mapaLimpo)) {
+          mapaLimpo = ''
+        }
+
+        // Se o princípio ativo contiver nota TIPI
+        let paLimpo = pa.trim()
+        if (isTextoTipi(paLimpo)) {
+          paLimpo = 'Não Informado'
+        }
+
+        // 4. VALIDAÇÃO DE NCM
+        if (!ncmLimpo) {
+          rejeitados.push({
+            linhaOriginal: originalLineNum,
+            linhaLote: idx + 1,
+            motivo: 'NCM obrigatório ausente.',
+            categoria: 'NCM Ausente',
+            campo: 'NCM',
+            valor: rawNcm || 'vazio',
+            dados: row,
+          })
+          return
+        }
+
+        if (ncmLimpo.length !== 8) {
+          rejeitados.push({
+            linhaOriginal: originalLineNum,
+            linhaLote: idx + 1,
+            motivo: `NCM "${ncmLimpo}" possui ${ncmLimpo.length} dígitos. O padrão TIPI exige 8 dígitos numéricos.`,
             categoria: 'NCM com Dígitos Inválidos',
             campo: 'NCM',
             valor: ncmLimpo,
@@ -341,15 +483,18 @@ export default function Importar() {
           return
         }
 
+        // Fabricante: extraído da coluna Fabricante; onde a planilha não traz, gravar "Não Informado"
+        const fabLimpo = fab.trim() || 'Não Informado'
+
         validos.push({
           originalLine: originalLineNum,
           data: {
-            nome_produto: nomeFinal,
+            nome_produto: trimmedNome,
             ncm: ncmLimpo,
-            embalagem: emb || 'Padrão',
-            principio_ativo: pa || 'Não Informado',
-            fabricante: fab || '',
-            registro_mapa: mapa || '',
+            embalagem: embalagemLimpa || 'Padrão',
+            principio_ativo: paLimpo || 'Não Informado',
+            fabricante: fabLimpo,
+            registro_mapa: mapaLimpo,
             concentracao: pesoVol,
             unidade_concentracao: unid,
             status_validacao: 'aprovado',

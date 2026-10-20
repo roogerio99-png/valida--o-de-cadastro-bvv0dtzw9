@@ -10,6 +10,12 @@ import {
   CheckCircle2,
   XCircle,
   Clock,
+  Copy,
+  AlertTriangle,
+  RefreshCw,
+  ShieldAlert,
+  ChevronDown,
+  ChevronUp,
 } from 'lucide-react'
 import { Card } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -36,9 +42,15 @@ import {
   listarBaseMestre,
   atualizarProdutoBaseMestre,
   excluirProdutoBaseMestre,
+  obterRelatorioDuplicidades,
 } from '@/services/agroService'
 import { useRealtime } from '@/hooks/use-realtime'
-import type { BaseMestreProduto, StatusValidacao } from '@/types/agro'
+import type {
+  BaseMestreProduto,
+  StatusValidacao,
+  GrupoDuplicidade,
+  RelatorioDuplicidades,
+} from '@/types/agro'
 
 export default function BaseMestre() {
   const [searchParams] = useSearchParams()
@@ -62,6 +74,15 @@ export default function BaseMestre() {
   const [page, setPage] = useState(1)
   const [totalPages, setTotalPages] = useState(1)
   const [totalCount, setTotalCount] = useState(0)
+
+  // Painel de Duplicidades
+  const [duplicidadesOpen, setDuplicidadesOpen] = useState(false)
+  const [loadingDuplicidades, setLoadingDuplicidades] = useState(false)
+  const [relatorioDuplicidades, setRelatorioDuplicidades] = useState<RelatorioDuplicidades | null>(
+    null,
+  )
+  const [filtroCriterio, setFiltroCriterio] = useState<string>('todos')
+  const [resolvendoId, setResolvendoId] = useState<string | null>(null)
 
   const carregarProdutos = async () => {
     setLoading(true)
@@ -90,6 +111,141 @@ export default function BaseMestre() {
     } finally {
       setLoading(false)
     }
+  }
+
+  const carregarDuplicidades = async () => {
+    setLoadingDuplicidades(true)
+    try {
+      const res = await obterRelatorioDuplicidades()
+      setRelatorioDuplicidades(res)
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'Falha ao buscar duplicidades.'
+      toast({ variant: 'destructive', title: 'Erro de Análise', description: msg })
+    } finally {
+      setLoadingDuplicidades(false)
+    }
+  }
+
+  const handleToggleDuplicidades = () => {
+    const nextState = !duplicidadesOpen
+    setDuplicidadesOpen(nextState)
+    if (nextState && !relatorioDuplicidades) {
+      carregarDuplicidades()
+    }
+  }
+
+  // Resolver duplicidade: Manter um registro e excluir os demais do grupo
+  const handleManterUmExcluirOutros = async (grupo: GrupoDuplicidade, mantidoId: string) => {
+    const mantido = grupo.registros.find((r) => r.id === mantidoId)
+    const outros = grupo.registros.filter((r) => r.id !== mantidoId)
+
+    if (
+      !confirm(
+        `Confirma MANTER o produto "${mantido?.nome_produto || mantidoId}" e EXCLUIR os outros ${
+          outros.length
+        } registros duplicados deste grupo?`,
+      )
+    ) {
+      return
+    }
+
+    setResolvendoId(grupo.id)
+    try {
+      for (const o of outros) {
+        await excluirProdutoBaseMestre(o.id)
+      }
+      toast({
+        title: 'Duplicidade Resolvida',
+        description: `${outros.length} registros duplicados foram excluídos com sucesso.`,
+      })
+      await carregarDuplicidades()
+      await carregarProdutos()
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'Falha ao resolver duplicidade.'
+      toast({ variant: 'destructive', title: 'Erro', description: msg })
+    } finally {
+      setResolvendoId(null)
+    }
+  }
+
+  // Marcar todos os registros do grupo como pendentes para auditoria manual
+  const handleMarcarGrupoPendente = async (grupo: GrupoDuplicidade) => {
+    setResolvendoId(grupo.id)
+    try {
+      for (const r of grupo.registros) {
+        await atualizarProdutoBaseMestre(r.id, { status_validacao: 'pendente' })
+      }
+      toast({
+        title: 'Status Atualizado',
+        description: `Todos os ${grupo.registros.length} registros foram marcados como "Pendente" para revisão.`,
+      })
+      await carregarDuplicidades()
+      await carregarProdutos()
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'Falha ao atualizar status.'
+      toast({ variant: 'destructive', title: 'Erro', description: msg })
+    } finally {
+      setResolvendoId(null)
+    }
+  }
+
+  // Exportar relatório de duplicidades em CSV
+  const handleExportarDuplicidadesCSV = () => {
+    if (!relatorioDuplicidades || relatorioDuplicidades.grupos.length === 0) {
+      toast({ title: 'Aviso', description: 'Nenhuma duplicidade para exportar.' })
+      return
+    }
+
+    const headers = [
+      'Grupo_ID',
+      'Criterio_Duplicidade',
+      'Chave_Grupo',
+      'ID_Produto',
+      'Nome_Produto',
+      'NCM',
+      'Embalagem',
+      'Principio_Ativo',
+      'Fabricante',
+      'Registro_MAPA',
+      'Status_Validacao',
+    ]
+
+    const rows: string[] = []
+    relatorioDuplicidades.grupos.forEach((g) => {
+      g.registros.forEach((r) => {
+        rows.push(
+          [
+            `"${g.id}"`,
+            `"${g.criterio}"`,
+            `"${g.chave.replace(/"/g, '""')}"`,
+            `"${r.id}"`,
+            `"${r.nome_produto.replace(/"/g, '""')}"`,
+            `"${r.ncm}"`,
+            `"${r.embalagem}"`,
+            `"${r.principio_ativo.replace(/"/g, '""')}"`,
+            `"${r.fabricante.replace(/"/g, '""')}"`,
+            `"${r.registro_mapa}"`,
+            `"${r.status_validacao}"`,
+          ].join(';'),
+        )
+      })
+    })
+
+    const csvContent = '\uFEFF' + [headers.join(';'), ...rows].join('\r\n')
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' })
+    const url = URL.createObjectURL(blob)
+    const link = document.createElement('a')
+    link.href = url
+    link.download = `relatorio_duplicidades_base_mestre_${new Date().toISOString().slice(0, 10)}.csv`
+    document.body.appendChild(link)
+    link.click()
+    document.body.removeChild(link)
+    URL.revokeObjectURL(url)
+
+    toast({
+      title: 'Download Concluído',
+      description: 'O CSV com o relatório de duplicidades foi gerado.',
+    })
   }
 
   useEffect(() => {
@@ -230,8 +386,32 @@ export default function BaseMestre() {
           </p>
         </div>
 
-        {/* Ações em Lote */}
-        <div className="flex items-center gap-2">
+        {/* Ações do Topo */}
+        <div className="flex items-center gap-2 flex-wrap">
+          <Button
+            variant={duplicidadesOpen ? 'default' : 'outline'}
+            size="sm"
+            onClick={handleToggleDuplicidades}
+            className={`text-xs h-9 font-semibold ${
+              duplicidadesOpen
+                ? 'bg-[#F57F17] hover:bg-[#F9A825] text-white border-0'
+                : 'border-amber-300 bg-amber-50/70 text-amber-900 hover:bg-amber-100'
+            }`}
+          >
+            <Copy className="w-3.5 h-3.5 mr-1.5" />
+            <span>Verificar Duplicidade</span>
+            {relatorioDuplicidades && (
+              <Badge className="ml-1.5 bg-amber-600 text-white text-[10px] py-0 px-1.5">
+                {relatorioDuplicidades.total_grupos}
+              </Badge>
+            )}
+            {duplicidadesOpen ? (
+              <ChevronUp className="w-3.5 h-3.5 ml-1" />
+            ) : (
+              <ChevronDown className="w-3.5 h-3.5 ml-1" />
+            )}
+          </Button>
+
           {selectedIds.length > 0 && (
             <Button
               variant="destructive"
@@ -243,6 +423,7 @@ export default function BaseMestre() {
               Excluir ({selectedIds.length})
             </Button>
           )}
+
           <Button
             variant="outline"
             size="sm"
@@ -256,6 +437,234 @@ export default function BaseMestre() {
           </Button>
         </div>
       </div>
+
+      {/* ------------------------------------------------------------------ */}
+      {/* PAINEL DE AUDITORIA DE DUPLICIDADES (EXPANSÍVEL) */}
+      {/* ------------------------------------------------------------------ */}
+      {duplicidadesOpen && (
+        <Card className="rounded-2xl border-amber-300 bg-amber-50/20 p-5 shadow-sm space-y-4">
+          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 border-b border-amber-200/70 pb-3">
+            <div className="flex items-center gap-2.5">
+              <div className="w-9 h-9 rounded-xl bg-amber-100 text-amber-900 flex items-center justify-center">
+                <Copy className="w-5 h-5 text-amber-700" />
+              </div>
+              <div>
+                <h3 className="font-bold text-sm text-[#1C2B1C] flex items-center gap-2">
+                  <span>Diagnóstico de Produtos em Duplicidade</span>
+                  {relatorioDuplicidades && (
+                    <Badge className="bg-amber-600 text-white text-[10px]">
+                      {relatorioDuplicidades.total_grupos} grupos •{' '}
+                      {relatorioDuplicidades.total_produtos_duplicados} itens envolvidos
+                    </Badge>
+                  )}
+                </h3>
+                <p className="text-xs text-[#5A6D5A]">
+                  Análise multicritério: (a) NCM + Princípio Ativo; (b) Registro MAPA idêntico; (c)
+                  Nome Comercial + NCM.
+                </p>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-2 w-full sm:w-auto">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={carregarDuplicidades}
+                disabled={loadingDuplicidades}
+                className="text-xs h-8 bg-white border-[#DCE5DC] text-[#1C2B1C] hover:bg-amber-50"
+              >
+                <RefreshCw
+                  className={`w-3.5 h-3.5 mr-1.5 text-amber-700 ${
+                    loadingDuplicidades ? 'animate-spin' : ''
+                  }`}
+                />
+                Atualizar Análise
+              </Button>
+              {relatorioDuplicidades && relatorioDuplicidades.grupos.length > 0 && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={handleExportarDuplicidadesCSV}
+                  className="text-xs h-8 bg-white border-[#DCE5DC] text-[#1C2B1C] hover:bg-amber-50"
+                >
+                  <Download className="w-3.5 h-3.5 mr-1.5 text-amber-700" />
+                  Exportar CSV
+                </Button>
+              )}
+            </div>
+          </div>
+
+          {/* Filtros por Critério */}
+          <div className="flex flex-wrap items-center gap-2 pt-1 text-xs">
+            <span className="font-semibold text-[#1C2B1C] text-[11px]">Filtrar critério:</span>
+            <Button
+              size="sm"
+              variant={filtroCriterio === 'todos' ? 'default' : 'outline'}
+              onClick={() => setFiltroCriterio('todos')}
+              className={`h-7 text-xs rounded-lg ${
+                filtroCriterio === 'todos'
+                  ? 'bg-amber-700 text-white'
+                  : 'bg-white border-[#DCE5DC] text-[#1C2B1C]'
+              }`}
+            >
+              Todos os Critérios
+            </Button>
+            <Button
+              size="sm"
+              variant={filtroCriterio === 'nome_ncm' ? 'default' : 'outline'}
+              onClick={() => setFiltroCriterio('nome_ncm')}
+              className={`h-7 text-xs rounded-lg ${
+                filtroCriterio === 'nome_ncm'
+                  ? 'bg-amber-700 text-white'
+                  : 'bg-white border-[#DCE5DC] text-[#1C2B1C]'
+              }`}
+            >
+              Nome + NCM
+            </Button>
+            <Button
+              size="sm"
+              variant={filtroCriterio === 'registro_mapa' ? 'default' : 'outline'}
+              onClick={() => setFiltroCriterio('registro_mapa')}
+              className={`h-7 text-xs rounded-lg ${
+                filtroCriterio === 'registro_mapa'
+                  ? 'bg-amber-700 text-white'
+                  : 'bg-white border-[#DCE5DC] text-[#1C2B1C]'
+              }`}
+            >
+              Registro MAPA
+            </Button>
+            <Button
+              size="sm"
+              variant={filtroCriterio === 'ncm_pa' ? 'default' : 'outline'}
+              onClick={() => setFiltroCriterio('ncm_pa')}
+              className={`h-7 text-xs rounded-lg ${
+                filtroCriterio === 'ncm_pa'
+                  ? 'bg-amber-700 text-white'
+                  : 'bg-white border-[#DCE5DC] text-[#1C2B1C]'
+              }`}
+            >
+              NCM + Princípio Ativo
+            </Button>
+          </div>
+
+          {/* Conteúdo do Relatório */}
+          {loadingDuplicidades ? (
+            <div className="p-8 text-center text-xs text-[#5A6D5A]">
+              <Loader2 className="w-6 h-6 animate-spin mx-auto text-amber-700 mb-2" />
+              Executando cruzamento multicritério de duplicidades no servidor...
+            </div>
+          ) : !relatorioDuplicidades || relatorioDuplicidades.grupos.length === 0 ? (
+            <div className="p-6 text-center text-xs text-emerald-800 bg-emerald-50 rounded-xl border border-emerald-200">
+              <CheckCircle2 className="w-6 h-6 text-emerald-600 mx-auto mb-1.5" />
+              <p className="font-bold text-sm text-emerald-900">
+                Nenhuma duplicidade encontrada na Base Mestre!
+              </p>
+              <p className="text-[11px] text-emerald-700 mt-0.5">
+                Todos os produtos estão com identificadores, registros MAPA e combinações NCM +
+                Princípio Ativo únicos.
+              </p>
+            </div>
+          ) : (
+            <div className="space-y-3 max-h-96 overflow-y-auto pr-1">
+              {relatorioDuplicidades.grupos
+                .filter((g) => filtroCriterio === 'todos' || g.criterio_tipo === filtroCriterio)
+                .map((grupo) => {
+                  const isResolving = resolvendoId === grupo.id
+                  return (
+                    <div
+                      key={grupo.id}
+                      className="p-4 rounded-xl bg-white border border-amber-200 shadow-sm space-y-3"
+                    >
+                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-amber-100 pb-2.5">
+                        <div className="flex items-center gap-2">
+                          <AlertTriangle className="w-4 h-4 text-amber-600 flex-shrink-0" />
+                          <div>
+                            <span className="font-bold text-xs text-[#1C2B1C]">{grupo.chave}</span>
+                            <span className="text-[11px] text-[#5A6D5A] ml-2">
+                              Critério: <strong>{grupo.criterio}</strong> ({grupo.total_ocorrencias}{' '}
+                              ocorrências)
+                            </span>
+                          </div>
+                        </div>
+
+                        <div className="flex items-center gap-1.5">
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            disabled={isResolving}
+                            onClick={() => handleMarcarGrupoPendente(grupo)}
+                            className="text-[11px] h-7 text-amber-800 border-amber-200 hover:bg-amber-50"
+                          >
+                            Marcar Todos p/ Revisão
+                          </Button>
+                        </div>
+                      </div>
+
+                      {/* Lista dos Produtos no Grupo */}
+                      <div className="space-y-1.5">
+                        {grupo.registros.map((item) => (
+                          <div
+                            key={item.id}
+                            className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 p-2.5 rounded-lg bg-[#F5F7F1]/80 hover:bg-[#F5F7F1] text-xs transition-colors"
+                          >
+                            <div className="grid grid-cols-1 sm:grid-cols-4 gap-2 flex-1">
+                              <div>
+                                <span className="block font-bold text-[#1C2B1C]">
+                                  {item.nome_produto}
+                                </span>
+                                <span className="text-[10px] font-mono text-[#1B5E20]">
+                                  NCM: {item.ncm || '—'}
+                                </span>
+                              </div>
+                              <div>
+                                <span className="block text-[11px] text-[#1C2B1C]">
+                                  P.A.: {item.principio_ativo || '—'}
+                                </span>
+                                <span className="text-[10px] text-[#5A6D5A]">
+                                  Emb: {item.embalagem || '—'}
+                                </span>
+                              </div>
+                              <div>
+                                <span className="block text-[11px] text-[#1C2B1C]">
+                                  Fab: {item.fabricante || 'Não Informado'}
+                                </span>
+                                <span className="text-[10px] font-mono text-[#5A6D5A]">
+                                  MAPA: {item.registro_mapa || '—'}
+                                </span>
+                              </div>
+                              <div className="flex items-center gap-1.5">
+                                <Badge
+                                  className={`text-[9px] py-0 px-1.5 ${
+                                    item.status_validacao === 'aprovado'
+                                      ? 'bg-emerald-100 text-emerald-800'
+                                      : item.status_validacao === 'reprovado'
+                                        ? 'bg-red-100 text-red-800'
+                                        : 'bg-amber-100 text-amber-800'
+                                  }`}
+                                >
+                                  {item.status_validacao}
+                                </Badge>
+                              </div>
+                            </div>
+
+                            <Button
+                              size="sm"
+                              disabled={isResolving}
+                              onClick={() => handleManterUmExcluirOutros(grupo, item.id)}
+                              className="text-[10px] h-7 bg-[#1B5E20] hover:bg-[#2E7D32] text-white font-medium px-2.5 rounded-lg whitespace-nowrap"
+                            >
+                              Manter Este e Excluir Outros
+                            </Button>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )
+                })}
+            </div>
+          )}
+        </Card>
+      )}
 
       {/* Filtros e Busca */}
       <Card className="rounded-2xl border-[#DCE5DC] bg-white shadow-sm p-4">

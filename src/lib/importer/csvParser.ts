@@ -119,27 +119,39 @@ function findHeaderRowIndex(grid: (string | number | undefined)[][]): number {
   let bestIndex = 0
   let maxColScore = -1
 
-  for (let i = 0; i < Math.min(grid.length, 12); i++) {
+  for (let i = 0; i < Math.min(grid.length, 15); i++) {
     const row = grid[i] || []
     const filledStrings = row.filter((c) => {
       if (c === undefined || c === null) return false
       const s = String(c).trim()
-      // Não conta se for apenas número ou muito longo (mais de 150 caracteres costuma ser instrução)
-      return s.length > 0 && s.length < 150
+      // Não conta se for apenas número ou muito longo (mais de 120 caracteres costuma ser instrução)
+      return s.length > 0 && s.length < 120
     })
 
     // Contar quantas colunas preenchidas existem
     let score = filledStrings.length
 
-    // Bônus se contiver palavras típicas de cabeçalho
-    const rowText = row
-      .map((c) =>
-        String(c || '')
-          .toLowerCase()
-          .normalize('NFD')
-          .replace(/[\u0300-\u036f]/g, ''),
-      )
-      .join(' ')
+    // Normalizar texto da linha
+    const cellsNorm = row.map((c) =>
+      String(c || '')
+        .toLowerCase()
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '')
+        .trim(),
+    )
+    const rowText = cellsNorm.join(' ')
+
+    // Se a linha contiver textos instrutivos claros ou títulos informativos de relatório, penalizar fortemente
+    if (
+      rowText.includes('como usar') ||
+      rowText.includes('produtos em validacao') ||
+      rowText.includes('regras oficiais da tipi') ||
+      rowText.includes('resumo quantitativo') ||
+      rowText.includes('relacao nominal') ||
+      rowText.includes('total de produtos')
+    ) {
+      score -= 50
+    }
 
     const headerKeywords = [
       'codigo',
@@ -158,16 +170,25 @@ function findHeaderRowIndex(grid: (string | number | undefined)[][]): number {
       'dispositivo',
       'condicao',
       'escopo',
-      'tipi',
       'subposicao',
     ]
-    const matchCount = headerKeywords.filter((k) => rowText.includes(k)).length
-    score += matchCount * 3
 
-    // Penalizar se a primeira coluna tiver texto gigante (linha de instruções/merge)
-    const firstCell = String(row[0] || '')
-    if (firstCell.length > 100) {
-      score -= 10
+    // Pontuar palavras-chave identificadas como nomes de colunas
+    const matchCount = headerKeywords.filter((k) => rowText.includes(k)).length
+    score += matchCount * 4
+
+    // Se contiver palavras fortes combinadas como "descricao" e "ncm" ou "codigo" e "descricao"
+    if (
+      (rowText.includes('descricao') || rowText.includes('produto')) &&
+      (rowText.includes('ncm') || rowText.includes('codigo'))
+    ) {
+      score += 15
+    }
+
+    // Penalizar se a primeira célula tiver texto longo (linha mesclada de instrução ou notas)
+    const firstCell = String(row[0] || '').trim()
+    if (firstCell.length > 60) {
+      score -= 15
     }
 
     if (score > maxColScore) {
