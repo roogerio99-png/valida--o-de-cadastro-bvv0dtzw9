@@ -21,45 +21,19 @@ export async function executarSincronizacaoProdutos(params?: {
   auto_inclusao?: boolean
   limite_por_fonte?: number
 }): Promise<RespostaSincronizacao> {
-  const token = pb.authStore.token
-  const baseUrl = import.meta.env.VITE_POCKETBASE_URL || ''
-
-  const response = await fetch(`${baseUrl}/backend/v1/sincronizar-produtos`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      ...(token ? { Authorization: token } : {}),
-    },
-    body: JSON.stringify(params || {}),
-  })
-
-  if (!response.ok) {
-    let msg = `Erro no servidor (HTTP ${response.status})`
-    try {
-      const clone = response.clone()
-      const data = await clone.json()
-      if (data?.error || data?.message) {
-        msg = data.error || data.message
-      }
-    } catch (_) {
-      try {
-        const text = await response.text()
-        if (text) {
-          try {
-            const parsed = JSON.parse(text)
-            msg = parsed?.error || parsed?.message || text.slice(0, 300)
-          } catch {
-            msg = text.slice(0, 300)
-          }
-        }
-      } catch {
-        /* intentionally ignored */
-      }
-    }
-    throw new Error(msg)
+  try {
+    return await pb.send<RespostaSincronizacao>('/backend/v1/sincronizar-produtos', {
+      method: 'POST',
+      body: params || {},
+    })
+  } catch (err: any) {
+    const errorMsg =
+      err?.data?.error ||
+      err?.data?.message ||
+      err?.message ||
+      (typeof err === 'string' ? err : 'Falha na comunicação com o servidor de sincronização.')
+    throw new Error(errorMsg)
   }
-
-  return (await response.json()) as RespostaSincronizacao
 }
 
 export async function listarHistoricoSincronizacao(params?: {
