@@ -308,14 +308,18 @@
     height: 0;
   }
 
-  /* Barra de rolagem sutil para áreas com scroll visível */
+  /* Barra de rolagem sutil para áreas com scroll vertical visível, ocultando a barra horizontal */
   .custom-scrollbar {
     scrollbar-width: thin;
     scrollbar-color: rgba(27, 94, 32, 0.35) transparent;
   }
   .custom-scrollbar::-webkit-scrollbar {
     width: 8px;
-    height: 8px;
+    height: 0px; /* Esconde visualmente scrollbar horizontal webkit */
+  }
+  .custom-scrollbar::-webkit-scrollbar:horizontal {
+    display: none;
+    height: 0px;
   }
   .custom-scrollbar::-webkit-scrollbar-track {
     background: transparent;
@@ -326,5 +330,11 @@
   }
   .custom-scrollbar::-webkit-scrollbar-thumb:hover {
     background: rgba(27, 94, 32, 0.7);
+  }
+
+  /* Oculta apenas a barra horizontal mantendo scrollbar vertical intacta */
+  .hide-horizontal-scrollbar::-webkit-scrollbar:horizontal {
+    display: none;
+    height: 0;
   }
 }
