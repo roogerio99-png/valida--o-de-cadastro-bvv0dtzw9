@@ -386,7 +386,14 @@ export function MarkdownRenderer({
   isStreaming = false,
   className = '',
 }: MarkdownRendererProps) {
-  const blocks = useMemo(() => parseMarkdownBlocks(content), [content])
+  const blocks = useMemo(() => {
+    try {
+      return parseMarkdownBlocks(content)
+    } catch (err) {
+      console.warn('Erro ao processar markdown incremental:', err)
+      return [{ type: 'paragraph', content: content || '' } as Block]
+    }
+  }, [content])
 
   if (!content && !isStreaming) {
     return null

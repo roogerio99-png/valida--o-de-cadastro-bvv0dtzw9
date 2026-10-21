@@ -52,19 +52,17 @@ routerAdd(
         title: convTitle,
       })
 
-      // Se houver termo relevante que pareça busca de produto ou NCM, adiciona breve contexto complementar
-      let enrichedMessage = message
-
       const iter = $ai.agent(agentSlug).chat({
         user_id: userId,
         conversation_id: conv.id,
-        message: enrichedMessage,
+        message: message,
         stream: true,
       })
 
       e.response.header().set('Content-Type', 'text/event-stream')
-      e.response.header().set('Cache-Control', 'no-cache')
+      e.response.header().set('Cache-Control', 'no-cache, no-transform')
       e.response.header().set('Connection', 'keep-alive')
+      e.response.header().set('X-Accel-Buffering', 'no')
       e.response.header().set('X-Conversation-Id', conv.id)
 
       $response.stream(e, iter)
@@ -103,7 +101,6 @@ routerAdd(
   },
   $apis.requireAuth(),
 )
-
 // 2. Chat síncrono
 routerAdd(
   'POST',

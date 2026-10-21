@@ -22,6 +22,7 @@ import {
   History,
   Plus,
   BookOpen,
+  Square,
 } from 'lucide-react'
 import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -251,6 +252,26 @@ export function Tributacao() {
     textareaRef.current?.focus()
   }
 
+  // Cancelar geração em andamento
+  const handlePararGeracao = () => {
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort()
+      abortControllerRef.current = null
+    }
+    setIsSending(false)
+    if (streamingContent.trim()) {
+      const partialMsg: DisplayMessage = {
+        id: `assistant-cancelled-${Date.now()}`,
+        role: 'assistant',
+        content: streamingContent + '\n\n> ⏹️ *Geração interrompida pelo usuário.*',
+        created: new Date().toISOString(),
+      }
+      setMessages((prev) => [...prev, partialMsg])
+      setStreamingContent('')
+    }
+    textareaRef.current?.focus()
+  }
+
   // Selecionar conversa do histórico
   const handleSelecionarConversa = (convId: string) => {
     if (abortControllerRef.current) {
@@ -286,6 +307,17 @@ export function Tributacao() {
     const abortController = new AbortController()
     abortControllerRef.current = abortController
 
+    // Timeout de 70 segundos para evitar travamento infinito caso haja falha de conexão/upstream
+    let timeoutId: ReturnType<typeof setTimeout> | null = setTimeout(() => {
+      if (abortControllerRef.current) {
+        abortController.abort(
+          new Error('Tempo limite de espera excedido. O assistente demorou para responder.'),
+        )
+      }
+    }, 70000)
+
+    let partialContent = ''
+
     try {
       const res = await fetch(
         `${import.meta.env.VITE_POCKETBASE_URL}/backend/v1/tributacao/chat-stream`,
@@ -308,6 +340,7 @@ export function Tributacao() {
 
       const result = await streamAgentChat(res, {
         onChunk: (_delta, full) => {
+          partialContent = full
           setStreamingContent(full)
         },
         onCitations: (citations) => {
@@ -334,20 +367,70 @@ export function Tributacao() {
       setMessages((prev) => [...prev, assistantMsg])
       setStreamingContent('')
     } catch (err: unknown) {
-      if (err instanceof Error && err.name === 'AbortError') {
-        // Envio cancelado pelo usuário
+      if (err instanceof Error && err.name === 'AbortError' && !abortController.signal.reason) {
+        // Envio cancelado voluntariamente pelo usuário
         return
       }
+
+      const isTimeout =
+        (err instanceof Error && err.message.includes('Tempo limite')) ||
+        (abortController.signal.aborted &&
+          abortController.signal.reason instanceof Error &&
+          abortController.signal.reason.message.includes('Tempo limite'))
+
+      const isStreamEndedEarly =
+        err instanceof Error && err.message.includes('Agent stream ended before the done event')
+
       console.error('Erro na resposta do agente tributário:', err)
+
+      // Se já tínhamos texto parcial recebido antes da queda do stream, preservamos o texto na conversa
+      if (partialContent.trim()) {
+        const errorSuffix = isTimeout
+          ? '\n\n> ⚠️ *Tempo limite de conexão atingido. A resposta pode estar incompleta. Você pode perguntar novamente para continuar.*'
+          : '\n\n> ⚠️ *A conexão com o especialista foi interrompida. O texto acima foi preservado.*'
+
+        const fallbackMsg: DisplayMessage = {
+          id: `assistant-partial-${Date.now()}`,
+          role: 'assistant',
+          content: partialContent + errorSuffix,
+          created: new Date().toISOString(),
+        }
+        setMessages((prev) => [...prev, fallbackMsg])
+        setStreamingContent('')
+      } else {
+        // Nenhum conteúdo foi gerado ainda: exibe mensagem de erro limpa na conversa para o usuário
+        const errorMessage = isTimeout
+          ? 'O servidor demorou para responder (tempo limite excedido). O especialista tributário está temporariamente sobrecarregado. Por favor, tente enviar sua pergunta novamente.'
+          : isStreamEndedEarly
+            ? 'A conexão com o especialista tributário foi interrompida durante a inicialização. Por favor, tente enviar sua pergunta novamente.'
+            : err instanceof Error
+              ? err.message
+              : 'Não foi possível consultar o especialista tributário no momento. Tente novamente.'
+
+        const errorMsg: DisplayMessage = {
+          id: `error-${Date.now()}`,
+          role: 'assistant',
+          content: `> ⚠️ **Não foi possível concluir a consulta tributária agora.**\n\n${errorMessage}\n\n*O botão "Enviar" foi reabilitado para nova tentativa.*`,
+          created: new Date().toISOString(),
+        }
+        setMessages((prev) => [...prev, errorMsg])
+        setStreamingContent('')
+      }
+
       toast({
         variant: 'destructive',
-        title: 'Falha na resposta do assistente',
-        description:
-          err instanceof Error
+        title: isTimeout ? 'Tempo limite excedido' : 'Falha na resposta do assistente',
+        description: isTimeout
+          ? 'O assistente demorou para responder. Tente novamente em instantes.'
+          : err instanceof Error
             ? err.message
             : 'Não foi possível obter resposta agora. Tente novamente.',
       })
     } finally {
+      if (timeoutId) {
+        clearTimeout(timeoutId)
+        timeoutId = null
+      }
       setIsSending(false)
       abortControllerRef.current = null
       textareaRef.current?.focus()
@@ -810,22 +893,30 @@ export function Tributacao() {
                   disabled={isSending}
                 />
 
-                <Button
-                  type="button"
-                  size="sm"
-                  onClick={() => handleSendMessage()}
-                  disabled={!inputMessage.trim() || isSending}
-                  className="h-9 px-3.5 rounded-xl bg-[#1B5E20] hover:bg-[#2E7D32] text-white flex-shrink-0 font-medium"
-                >
-                  {isSending ? (
-                    <Loader2 className="w-4 h-4 animate-spin" />
-                  ) : (
-                    <>
-                      <Send className="w-3.5 h-3.5 mr-1" />
-                      <span>Enviar</span>
-                    </>
-                  )}
-                </Button>
+                {isSending ? (
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    onClick={handlePararGeracao}
+                    className="h-9 px-3 rounded-xl border-amber-300 text-amber-900 bg-amber-50 hover:bg-amber-100 flex-shrink-0 font-medium text-xs flex items-center gap-1"
+                    title="Parar geração"
+                  >
+                    <Square className="w-3 h-3 fill-amber-800 text-amber-800" />
+                    <span>Parar</span>
+                  </Button>
+                ) : (
+                  <Button
+                    type="button"
+                    size="sm"
+                    onClick={() => handleSendMessage()}
+                    disabled={!inputMessage.trim() || isSending}
+                    className="h-9 px-3.5 rounded-xl bg-[#1B5E20] hover:bg-[#2E7D32] text-white flex-shrink-0 font-medium"
+                  >
+                    <Send className="w-3.5 h-3.5 mr-1" />
+                    <span>Enviar</span>
+                  </Button>
+                )}
               </div>
 
               <div className="flex items-center justify-between mt-2 px-1 text-[10px] text-[#5A6D5A]">
