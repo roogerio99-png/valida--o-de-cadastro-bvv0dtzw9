@@ -45,6 +45,7 @@ const navItems = [
   { path: '/parametrizacao', label: 'Parametrização Fiscal', icon: Percent },
   { path: '/tributacao', label: 'Tributação Agro', icon: Scale },
   { path: '/importar', label: 'Importar Planilhas', icon: UploadCloud },
+  { path: '/configuracoes', label: 'Configurações', icon: User },
 ]
 
 export default function Layout() {
@@ -68,7 +69,13 @@ export default function Layout() {
 
   // Título dinâmico da página atual
   const currentNav = navItems.find((item) => item.path === location.pathname)
-  const pageTitle = currentNav?.label || 'Validador Agro'
+  const pageTitle =
+    currentNav?.label ||
+    (location.pathname === '/regras-ncm'
+      ? 'Regras NCM × Embalagem'
+      : location.pathname === '/parametrizacao-fiscal'
+        ? 'Parametrização Fiscal'
+        : 'Validador Agro')
 
   return (
     <div className="flex h-screen bg-[#F5F7F1] text-[#1C2B1C] font-sans overflow-hidden">
@@ -290,6 +297,13 @@ export default function Layout() {
                 <DropdownMenuItem onClick={() => navigate('/importar')} className="cursor-pointer">
                   <UploadCloud className="mr-2 h-4 h-4 text-[#F57F17]" />
                   <span>Importar Planilhas</span>
+                </DropdownMenuItem>
+                <DropdownMenuItem
+                  onClick={() => navigate('/configuracoes')}
+                  className="cursor-pointer"
+                >
+                  <User className="mr-2 h-4 h-4 text-[#1B5E20]" />
+                  <span>Configurações</span>
                 </DropdownMenuItem>
                 <DropdownMenuSeparator />
                 <DropdownMenuItem onClick={handleLogout} className="cursor-pointer text-red-600">

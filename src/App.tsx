@@ -51,10 +51,15 @@ const App = () => (
             <Route path="/validar" element={<Validar />} />
             <Route path="/sincronizacao" element={<SincronizacaoProdutos />} />
             <Route path="/regras" element={<Regras />} />
+            <Route path="/regras-ncm" element={<Navigate to="/regras" replace />} />
             <Route path="/principios-ativos" element={<PrincipiosAtivos />} />
             <Route path="/base-mestre" element={<BaseMestre />} />
             <Route path="/travas" element={<Travas />} />
             <Route path="/parametrizacao" element={<Parametrizacao />} />
+            <Route
+              path="/parametrizacao-fiscal"
+              element={<Navigate to="/parametrizacao" replace />}
+            />
             <Route path="/tributacao" element={<Tributacao />} />
             <Route path="/importar" element={<Importar />} />
             <Route path="/configuracoes" element={<Configuracoes />} />
