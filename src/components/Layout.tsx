@@ -36,6 +36,7 @@ import {
 } from '@/components/ui/dropdown-menu'
 import { Avatar, AvatarFallback } from '@/components/ui/avatar'
 import { Badge } from '@/components/ui/badge'
+import { cn } from '@/lib/utils'
 
 const navItems = [
   { path: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
@@ -75,6 +76,19 @@ export function Layout() {
     ...(isAdmin ? [{ path: '/usuarios', label: 'Gestão de Usuários', icon: Users }] : []),
   ]
 
+  // Determina se a rota atual é de tabela que ocupa a tela sem scroll na página
+  const isTablePage = [
+    '/base-mestre',
+    '/principios-ativos',
+    '/regras',
+    '/regras-ncm',
+    '/parametrizacao',
+    '/parametrizacao-fiscal',
+    '/travas',
+    '/sincronizacao',
+    '/sincronizacao-produtos',
+  ].includes(location.pathname)
+
   // Título dinâmico da página atual
   const currentNav = navItemsFiltrados.find((item) => item.path === location.pathname)
   const pageTitle =
@@ -88,7 +102,7 @@ export function Layout() {
           : 'Validador Agro')
 
   return (
-    <div className="flex h-screen bg-[#F5F7F1] text-[#1C2B1C] font-sans overflow-hidden">
+    <div className="flex h-screen h-[100dvh] w-screen overflow-hidden bg-[#F5F7F1] text-[#1C2B1C] font-sans select-none md:select-auto">
       {/* ------------------------------------------------------------------ */}
       {/* SIDEBAR DESKTOP */}
       {/* ------------------------------------------------------------------ */}
@@ -358,8 +372,15 @@ export function Layout() {
           </div>
         </header>
 
-        {/* Conteúdo com Scroll */}
-        <main className="flex-1 overflow-y-auto px-4 lg:px-8 py-6 max-w-[1400px] w-full mx-auto">
+        {/* Conteúdo: Em telas de tabela como Base Mestre o scroll é delegado 100% à tabela interna */}
+        <main
+          className={cn(
+            'flex-1 w-full mx-auto px-4 lg:px-8 py-4 min-h-0 flex flex-col',
+            isTablePage
+              ? 'overflow-hidden max-w-[1600px]'
+              : 'overflow-y-auto max-w-[1400px] custom-scrollbar',
+          )}
+        >
           <Outlet />
         </main>
 

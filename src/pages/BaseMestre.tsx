@@ -563,7 +563,7 @@ export function BaseMestre() {
   }
 
   return (
-    <div className="space-y-6 animate-in fade-in-up duration-300">
+    <div className="flex-1 flex flex-col space-y-4 min-h-0 animate-in fade-in-up duration-300">
       {paIdFilter && (
         <div className="p-3 bg-emerald-50 border border-emerald-200 rounded-lg flex items-center justify-between text-xs text-emerald-900">
           <div className="flex items-center gap-2">
@@ -1002,13 +1002,14 @@ export function BaseMestre() {
       </Card>
 
       {/* Tabela da Base Mestre com Colunas Canônicas Visíveis e Expansão para os 28 Campos */}
-      <Card className="rounded-2xl border-[#DCE5DC] bg-white shadow-sm overflow-hidden flex flex-col">
+      <Card className="rounded-2xl border-[#DCE5DC] bg-white shadow-sm overflow-hidden flex-1 flex flex-col min-h-0">
         <ScrollableTable
           autoFitHeight={true}
-          bottomOffset={76}
+          bottomOffset={52}
           containerRef={tableContainerRef}
           onNearBottom={carregarMaisProdutos}
           bottomThreshold={250}
+          className="flex-1 min-h-0"
         >
           <table className="w-full text-xs">
             <thead className="sticky top-0 z-20 bg-[#F5F7F1] shadow-[0_1px_0_0_#DCE5DC]">

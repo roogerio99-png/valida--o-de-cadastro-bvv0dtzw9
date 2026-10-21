@@ -16,11 +16,11 @@ export interface ScrollableTableProps extends React.HTMLAttributes<HTMLDivElemen
   minHeight?: string
   /** Se deve forçar ocultação da barra flutuante (ex.: quando a tela é muito pequena) */
   hideFloatingBarOnTouch?: boolean
-  /** Se deve esconder a barra de rolagem vertical visível (padrão: true, conforme pedido do usuário) */
+  /** Se deve esconder a barra de rolagem vertical visível (padrão: false, barra interna visível e funcional) */
   hideVerticalScrollbar?: boolean
   /** Se deve calcular a altura restante até o rodapé da página dinamicamente via medição do viewport */
   autoFitHeight?: boolean
-  /** Margem inferior de segurança em pixels para o autoFitHeight (padrão: 72px para footer + padding) */
+  /** Margem inferior de segurança em pixels para o autoFitHeight (padrão: 64px para footer + padding) */
   bottomOffset?: number
   /** Callback opcional acionado quando o usuário se aproxima do final do scroll vertical */
   onNearBottom?: () => void
@@ -35,23 +35,11 @@ export interface ScrollableTableProps extends React.HTMLAttributes<HTMLDivElemen
  *
  * Componente contêiner para tabelas largas e longas.
  *
- * Resolve definitivamente o problema relatado pelo usuário:
- * "para eu ver os detalhes do produto roundup preciso ir até o final na barra
- * de rolagem vertical para poder arrastar para o lado na horizontal, precisa
- * deixar a barra de rolagem horizontal sempre a vista de forma fixa na tela,
- * assim como o cabeçalho na parte superior, deve sempre ficar fixo e somente
- * as informações rolar pra cima e para baixo"
- *
- * Arquitetura:
- * 1. O contêiner interno (`containerRef`) possui overflow-x: auto E overflow-y: auto,
- *    com altura calculada dinamicamente (`maxHeight` responsivo).
- * 2. O thead da tabela fica sticky no top-0 deste contêiner (com z-20 e fundo opaco),
- *    permitindo que as linhas rolem por baixo dele.
- * 3. A barra de rolagem horizontal fica fixa/sticky no bottom-0 DO MESMO contêiner,
- *    estando SEMPRE VISÍVEL desde o primeiro pixel, sem precisar descer até o fim da página.
- * 4. Arrasto fluido por pointer drag no thumb, clique na trilha, botões de passo ‹ e ›,
- *    e sincronização bidirecional em tempo real com wheel, trackpad e touch.
- * 5. Preserva checkboxes, estado indeterminado, linhas expansíveis e ações.
+ * Resolve o requisito do usuário:
+ * A barra de rolagem horizontal permanece sempre visível na base do bloco,
+ * o cabeçalho thead fica fixo no topo (sticky top-0), a barra de rolagem
+ * vertical interna do bloco fica visível com seu indicador de posição,
+ * e toda a rolagem vertical ocorre exclusivamente dentro do bloco da tabela.
  */
 export function ScrollableTable({
   children,
@@ -60,7 +48,7 @@ export function ScrollableTable({
   maxHeight,
   minHeight = '220px',
   hideFloatingBarOnTouch = false,
-  hideVerticalScrollbar = true,
+  hideVerticalScrollbar = false,
   autoFitHeight = true,
   bottomOffset = 64,
   onNearBottom,
@@ -129,13 +117,13 @@ export function ScrollableTable({
 
     const rect = wrapper.getBoundingClientRect()
     // Espaço da base do wrapper/início da tabela até o rodapé da viewport
-    const viewportHeight = window.innerHeight
-    // Considerar barra horizontal se visível (~44px) + margem do rodapé da tela
-    const reservedBottom = bottomOffset + (hasOverflow ? 44 : 12)
+    const viewportHeight = window.innerHeight || document.documentElement.clientHeight
+    // Considerar barra horizontal se visível (~44px) + margem do rodapé da tela (footer h-10 = 40px + padding)
+    const reservedBottom = bottomOffset + (hasOverflow ? 44 : 8)
     const available = viewportHeight - rect.top - reservedBottom
 
-    // Manter um limite mínimo utilizável (ex.: 220px)
-    const targetHeight = Math.max(220, Math.floor(available))
+    // Manter um limite mínimo utilizável (ex.: 180px)
+    const targetHeight = Math.max(180, Math.floor(available))
     setComputedMaxHeight(`${targetHeight}px`)
   }, [autoFitHeight, bottomOffset, hasOverflow])
 
@@ -298,6 +286,8 @@ export function ScrollableTable({
   const containerHeightStyle: React.CSSProperties = {
     ...(effectiveMaxHeight ? { maxHeight: effectiveMaxHeight } : {}),
     ...(minHeight ? { minHeight } : {}),
+    // Em contêineres flex, permite encolher e rolar internamente
+    flex: '1 1 auto',
   }
 
   return (
@@ -314,8 +304,8 @@ export function ScrollableTable({
         Ao ter altura calculada + overflow-y: auto + overflow-x: auto:
         1. thead com sticky top-0 trava perfeitamente no topo durante o scroll vertical das linhas.
         2. Toda a barra flutuante horizontal fica docking no fundo do contêiner e nunca desce além do viewport visível.
-        3. A barra vertical de rolagem é ocultada visualmente (scrollbar-width: none e ::-webkit-scrollbar display: none),
-           mantendo 100% da capacidade de rolagem por trackpad/mousewheel/touch e os eventos onScroll / onNearBottom.
+        3. A barra vertical de rolagem interna fica VISÍVEL por padrão (scrollbar nativa/estilizada),
+           para que o usuário veja a posição exata das linhas enquanto rola o bloco.
       */}
       <div
         ref={containerRef}
@@ -326,12 +316,10 @@ export function ScrollableTable({
           // Regra CSS utilitária para fixar thead das tabelas filhas automaticamente
           '[&_thead]:sticky [&_thead]:top-0 [&_thead]:z-20 [&_thead]:bg-[#F5F7F1] [&_thead_th]:bg-[#F5F7F1]',
           '[&_thead_th]:shadow-[0_1px_0_0_#DCE5DC]',
-          // Esconde a barra de rolagem vertical conforme solicitação do usuário
-          hideVerticalScrollbar &&
-            'no-scrollbar-vertical [scrollbar-width:none] [&::-webkit-scrollbar]:hidden',
-          // Scrollbar horizontal suave nativa como fallback caso não haja a flutuante
-          !hideVerticalScrollbar &&
-            'scrollbar-thin scrollbar-thumb-zinc-300 dark:scrollbar-thumb-zinc-700',
+          // Ocultação opcional apenas se explicitamente solicitada
+          hideVerticalScrollbar
+            ? 'no-scrollbar-vertical [scrollbar-width:none] [&::-webkit-scrollbar]:hidden'
+            : 'custom-scrollbar',
           scrollClassName,
         )}
       >
