@@ -15,6 +15,7 @@ import {
   Copy,
 } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
+import { ScrollableTable } from '@/components/ScrollableTable'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import pb from '@/lib/pocketbase/client'
@@ -415,7 +416,7 @@ export function Dashboard() {
               produto.
             </div>
           ) : (
-            <div className="overflow-x-auto">
+            <ScrollableTable>
               <table className="w-full text-xs">
                 <thead>
                   <tr className="border-b border-[#DCE5DC] text-left text-[#5A6D5A]">
@@ -464,7 +465,7 @@ export function Dashboard() {
                   ))}
                 </tbody>
               </table>
-            </div>
+            </ScrollableTable>
           )}
         </CardContent>
       </Card>

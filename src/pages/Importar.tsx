@@ -19,6 +19,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/com
 import { Button } from '@/components/ui/button'
 import { Progress } from '@/components/ui/progress'
 import { Badge } from '@/components/ui/badge'
+import { ScrollableTable } from '@/components/ScrollableTable'
 import { toast } from '@/hooks/use-toast'
 import { readSpreadsheetFile, type ParsedTable } from '@/lib/importer/csvParser'
 import { useAuth } from '@/contexts/AuthContext'
@@ -1368,88 +1369,90 @@ export function Importar() {
                     </div>
 
                     <div className="border border-red-200 rounded-xl overflow-hidden max-h-64 overflow-y-auto text-[11px]">
-                      <table className="w-full text-left">
-                        <thead className="bg-red-50/70 border-b border-red-200 text-red-900">
-                          <tr>
-                            <th className="py-2 px-3 font-semibold w-16">Linha</th>
-                            <th className="py-2 px-3 font-semibold">Categoria</th>
-                            <th className="py-2 px-3 font-semibold">Motivo da Recusa</th>
-                            <th className="py-2 px-3 font-semibold">Campo / Valor</th>
-                            <th className="py-2 px-2 text-center w-8"></th>
-                          </tr>
-                        </thead>
-                        <tbody className="divide-y divide-red-100 bg-white">
-                          {errosFiltrados.map((item, errIdx) => {
-                            const isExpanded = expandedErrorRow === errIdx
-                            return (
-                              <React.Fragment key={errIdx}>
-                                <tr
-                                  onClick={() => setExpandedErrorRow(isExpanded ? null : errIdx)}
-                                  className="hover:bg-red-50/40 cursor-pointer transition-colors"
-                                >
-                                  <td className="py-2 px-3 font-mono font-bold text-red-700">
-                                    {item.linhaOriginal}
-                                  </td>
-                                  <td className="py-2 px-3 font-medium text-red-900">
-                                    {item.categoria}
-                                  </td>
-                                  <td className="py-2 px-3 text-red-800">{item.motivo}</td>
-                                  <td
-                                    className="py-2 px-3 text-red-700 max-w-[260px]"
-                                    title={
-                                      item.campo
-                                        ? `${item.campo}: ${item.valor || 'vazio'}`
-                                        : item.motivo
-                                    }
+                      <ScrollableTable>
+                        <table className="w-full text-left">
+                          <thead className="bg-red-50/70 border-b border-red-200 text-red-900">
+                            <tr>
+                              <th className="py-2 px-3 font-semibold w-16">Linha</th>
+                              <th className="py-2 px-3 font-semibold">Categoria</th>
+                              <th className="py-2 px-3 font-semibold">Motivo da Recusa</th>
+                              <th className="py-2 px-3 font-semibold">Campo / Valor</th>
+                              <th className="py-2 px-2 text-center w-8"></th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-red-100 bg-white">
+                            {errosFiltrados.map((item, errIdx) => {
+                              const isExpanded = expandedErrorRow === errIdx
+                              return (
+                                <React.Fragment key={errIdx}>
+                                  <tr
+                                    onClick={() => setExpandedErrorRow(isExpanded ? null : errIdx)}
+                                    className="hover:bg-red-50/40 cursor-pointer transition-colors"
                                   >
-                                    {item.campo && (
-                                      <div className="mb-0.5">
-                                        <Badge
-                                          variant="outline"
-                                          className="text-[9px] px-1.5 py-0 border-red-300 text-red-800 bg-red-50/50 font-mono"
+                                    <td className="py-2 px-3 font-mono font-bold text-red-700">
+                                      {item.linhaOriginal}
+                                    </td>
+                                    <td className="py-2 px-3 font-medium text-red-900">
+                                      {item.categoria}
+                                    </td>
+                                    <td className="py-2 px-3 text-red-800">{item.motivo}</td>
+                                    <td
+                                      className="py-2 px-3 text-red-700 max-w-[260px]"
+                                      title={
+                                        item.campo
+                                          ? `${item.campo}: ${item.valor || 'vazio'}`
+                                          : item.motivo
+                                      }
+                                    >
+                                      {item.campo && (
+                                        <div className="mb-0.5">
+                                          <Badge
+                                            variant="outline"
+                                            className="text-[9px] px-1.5 py-0 border-red-300 text-red-800 bg-red-50/50 font-mono"
+                                          >
+                                            {item.campo}
+                                          </Badge>
+                                        </div>
+                                      )}
+                                      {item.valor ? (
+                                        <span
+                                          className="font-mono text-[10px] text-red-600 block truncate"
+                                          title={item.valor}
                                         >
-                                          {item.campo}
-                                        </Badge>
-                                      </div>
-                                    )}
-                                    {item.valor ? (
-                                      <span
-                                        className="font-mono text-[10px] text-red-600 block truncate"
-                                        title={item.valor}
-                                      >
-                                        {item.valor}
-                                      </span>
-                                    ) : (
-                                      <span className="text-red-400 italic text-[10px]">
-                                        {item.campo ? 'valor não especificado' : '—'}
-                                      </span>
-                                    )}
-                                  </td>
-                                  <td className="py-2 px-2 text-center text-red-500">
-                                    {isExpanded ? (
-                                      <ChevronDown className="w-4 h-4" />
-                                    ) : (
-                                      <ChevronRight className="w-4 h-4" />
-                                    )}
-                                  </td>
-                                </tr>
-                                {isExpanded && (
-                                  <tr className="bg-[#F5F7F1]">
-                                    <td colSpan={5} className="p-3 text-[10px] text-[#1C2B1C]">
-                                      <div className="font-semibold text-[#1B5E20] mb-1">
-                                        Conteúdo bruto extraído da Linha {item.linhaOriginal}:
-                                      </div>
-                                      <pre className="bg-white p-2 rounded-lg border border-[#DCE5DC] overflow-x-auto text-xs font-mono">
-                                        {JSON.stringify(item.dados, null, 2)}
-                                      </pre>
+                                          {item.valor}
+                                        </span>
+                                      ) : (
+                                        <span className="text-red-400 italic text-[10px]">
+                                          {item.campo ? 'valor não especificado' : '—'}
+                                        </span>
+                                      )}
+                                    </td>
+                                    <td className="py-2 px-2 text-center text-red-500">
+                                      {isExpanded ? (
+                                        <ChevronDown className="w-4 h-4" />
+                                      ) : (
+                                        <ChevronRight className="w-4 h-4" />
+                                      )}
                                     </td>
                                   </tr>
-                                )}
-                              </React.Fragment>
-                            )
-                          })}
-                        </tbody>
-                      </table>
+                                  {isExpanded && (
+                                    <tr className="bg-[#F5F7F1]">
+                                      <td colSpan={5} className="p-3 text-[10px] text-[#1C2B1C]">
+                                        <div className="font-semibold text-[#1B5E20] mb-1">
+                                          Conteúdo bruto extraído da Linha {item.linhaOriginal}:
+                                        </div>
+                                        <pre className="bg-white p-2 rounded-lg border border-[#DCE5DC] overflow-x-auto text-xs font-mono">
+                                          {JSON.stringify(item.dados, null, 2)}
+                                        </pre>
+                                      </td>
+                                    </tr>
+                                  )}
+                                </React.Fragment>
+                              )
+                            })}
+                          </tbody>
+                        </table>
+                      </ScrollableTable>
                     </div>
                   </div>
                 )}
@@ -1464,37 +1467,39 @@ export function Importar() {
                   Total de colunas: {parsedData.headers.length}
                 </span>
               </h5>
-              <div className="overflow-x-auto border border-[#DCE5DC] rounded-xl max-h-64 overflow-y-auto">
-                <table className="w-full text-[11px]">
-                  <thead>
-                    <tr className="bg-[#F5F7F1] border-b border-[#DCE5DC] text-left text-[#5A6D5A]">
-                      <th className="py-2 px-3 font-semibold text-center w-12">#</th>
-                      {parsedData.headers.map((h, i) => (
-                        <th key={i} className="py-2 px-3 font-semibold whitespace-nowrap">
-                          {h}
-                        </th>
-                      ))}
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-[#F0F4F0]">
-                    {parsedData.rows.slice(0, 10).map((r, rowIdx) => (
-                      <tr key={rowIdx} className="hover:bg-[#F5F7F1]/40">
-                        <td className="py-1.5 px-3 text-center text-[#5A6D5A] font-mono text-[10px]">
-                          {parsedData.rowIndices?.[rowIdx] ?? rowIdx + 2}
-                        </td>
-                        {parsedData.headers.map((h, colIdx) => (
-                          <td
-                            key={colIdx}
-                            className="py-1.5 px-3 max-w-[220px] truncate text-[#1C2B1C]"
-                            title={r[h] || ''}
-                          >
-                            {r[h] || '—'}
-                          </td>
+              <div className="border border-[#DCE5DC] rounded-xl max-h-64 overflow-y-auto">
+                <ScrollableTable>
+                  <table className="w-full text-[11px]">
+                    <thead>
+                      <tr className="bg-[#F5F7F1] border-b border-[#DCE5DC] text-left text-[#5A6D5A]">
+                        <th className="py-2 px-3 font-semibold text-center w-12">#</th>
+                        {parsedData.headers.map((h, i) => (
+                          <th key={i} className="py-2 px-3 font-semibold whitespace-nowrap">
+                            {h}
+                          </th>
                         ))}
                       </tr>
-                    ))}
-                  </tbody>
-                </table>
+                    </thead>
+                    <tbody className="divide-y divide-[#F0F4F0]">
+                      {parsedData.rows.slice(0, 10).map((r, rowIdx) => (
+                        <tr key={rowIdx} className="hover:bg-[#F5F7F1]/40">
+                          <td className="py-1.5 px-3 text-center text-[#5A6D5A] font-mono text-[10px]">
+                            {parsedData.rowIndices?.[rowIdx] ?? rowIdx + 2}
+                          </td>
+                          {parsedData.headers.map((h, colIdx) => (
+                            <td
+                              key={colIdx}
+                              className="py-1.5 px-3 max-w-[220px] truncate text-[#1C2B1C]"
+                              title={r[h] || ''}
+                            >
+                              {r[h] || '—'}
+                            </td>
+                          ))}
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </ScrollableTable>
               </div>
             </div>
           </div>

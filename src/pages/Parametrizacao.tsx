@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react'
 import { Percent, Plus, Search, Save, Loader2, HelpCircle } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
+import { ScrollableTable } from '@/components/ScrollableTable'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -271,7 +272,7 @@ export function Parametrizacao() {
       </Card>
 
       <Card className="rounded-2xl border-[#DCE5DC] bg-white shadow-sm overflow-hidden">
-        <div className="overflow-x-auto">
+        <ScrollableTable>
           <table className="w-full text-xs">
             <thead>
               <tr className="bg-[#F5F7F1] border-b border-[#DCE5DC] text-left text-[#5A6D5A]">
@@ -412,7 +413,7 @@ export function Parametrizacao() {
               )}
             </tbody>
           </table>
-        </div>
+        </ScrollableTable>
       </Card>
 
       {/* Explicação da Reforma Tributária Agro */}

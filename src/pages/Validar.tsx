@@ -28,6 +28,7 @@ import {
   FileCode,
 } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
+import { ScrollableTable } from '@/components/ScrollableTable'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -1116,7 +1117,7 @@ export function Validar() {
                     </span>
                   </CardTitle>
                 </CardHeader>
-                <div className="overflow-x-auto">
+                <ScrollableTable>
                   <table className="w-full text-xs">
                     <thead>
                       <tr className="border-b border-[#DCE5DC] bg-[#F5F7F1]/50 text-[#5A6D5A] font-semibold text-left">
@@ -1181,7 +1182,7 @@ export function Validar() {
                       })}
                     </tbody>
                   </table>
-                </div>
+                </ScrollableTable>
               </Card>
 
               {/* ------------------------------------------------------------------ */}
@@ -1210,7 +1211,7 @@ export function Validar() {
                     faixa.
                   </CardDescription>
                 </CardHeader>
-                <div className="overflow-x-auto">
+                <ScrollableTable>
                   <table className="w-full text-xs">
                     <thead>
                       <tr className="border-b border-[#DCE5DC] bg-[#F5F7F1]/50 text-[#5A6D5A] font-semibold text-left">
@@ -1260,7 +1261,7 @@ export function Validar() {
                       })}
                     </tbody>
                   </table>
-                </div>
+                </ScrollableTable>
               </Card>
 
               {/* ------------------------------------------------------------------ */}

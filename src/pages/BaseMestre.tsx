@@ -20,6 +20,7 @@ import {
   Scale,
 } from 'lucide-react'
 import { Card } from '@/components/ui/card'
+import { ScrollableTable } from '@/components/ScrollableTable'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -936,7 +937,7 @@ export function BaseMestre() {
 
       {/* Tabela da Base Mestre com Colunas Canônicas Visíveis e Expansão para os 28 Campos */}
       <Card className="rounded-2xl border-[#DCE5DC] bg-white shadow-sm overflow-hidden">
-        <div className="overflow-x-auto">
+        <ScrollableTable>
           <table className="w-full text-xs">
             <thead>
               <tr className="bg-[#F5F7F1] border-b border-[#DCE5DC] text-left text-[#5A6D5A]">
@@ -1338,7 +1339,7 @@ export function BaseMestre() {
               )}
             </tbody>
           </table>
-        </div>
+        </ScrollableTable>
 
         {/* Paginação */}
         {totalPages > 1 && (

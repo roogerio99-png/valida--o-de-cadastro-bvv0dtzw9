@@ -32,6 +32,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Badge } from '@/components/ui/badge'
+import { ScrollableTable } from '@/components/ScrollableTable'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import {
   Dialog,
@@ -397,260 +398,265 @@ export function Usuarios() {
 
         {/* Tabela de Usuários */}
         <TabsContent value="usuarios" className="space-y-4 pt-2">
-          <div className="rounded-md border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 overflow-x-auto shadow-sm">
-            <table className="w-full text-sm text-left">
-              <thead className="bg-slate-50 dark:bg-slate-800/60 text-slate-700 dark:text-slate-300 border-b border-slate-200 dark:border-slate-800 font-medium">
-                <tr>
-                  <th className="py-3 px-4">Usuário</th>
-                  <th className="py-3 px-4">E-mail</th>
-                  <th className="py-3 px-4">Papel Atual</th>
-                  <th className="py-3 px-4">Status</th>
-                  <th className="py-3 px-4">Cadastrado em</th>
-                  <th className="py-3 px-4 text-right">Ações</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
-                {carregando ? (
+          <div className="rounded-md border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-sm">
+            <ScrollableTable>
+              <table className="w-full text-sm text-left">
+                <thead className="bg-slate-50 dark:bg-slate-800/60 text-slate-700 dark:text-slate-300 border-b border-slate-200 dark:border-slate-800 font-medium">
                   <tr>
-                    <td colSpan={6} className="py-8 text-center text-slate-500">
-                      <RefreshCw className="w-6 h-6 animate-spin mx-auto mb-2 text-emerald-600" />
-                      Carregando usuários do sistema...
-                    </td>
+                    <th className="py-3 px-4">Usuário</th>
+                    <th className="py-3 px-4">E-mail</th>
+                    <th className="py-3 px-4">Papel Atual</th>
+                    <th className="py-3 px-4">Status</th>
+                    <th className="py-3 px-4">Cadastrado em</th>
+                    <th className="py-3 px-4 text-right">Ações</th>
                   </tr>
-                ) : usuariosFiltrados.length === 0 ? (
-                  <tr>
-                    <td colSpan={6} className="py-8 text-center text-slate-500">
-                      Nenhum usuário encontrado com os filtros aplicados.
-                    </td>
-                  </tr>
-                ) : (
-                  usuariosFiltrados.map((u) => {
-                    const isSelf = user?.id === u.id
-                    const isRootAdmin = u.email === 'roogerio99@gmail.com'
-                    const ehAdmin = u.role === 'admin'
+                </thead>
+                <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+                  {carregando ? (
+                    <tr>
+                      <td colSpan={6} className="py-8 text-center text-slate-500">
+                        <RefreshCw className="w-6 h-6 animate-spin mx-auto mb-2 text-emerald-600" />
+                        Carregando usuários do sistema...
+                      </td>
+                    </tr>
+                  ) : usuariosFiltrados.length === 0 ? (
+                    <tr>
+                      <td colSpan={6} className="py-8 text-center text-slate-500">
+                        Nenhum usuário encontrado com os filtros aplicados.
+                      </td>
+                    </tr>
+                  ) : (
+                    usuariosFiltrados.map((u) => {
+                      const isSelf = user?.id === u.id
+                      const isRootAdmin = u.email === 'roogerio99@gmail.com'
+                      const ehAdmin = u.role === 'admin'
 
-                    return (
-                      <tr key={u.id} className="hover:bg-slate-50/50 dark:hover:bg-slate-800/30">
-                        <td className="py-3 px-4">
-                          <div className="font-medium text-slate-900 dark:text-slate-100 flex items-center gap-2">
-                            <span>{u.name || 'Sem nome informado'}</span>
-                            {isSelf && (
+                      return (
+                        <tr key={u.id} className="hover:bg-slate-50/50 dark:hover:bg-slate-800/30">
+                          <td className="py-3 px-4">
+                            <div className="font-medium text-slate-900 dark:text-slate-100 flex items-center gap-2">
+                              <span>{u.name || 'Sem nome informado'}</span>
+                              {isSelf && (
+                                <Badge
+                                  variant="outline"
+                                  className="text-[10px] bg-slate-100 text-slate-700"
+                                >
+                                  Você
+                                </Badge>
+                              )}
+                              {isRootAdmin && (
+                                <Badge
+                                  variant="outline"
+                                  className="text-[10px] border-amber-300 text-amber-700 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/40"
+                                >
+                                  Principal
+                                </Badge>
+                              )}
+                            </div>
+                          </td>
+                          <td className="py-3 px-4 text-slate-600 dark:text-slate-300 font-mono text-xs">
+                            {u.email}
+                          </td>
+                          <td className="py-3 px-4">
+                            <div className="flex items-center gap-2">
+                              {ehAdmin ? (
+                                <Badge className="bg-emerald-600 hover:bg-emerald-700 text-white gap-1 font-medium">
+                                  <ShieldCheck className="w-3 h-3" />
+                                  Administrador
+                                </Badge>
+                              ) : (
+                                <Badge
+                                  variant="secondary"
+                                  className="gap-1 font-medium text-slate-700 dark:text-slate-200"
+                                >
+                                  <Eye className="w-3 h-3 text-blue-500" />
+                                  Analista (Leitura)
+                                </Badge>
+                              )}
+                            </div>
+                          </td>
+                          <td className="py-3 px-4">
+                            {u.verified ? (
                               <Badge
                                 variant="outline"
-                                className="text-[10px] bg-slate-100 text-slate-700"
+                                className="text-emerald-700 dark:text-emerald-400 border-emerald-300 bg-emerald-50 dark:bg-emerald-950/40 gap-1 text-[11px]"
                               >
-                                Você
-                              </Badge>
-                            )}
-                            {isRootAdmin && (
-                              <Badge
-                                variant="outline"
-                                className="text-[10px] border-amber-300 text-amber-700 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/40"
-                              >
-                                Principal
-                              </Badge>
-                            )}
-                          </div>
-                        </td>
-                        <td className="py-3 px-4 text-slate-600 dark:text-slate-300 font-mono text-xs">
-                          {u.email}
-                        </td>
-                        <td className="py-3 px-4">
-                          <div className="flex items-center gap-2">
-                            {ehAdmin ? (
-                              <Badge className="bg-emerald-600 hover:bg-emerald-700 text-white gap-1 font-medium">
-                                <ShieldCheck className="w-3 h-3" />
-                                Administrador
+                                <CheckCircle2 className="w-3 h-3" />
+                                Verificado
                               </Badge>
                             ) : (
                               <Badge
-                                variant="secondary"
-                                className="gap-1 font-medium text-slate-700 dark:text-slate-200"
+                                variant="outline"
+                                className="text-amber-700 dark:text-amber-400 border-amber-300 bg-amber-50 dark:bg-amber-950/40 gap-1 text-[11px]"
                               >
-                                <Eye className="w-3 h-3 text-blue-500" />
-                                Analista (Leitura)
+                                <Clock className="w-3 h-3" />
+                                Primeiro acesso pendente
                               </Badge>
                             )}
-                          </div>
-                        </td>
-                        <td className="py-3 px-4">
-                          {u.verified ? (
-                            <Badge
-                              variant="outline"
-                              className="text-emerald-700 dark:text-emerald-400 border-emerald-300 bg-emerald-50 dark:bg-emerald-950/40 gap-1 text-[11px]"
-                            >
-                              <CheckCircle2 className="w-3 h-3" />
-                              Verificado
-                            </Badge>
-                          ) : (
-                            <Badge
-                              variant="outline"
-                              className="text-amber-700 dark:text-amber-400 border-amber-300 bg-amber-50 dark:bg-amber-950/40 gap-1 text-[11px]"
-                            >
-                              <Clock className="w-3 h-3" />
-                              Primeiro acesso pendente
-                            </Badge>
-                          )}
-                        </td>
-                        <td className="py-3 px-4 text-slate-500 text-xs">
-                          {u.created ? new Date(u.created).toLocaleDateString('pt-BR') : '—'}
-                        </td>
-                        <td className="py-3 px-4 text-right">
-                          <div className="flex items-center justify-end gap-2">
-                            {/* Troca de Papel */}
-                            {!isRootAdmin && !isSelf ? (
-                              <Select
-                                value={u.role}
-                                disabled={alterandoPapelId === u.id}
-                                onValueChange={(val: 'admin' | 'analista') =>
-                                  handleAlterarPapel(u.id, val)
-                                }
-                              >
-                                <SelectTrigger className="h-8 w-[140px] text-xs">
-                                  <SelectValue />
-                                </SelectTrigger>
-                                <SelectContent>
-                                  <SelectItem value="admin">Administrador</SelectItem>
-                                  <SelectItem value="analista">Analista</SelectItem>
-                                </SelectContent>
-                              </Select>
-                            ) : (
-                              <span className="text-[11px] text-slate-400 italic px-2">
-                                {isRootAdmin ? 'Admin Permanente' : 'Sua Conta'}
-                              </span>
-                            )}
+                          </td>
+                          <td className="py-3 px-4 text-slate-500 text-xs">
+                            {u.created ? new Date(u.created).toLocaleDateString('pt-BR') : '—'}
+                          </td>
+                          <td className="py-3 px-4 text-right">
+                            <div className="flex items-center justify-end gap-2">
+                              {/* Troca de Papel */}
+                              {!isRootAdmin && !isSelf ? (
+                                <Select
+                                  value={u.role}
+                                  disabled={alterandoPapelId === u.id}
+                                  onValueChange={(val: 'admin' | 'analista') =>
+                                    handleAlterarPapel(u.id, val)
+                                  }
+                                >
+                                  <SelectTrigger className="h-8 w-[140px] text-xs">
+                                    <SelectValue />
+                                  </SelectTrigger>
+                                  <SelectContent>
+                                    <SelectItem value="admin">Administrador</SelectItem>
+                                    <SelectItem value="analista">Analista</SelectItem>
+                                  </SelectContent>
+                                </Select>
+                              ) : (
+                                <span className="text-[11px] text-slate-400 italic px-2">
+                                  {isRootAdmin ? 'Admin Permanente' : 'Sua Conta'}
+                                </span>
+                              )}
 
-                            {/* Excluir usuário */}
-                            {!isRootAdmin && !isSelf && (
-                              <Button
-                                variant="ghost"
-                                size="sm"
-                                onClick={() =>
-                                  setItemParaExcluir({
-                                    tipo: 'usuario',
-                                    id: u.id,
-                                    nome: u.name || u.email,
-                                    email: u.email,
-                                  })
-                                }
-                                className="h-8 w-8 p-0 text-red-600 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-950/50"
-                                title="Excluir Usuário"
-                              >
-                                <Trash2 className="w-4 h-4" />
-                              </Button>
-                            )}
-                          </div>
-                        </td>
-                      </tr>
-                    )
-                  })
-                )}
-              </tbody>
-            </table>
+                              {/* Excluir usuário */}
+                              {!isRootAdmin && !isSelf && (
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  onClick={() =>
+                                    setItemParaExcluir({
+                                      tipo: 'usuario',
+                                      id: u.id,
+                                      nome: u.name || u.email,
+                                      email: u.email,
+                                    })
+                                  }
+                                  className="h-8 w-8 p-0 text-red-600 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-950/50"
+                                  title="Excluir Usuário"
+                                >
+                                  <Trash2 className="w-4 h-4" />
+                                </Button>
+                              )}
+                            </div>
+                          </td>
+                        </tr>
+                      )
+                    })
+                  )}
+                </tbody>
+              </table>
+            </ScrollableTable>
           </div>
         </TabsContent>
 
         {/* Tabela de Convites Pendentes */}
         <TabsContent value="convites" className="space-y-4 pt-2">
-          <div className="rounded-md border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 overflow-x-auto shadow-sm">
-            <table className="w-full text-sm text-left">
-              <thead className="bg-slate-50 dark:bg-slate-800/60 text-slate-700 dark:text-slate-300 border-b border-slate-200 dark:border-slate-800 font-medium">
-                <tr>
-                  <th className="py-3 px-4">Convidado</th>
-                  <th className="py-3 px-4">E-mail</th>
-                  <th className="py-3 px-4">Papel Atribuído</th>
-                  <th className="py-3 px-4">Status</th>
-                  <th className="py-3 px-4">Enviado em</th>
-                  <th className="py-3 px-4 text-right">Ações</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
-                {carregando ? (
+          <div className="rounded-md border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-sm">
+            <ScrollableTable>
+              <table className="w-full text-sm text-left">
+                <thead className="bg-slate-50 dark:bg-slate-800/60 text-slate-700 dark:text-slate-300 border-b border-slate-200 dark:border-slate-800 font-medium">
                   <tr>
-                    <td colSpan={6} className="py-8 text-center text-slate-500">
-                      <RefreshCw className="w-6 h-6 animate-spin mx-auto mb-2 text-emerald-600" />
-                      Carregando convites pendentes...
-                    </td>
+                    <th className="py-3 px-4">Convidado</th>
+                    <th className="py-3 px-4">E-mail</th>
+                    <th className="py-3 px-4">Papel Atribuído</th>
+                    <th className="py-3 px-4">Status</th>
+                    <th className="py-3 px-4">Enviado em</th>
+                    <th className="py-3 px-4 text-right">Ações</th>
                   </tr>
-                ) : convitesFiltrados.length === 0 ? (
-                  <tr>
-                    <td colSpan={6} className="py-8 text-center text-slate-500">
-                      Nenhum convite pendente no momento. Utilize o botão "Convidar Usuário" acima
-                      para adicionar membros.
-                    </td>
-                  </tr>
-                ) : (
-                  convitesFiltrados.map((c) => (
-                    <tr key={c.id} className="hover:bg-slate-50/50 dark:hover:bg-slate-800/30">
-                      <td className="py-3 px-4 font-medium text-slate-900 dark:text-slate-100">
-                        {c.nome || 'Convidado'}
-                      </td>
-                      <td className="py-3 px-4 text-slate-600 dark:text-slate-300 font-mono text-xs">
-                        {c.email}
-                      </td>
-                      <td className="py-3 px-4">
-                        {c.role === 'admin' ? (
-                          <Badge className="bg-emerald-600 text-white font-medium text-[11px]">
-                            Administrador
-                          </Badge>
-                        ) : (
-                          <Badge variant="secondary" className="font-medium text-[11px]">
-                            Analista
-                          </Badge>
-                        )}
-                      </td>
-                      <td className="py-3 px-4">
-                        <Badge
-                          variant="outline"
-                          className="border-amber-300 text-amber-700 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/40 text-[11px] gap-1"
-                        >
-                          <Clock className="w-3 h-3" />
-                          Aguardando Acesso
-                        </Badge>
-                      </td>
-                      <td className="py-3 px-4 text-slate-500 text-xs">
-                        {c.created ? new Date(c.created).toLocaleDateString('pt-BR') : '—'}
-                      </td>
-                      <td className="py-3 px-4 text-right">
-                        <div className="flex items-center justify-end gap-2">
-                          {c.link_definicao_senha && (
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              className="h-8 gap-1 text-xs"
-                              onClick={() => {
-                                const urlCompleta = window.location.origin + c.link_definicao_senha
-                                copiarParaTransferencia(urlCompleta, 'Link de acesso')
-                              }}
-                              title="Copiar link de primeiro acesso"
-                            >
-                              <Copy className="w-3.5 h-3.5" />
-                              Copiar Link
-                            </Button>
-                          )}
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() =>
-                              setItemParaExcluir({
-                                tipo: 'convite',
-                                id: c.id,
-                                nome: c.nome || c.email,
-                                email: c.email,
-                              })
-                            }
-                            className="h-8 w-8 p-0 text-red-600 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-950/50"
-                            title="Cancelar Convite"
-                          >
-                            <Trash2 className="w-4 h-4" />
-                          </Button>
-                        </div>
+                </thead>
+                <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+                  {carregando ? (
+                    <tr>
+                      <td colSpan={6} className="py-8 text-center text-slate-500">
+                        <RefreshCw className="w-6 h-6 animate-spin mx-auto mb-2 text-emerald-600" />
+                        Carregando convites pendentes...
                       </td>
                     </tr>
-                  ))
-                )}
-              </tbody>
-            </table>
+                  ) : convitesFiltrados.length === 0 ? (
+                    <tr>
+                      <td colSpan={6} className="py-8 text-center text-slate-500">
+                        Nenhum convite pendente no momento. Utilize o botão "Convidar Usuário" acima
+                        para adicionar membros.
+                      </td>
+                    </tr>
+                  ) : (
+                    convitesFiltrados.map((c) => (
+                      <tr key={c.id} className="hover:bg-slate-50/50 dark:hover:bg-slate-800/30">
+                        <td className="py-3 px-4 font-medium text-slate-900 dark:text-slate-100">
+                          {c.nome || 'Convidado'}
+                        </td>
+                        <td className="py-3 px-4 text-slate-600 dark:text-slate-300 font-mono text-xs">
+                          {c.email}
+                        </td>
+                        <td className="py-3 px-4">
+                          {c.role === 'admin' ? (
+                            <Badge className="bg-emerald-600 text-white font-medium text-[11px]">
+                              Administrador
+                            </Badge>
+                          ) : (
+                            <Badge variant="secondary" className="font-medium text-[11px]">
+                              Analista
+                            </Badge>
+                          )}
+                        </td>
+                        <td className="py-3 px-4">
+                          <Badge
+                            variant="outline"
+                            className="border-amber-300 text-amber-700 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/40 text-[11px] gap-1"
+                          >
+                            <Clock className="w-3 h-3" />
+                            Aguardando Acesso
+                          </Badge>
+                        </td>
+                        <td className="py-3 px-4 text-slate-500 text-xs">
+                          {c.created ? new Date(c.created).toLocaleDateString('pt-BR') : '—'}
+                        </td>
+                        <td className="py-3 px-4 text-right">
+                          <div className="flex items-center justify-end gap-2">
+                            {c.link_definicao_senha && (
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                className="h-8 gap-1 text-xs"
+                                onClick={() => {
+                                  const urlCompleta =
+                                    window.location.origin + c.link_definicao_senha
+                                  copiarParaTransferencia(urlCompleta, 'Link de acesso')
+                                }}
+                                title="Copiar link de primeiro acesso"
+                              >
+                                <Copy className="w-3.5 h-3.5" />
+                                Copiar Link
+                              </Button>
+                            )}
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() =>
+                                setItemParaExcluir({
+                                  tipo: 'convite',
+                                  id: c.id,
+                                  nome: c.nome || c.email,
+                                  email: c.email,
+                                })
+                              }
+                              className="h-8 w-8 p-0 text-red-600 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-950/50"
+                              title="Cancelar Convite"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </Button>
+                          </div>
+                        </td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            </ScrollableTable>
           </div>
         </TabsContent>
       </Tabs>

@@ -29,6 +29,7 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table'
+import { ScrollableTable } from '@/components/ScrollableTable'
 import type {
   ItemRelatorioIntegracao,
   ContadoresDesfecho,
@@ -477,7 +478,7 @@ export function PainelRelatorioIntegracao({
 
           {/* TABELA PAGINADA DE ITENS */}
           <div className="border border-[#DCE5DC] rounded-xl overflow-hidden bg-white shadow-sm">
-            <div className="overflow-x-auto">
+            <ScrollableTable>
               <Table>
                 <TableHeader>
                   <TableRow className="bg-[#FAFBF9]">
@@ -541,7 +542,7 @@ export function PainelRelatorioIntegracao({
                   )}
                 </TableBody>
               </Table>
-            </div>
+            </ScrollableTable>
 
             {/* Paginação */}
             <div className="flex items-center justify-between px-4 py-3 bg-[#FAFBF9] border-t border-[#DCE5DC] text-xs">

@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { ShieldAlert, CheckCircle2, XCircle, Percent, Clock, Loader2 } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
+import { ScrollableTable } from '@/components/ScrollableTable'
 import { Badge } from '@/components/ui/badge'
 import { Progress } from '@/components/ui/progress'
 import { listarLogValidacoes } from '@/services/agroService'
@@ -227,7 +228,7 @@ export function Travas() {
             Registro imutável das análises realizadas para fins de compliance fiscal e agrônomo
           </CardDescription>
         </CardHeader>
-        <div className="overflow-x-auto">
+        <ScrollableTable>
           <table className="w-full text-xs">
             <thead>
               <tr className="bg-[#F5F7F1] border-b border-[#DCE5DC] text-left text-[#5A6D5A]">
@@ -292,7 +293,7 @@ export function Travas() {
               )}
             </tbody>
           </table>
-        </div>
+        </ScrollableTable>
       </Card>
     </div>
   )

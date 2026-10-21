@@ -18,6 +18,7 @@ import {
   Package,
 } from 'lucide-react'
 import { Card } from '@/components/ui/card'
+import { ScrollableTable } from '@/components/ScrollableTable'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Badge } from '@/components/ui/badge'
@@ -569,7 +570,7 @@ export function PrincipiosAtivos() {
 
       {/* Tabela da Matriz Canônica */}
       <Card className="rounded-2xl border-[#DCE5DC] bg-white shadow-sm overflow-hidden">
-        <div className="overflow-x-auto">
+        <ScrollableTable>
           <table className="w-full text-xs">
             <thead>
               <tr className="bg-[#F5F7F1] border-b border-[#DCE5DC] text-left text-[#5A6D5A]">
@@ -893,7 +894,7 @@ export function PrincipiosAtivos() {
               )}
             </tbody>
           </table>
-        </div>
+        </ScrollableTable>
 
         {/* Paginação */}
         {totalPages > 1 && (

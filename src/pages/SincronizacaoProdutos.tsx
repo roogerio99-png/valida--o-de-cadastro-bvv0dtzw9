@@ -36,6 +36,7 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table'
+import { ScrollableTable } from '@/components/ScrollableTable'
 import { useToast } from '@/hooks/use-toast'
 import {
   executarSincronizacaoProdutos,
@@ -740,151 +741,156 @@ export function SincronizacaoProdutos() {
               </p>
             </div>
           ) : (
-            <Table>
-              <TableHeader>
-                <TableRow className="bg-[#FAFBF9]">
-                  <TableHead className="w-10"></TableHead>
-                  <TableHead>Data e Horário</TableHead>
-                  <TableHead>Fontes Executadas</TableHead>
-                  <TableHead>Auto-Inclusão</TableHead>
-                  <TableHead className="text-right">Total Baixado</TableHead>
-                  <TableHead className="text-right">Novos Cadastrados</TableHead>
-                  <TableHead className="text-right">Duplicidade Evitada</TableHead>
-                  <TableHead className="text-right">Duração</TableHead>
-                  <TableHead>Status Geral</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {historico.map((h) => {
-                  const fontes = safeParseJson<string[]>(h.fontes_executadas, [])
-                  const detalhes = safeParseJson<DetalheFonteSincronizacao[]>(h.detalhes_fontes, [])
-                  const isExpanded = detalheExpandido === h.id
+            <ScrollableTable>
+              <Table>
+                <TableHeader>
+                  <TableRow className="bg-[#FAFBF9]">
+                    <TableHead className="w-10"></TableHead>
+                    <TableHead>Data e Horário</TableHead>
+                    <TableHead>Fontes Executadas</TableHead>
+                    <TableHead>Auto-Inclusão</TableHead>
+                    <TableHead className="text-right">Total Baixado</TableHead>
+                    <TableHead className="text-right">Novos Cadastrados</TableHead>
+                    <TableHead className="text-right">Duplicidade Evitada</TableHead>
+                    <TableHead className="text-right">Duração</TableHead>
+                    <TableHead>Status Geral</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {historico.map((h) => {
+                    const fontes = safeParseJson<string[]>(h.fontes_executadas, [])
+                    const detalhes = safeParseJson<DetalheFonteSincronizacao[]>(
+                      h.detalhes_fontes,
+                      [],
+                    )
+                    const isExpanded = detalheExpandido === h.id
 
-                  return (
-                    <React.Fragment key={h.id}>
-                      <TableRow
-                        className="cursor-pointer hover:bg-emerald-50/30 transition-colors"
-                        onClick={() => setDetalheExpandido(isExpanded ? null : h.id)}
-                      >
-                        <TableCell>
-                          {isExpanded ? (
-                            <ChevronDown className="w-4 h-4 text-emerald-700" />
-                          ) : (
-                            <ChevronRight className="w-4 h-4 text-gray-400" />
-                          )}
-                        </TableCell>
-                        <TableCell className="font-medium text-xs text-[#1C2B1C]">
-                          {new Date(h.created).toLocaleString('pt-BR')}
-                        </TableCell>
-                        <TableCell>
-                          <div className="flex flex-wrap gap-1">
-                            {fontes.map((f, i) => (
-                              <Badge key={i} variant="outline" className="text-[10px]">
-                                {f.replace('AGROFIT_', '')}
-                              </Badge>
-                            ))}
-                          </div>
-                        </TableCell>
-                        <TableCell>
-                          {h.auto_inclusao ? (
-                            <Badge className="bg-emerald-100 text-emerald-800 border-emerald-300 text-[10px]">
-                              Ativa
-                            </Badge>
-                          ) : (
-                            <Badge variant="outline" className="text-gray-500 text-[10px]">
-                              Desativada
-                            </Badge>
-                          )}
-                        </TableCell>
-                        <TableCell className="text-right font-mono text-xs">
-                          {h.total_baixado}
-                        </TableCell>
-                        <TableCell className="text-right font-mono text-xs font-bold text-emerald-700">
-                          {h.novos_cadastrados}
-                        </TableCell>
-                        <TableCell className="text-right font-mono text-xs text-amber-700">
-                          {h.ignorados_duplicidade}
-                        </TableCell>
-                        <TableCell className="text-right font-mono text-xs text-[#5A6D5A]">
-                          {(h.duracao_ms / 1000).toFixed(1)}s
-                        </TableCell>
-                        <TableCell>
-                          {h.status_geral === 'concluido' ? (
-                            <Badge className="bg-emerald-100 text-emerald-800 border-emerald-300 text-[10px]">
-                              Concluído
-                            </Badge>
-                          ) : h.status_geral === 'parcial' ? (
-                            <Badge className="bg-amber-100 text-amber-800 border-amber-300 text-[10px]">
-                              Parcial
-                            </Badge>
-                          ) : (
-                            <Badge className="bg-red-100 text-red-800 border-red-300 text-[10px]">
-                              Falha Total
-                            </Badge>
-                          )}
-                        </TableCell>
-                      </TableRow>
-
-                      {/* Linha expandida com detalhes das fontes e botão de reabrir relatório */}
-                      {isExpanded && (
-                        <TableRow className="bg-[#FAFBF9]/80">
-                          <TableCell colSpan={9} className="p-4">
-                            <div className="space-y-4">
-                              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-2 border-b border-[#DCE5DC]">
-                                <div>
-                                  <p className="text-xs font-bold text-[#1C2B1C]">
-                                    Detalhamento por Fonte Governamental na Execução
-                                  </p>
-                                  <p className="text-[11px] text-[#5A6D5A]">
-                                    Clique no botão ao lado para abrir o Relatório de Integração
-                                    completo item a item gravado nesta sincronização.
-                                  </p>
-                                </div>
-                                <Button
-                                  size="sm"
-                                  onClick={(e) => {
-                                    e.stopPropagation()
-                                    handleAbrirRelatorioHistorico(h)
-                                  }}
-                                  className="bg-[#1B5E20] hover:bg-[#2E7D32] text-white text-xs h-8 flex items-center gap-1.5 shadow-sm font-semibold"
-                                >
-                                  <FileSpreadsheet className="w-3.5 h-3.5" />
-                                  Abrir Relatório de Integração desta Execução
-                                </Button>
-                              </div>
-
-                              <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-                                {detalhes.map((df, dfIdx) => (
-                                  <div
-                                    key={dfIdx}
-                                    className="p-3 rounded-lg border border-[#DCE5DC] bg-white text-xs space-y-1.5"
-                                  >
-                                    <div className="flex items-center justify-between">
-                                      <span className="font-bold text-[#1C2B1C]">{df.nome}</span>
-                                      {renderStatusFonte(df.status)}
-                                    </div>
-                                    <p className="text-[11px] text-[#5A6D5A]">{df.mensagem}</p>
-                                    <div className="pt-2 border-t border-[#DCE5DC]/60 flex items-center justify-between font-mono text-[11px]">
-                                      <span>Baixados: {df.total_baixado}</span>
-                                      <span className="text-emerald-700 font-bold">
-                                        Novos: {df.novos_cadastrados}
-                                      </span>
-                                      <span className="text-amber-700">
-                                        Ignorados: {df.ignorados_duplicidade}
-                                      </span>
-                                    </div>
-                                  </div>
-                                ))}
-                              </div>
+                    return (
+                      <React.Fragment key={h.id}>
+                        <TableRow
+                          className="cursor-pointer hover:bg-emerald-50/30 transition-colors"
+                          onClick={() => setDetalheExpandido(isExpanded ? null : h.id)}
+                        >
+                          <TableCell>
+                            {isExpanded ? (
+                              <ChevronDown className="w-4 h-4 text-emerald-700" />
+                            ) : (
+                              <ChevronRight className="w-4 h-4 text-gray-400" />
+                            )}
+                          </TableCell>
+                          <TableCell className="font-medium text-xs text-[#1C2B1C]">
+                            {new Date(h.created).toLocaleString('pt-BR')}
+                          </TableCell>
+                          <TableCell>
+                            <div className="flex flex-wrap gap-1">
+                              {fontes.map((f, i) => (
+                                <Badge key={i} variant="outline" className="text-[10px]">
+                                  {f.replace('AGROFIT_', '')}
+                                </Badge>
+                              ))}
                             </div>
                           </TableCell>
+                          <TableCell>
+                            {h.auto_inclusao ? (
+                              <Badge className="bg-emerald-100 text-emerald-800 border-emerald-300 text-[10px]">
+                                Ativa
+                              </Badge>
+                            ) : (
+                              <Badge variant="outline" className="text-gray-500 text-[10px]">
+                                Desativada
+                              </Badge>
+                            )}
+                          </TableCell>
+                          <TableCell className="text-right font-mono text-xs">
+                            {h.total_baixado}
+                          </TableCell>
+                          <TableCell className="text-right font-mono text-xs font-bold text-emerald-700">
+                            {h.novos_cadastrados}
+                          </TableCell>
+                          <TableCell className="text-right font-mono text-xs text-amber-700">
+                            {h.ignorados_duplicidade}
+                          </TableCell>
+                          <TableCell className="text-right font-mono text-xs text-[#5A6D5A]">
+                            {(h.duracao_ms / 1000).toFixed(1)}s
+                          </TableCell>
+                          <TableCell>
+                            {h.status_geral === 'concluido' ? (
+                              <Badge className="bg-emerald-100 text-emerald-800 border-emerald-300 text-[10px]">
+                                Concluído
+                              </Badge>
+                            ) : h.status_geral === 'parcial' ? (
+                              <Badge className="bg-amber-100 text-amber-800 border-amber-300 text-[10px]">
+                                Parcial
+                              </Badge>
+                            ) : (
+                              <Badge className="bg-red-100 text-red-800 border-red-300 text-[10px]">
+                                Falha Total
+                              </Badge>
+                            )}
+                          </TableCell>
                         </TableRow>
-                      )}
-                    </React.Fragment>
-                  )
-                })}
-              </TableBody>
-            </Table>
+
+                        {/* Linha expandida com detalhes das fontes e botão de reabrir relatório */}
+                        {isExpanded && (
+                          <TableRow className="bg-[#FAFBF9]/80">
+                            <TableCell colSpan={9} className="p-4">
+                              <div className="space-y-4">
+                                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-2 border-b border-[#DCE5DC]">
+                                  <div>
+                                    <p className="text-xs font-bold text-[#1C2B1C]">
+                                      Detalhamento por Fonte Governamental na Execução
+                                    </p>
+                                    <p className="text-[11px] text-[#5A6D5A]">
+                                      Clique no botão ao lado para abrir o Relatório de Integração
+                                      completo item a item gravado nesta sincronização.
+                                    </p>
+                                  </div>
+                                  <Button
+                                    size="sm"
+                                    onClick={(e) => {
+                                      e.stopPropagation()
+                                      handleAbrirRelatorioHistorico(h)
+                                    }}
+                                    className="bg-[#1B5E20] hover:bg-[#2E7D32] text-white text-xs h-8 flex items-center gap-1.5 shadow-sm font-semibold"
+                                  >
+                                    <FileSpreadsheet className="w-3.5 h-3.5" />
+                                    Abrir Relatório de Integração desta Execução
+                                  </Button>
+                                </div>
+
+                                <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                                  {detalhes.map((df, dfIdx) => (
+                                    <div
+                                      key={dfIdx}
+                                      className="p-3 rounded-lg border border-[#DCE5DC] bg-white text-xs space-y-1.5"
+                                    >
+                                      <div className="flex items-center justify-between">
+                                        <span className="font-bold text-[#1C2B1C]">{df.nome}</span>
+                                        {renderStatusFonte(df.status)}
+                                      </div>
+                                      <p className="text-[11px] text-[#5A6D5A]">{df.mensagem}</p>
+                                      <div className="pt-2 border-t border-[#DCE5DC]/60 flex items-center justify-between font-mono text-[11px]">
+                                        <span>Baixados: {df.total_baixado}</span>
+                                        <span className="text-emerald-700 font-bold">
+                                          Novos: {df.novos_cadastrados}
+                                        </span>
+                                        <span className="text-amber-700">
+                                          Ignorados: {df.ignorados_duplicidade}
+                                        </span>
+                                      </div>
+                                    </div>
+                                  ))}
+                                </div>
+                              </div>
+                            </TableCell>
+                          </TableRow>
+                        )}
+                      </React.Fragment>
+                    )
+                  })}
+                </TableBody>
+              </Table>
+            </ScrollableTable>
           )}
         </CardContent>
       </Card>
