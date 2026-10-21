@@ -1,5 +1,11 @@
-import React, { useEffect, useState, useTransition, useRef, useCallback } from 'react'
+import React, { useEffect, useState, useRef, useCallback, useTransition } from 'react'
 import {
+  MessageSquare,
+  Send,
+  Sparkles,
+  Bot,
+  User,
+  RotateCcw,
   Scale,
   Search,
   Download,
@@ -7,21 +13,23 @@ import {
   ChevronDown,
   ChevronUp,
   ExternalLink,
-  Info,
   Layers,
-  Sparkles,
   Calendar,
   Percent,
   CheckCircle2,
-  AlertCircle,
   FileSpreadsheet,
   Package,
+  History,
+  Plus,
+  BookOpen,
 } from 'lucide-react'
 import { Card, CardContent } from '@/components/ui/card'
-import { ScrollableTable } from '@/components/ScrollableTable'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import { Textarea } from '@/components/ui/textarea'
 import { Badge } from '@/components/ui/badge'
+import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
+import { ScrollableTable } from '@/components/ScrollableTable'
 import {
   Select,
   SelectContent,
@@ -30,9 +38,33 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { toast } from '@/hooks/use-toast'
+import pb from '@/lib/pocketbase/client'
+import {
+  streamAgentChat,
+  displayableMessages,
+  type AgentMessage,
+  type DisplayMessage,
+  type AgentCitation,
+} from '@/lib/skipAi'
 import { listarBaseMestre } from '@/services/agroService'
 import { formatarNcmMascara, sanitizarRegistroMapa } from '@/lib/motorCanonico'
 import type { BaseMestreProduto } from '@/types/agro'
+
+// Sugestões de perguntas pré-configuradas para o usuário
+const SUGESTOES_PERGUNTAS = [
+  'Qual o enquadramento PIS/COFINS do ROUNDUP WG?',
+  'O que muda com a reoneração da LC 224/2025 em Abril/2026?',
+  'Como fica o IBS/CBS para defensivos agrícolas na LC 214/2025?',
+  'Qual NCM para herbicida formulado comercial em bombona de 20L?',
+  'Inoculante solubilizador de fósforo tem alíquota zero?',
+]
+
+interface ConversaItem {
+  id: string
+  title: string
+  created?: string
+  updated?: string
+}
 
 interface EnquadramentoInfo {
   categoria: 'Beneficiado' | 'Condicional' | 'Tributado'
@@ -50,7 +82,6 @@ function deduzirEnquadramentoFiscal(p: BaseMestreProduto): EnquadramentoInfo {
   const macro = (p.macro_grupo || '').toLowerCase()
   const sub = (p.sub_grupo || '').toLowerCase()
 
-  // 1. Condicional à destinação agrícola (Dec. 5.630/2005)
   if (
     statusStr.includes('condicional') ||
     statusStr.includes('5.630') ||
@@ -72,7 +103,6 @@ function deduzirEnquadramentoFiscal(p: BaseMestreProduto): EnquadramentoInfo {
     }
   }
 
-  // 2. Tributado Integralmente (fora do rol da Lei 10.925/04 ou SC COSIT)
   if (
     statusStr.includes('tributado') ||
     statusStr.includes('cosit') ||
@@ -93,7 +123,6 @@ function deduzirEnquadramentoFiscal(p: BaseMestreProduto): EnquadramentoInfo {
     }
   }
 
-  // 3. Beneficiado Alíquota Zero (Lei 10.925/2004) com reoneração residual LC 224/2025
   return {
     categoria: 'Beneficiado',
     rotuloCurto: 'Beneficiado',
@@ -109,17 +138,30 @@ function deduzirEnquadramentoFiscal(p: BaseMestreProduto): EnquadramentoInfo {
 }
 
 export function Tributacao() {
+  const [activeTab, setActiveTab] = useState<'chat' | 'tabela'>('chat')
+
+  // --- ESTADO DO CHAT IA ---
+  const [messages, setMessages] = useState<DisplayMessage[]>([])
+  const [inputMessage, setInputMessage] = useState('')
+  const [isSending, setIsSending] = useState(false)
+  const [streamingContent, setStreamingContent] = useState('')
+  const [conversationId, setConversationId] = useState<string | null>(() => {
+    return localStorage.getItem('agro_tax_active_conv') || null
+  })
+  const [conversasAnteriores, setConversasAnteriores] = useState<ConversaItem[]>([])
+  const [loadingConversas, setLoadingConversas] = useState(false)
+  const [showHistoryDrawer, setShowHistoryDrawer] = useState(false)
+  const messagesEndRef = useRef<HTMLDivElement>(null)
+  const abortControllerRef = useRef<AbortController | null>(null)
+  const textareaRef = useRef<HTMLTextAreaElement>(null)
+
+  // --- ESTADO DA TABELA PANORAMA (ABA SECUNDÁRIA) ---
   const [produtos, setProdutos] = useState<BaseMestreProduto[]>([])
-  const [loading, setLoading] = useState(true)
-  const [search, setSearch] = useState('')
+  const [loadingTabela, setLoadingTabela] = useState(false)
+  const [searchTabela, setSearchTabela] = useState('')
   const [filtroEnquadramento, setFiltroEnquadramento] = useState<string>('todos')
   const [filtroMacro, setFiltroMacro] = useState<string>('todos')
-  const [, startTransition] = useTransition()
-
-  // Expansão de linha para detalhe tributário
   const [expandedRowIds, setExpandedRowIds] = useState<Record<string, boolean>>({})
-
-  // Rolagem infinita contínua
   const [totalCount, setTotalCount] = useState(0)
   const [hasMore, setHasMore] = useState(false)
   const [loadingMore, setLoadingMore] = useState(false)
@@ -129,18 +171,201 @@ export function Tributacao() {
   const loadingInitialRef = useRef(false)
   const tableContainerRef = useRef<HTMLDivElement>(null)
   const sentinelRef = useRef<HTMLDivElement>(null)
+  const [, startTransition] = useTransition()
 
-  const toggleRowExpanded = (id: string) => {
-    setExpandedRowIds((prev) => ({
-      ...prev,
-      [id]: !prev[id],
-    }))
+  // Rolar suavemente para a última mensagem
+  const scrollToBottom = (behavior: ScrollBehavior = 'smooth') => {
+    messagesEndRef.current?.scrollIntoView({ behavior })
   }
 
+  useEffect(() => {
+    scrollToBottom('smooth')
+  }, [messages, streamingContent, isSending])
+
+  // Carregar histórico de conversas anteriores do usuário
+  const carregarConversas = useCallback(async () => {
+    try {
+      setLoadingConversas(true)
+      const res = await fetch(
+        `${import.meta.env.VITE_POCKETBASE_URL}/backend/v1/tributacao/conversas?limit=25`,
+        {
+          headers: {
+            Authorization: pb.authStore.token,
+          },
+        },
+      )
+      if (!res.ok) return
+      const data = await res.json()
+      if (data && Array.isArray(data.conversations)) {
+        setConversasAnteriores(data.conversations)
+      }
+    } catch (err) {
+      console.warn('Erro ao listar conversas anteriores:', err)
+    } finally {
+      setLoadingConversas(false)
+    }
+  }, [])
+
+  // Carregar mensagens de uma conversa específica
+  const carregarMensagensConversa = useCallback(async (convId: string) => {
+    try {
+      const res = await fetch(
+        `${import.meta.env.VITE_POCKETBASE_URL}/backend/v1/tributacao/conversas/${encodeURIComponent(convId)}/mensagens`,
+        {
+          headers: {
+            Authorization: pb.authStore.token,
+          },
+        },
+      )
+      if (!res.ok) return
+      const data = await res.json()
+      if (data && Array.isArray(data.messages)) {
+        const disp = displayableMessages(data.messages as AgentMessage[])
+        setMessages(disp)
+      }
+    } catch (err) {
+      console.warn('Erro ao carregar mensagens da conversa:', err)
+    }
+  }, [])
+
+  // Inicialização do Chat
+  useEffect(() => {
+    carregarConversas()
+    if (conversationId) {
+      carregarMensagensConversa(conversationId)
+    }
+  }, [carregarConversas, carregarMensagensConversa, conversationId])
+
+  // Nova conversa limpa
+  const handleNovaConversa = () => {
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort()
+      abortControllerRef.current = null
+    }
+    setConversationId(null)
+    localStorage.removeItem('agro_tax_active_conv')
+    setMessages([])
+    setStreamingContent('')
+    setIsSending(false)
+    textareaRef.current?.focus()
+  }
+
+  // Selecionar conversa do histórico
+  const handleSelecionarConversa = (convId: string) => {
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort()
+      abortControllerRef.current = null
+    }
+    setConversationId(convId)
+    localStorage.setItem('agro_tax_active_conv', convId)
+    setStreamingContent('')
+    setIsSending(false)
+    setShowHistoryDrawer(false)
+    carregarMensagensConversa(convId)
+  }
+
+  // Enviar mensagem para o Agente Nativo (Streaming SSE)
+  const handleSendMessage = async (msgToSend?: string) => {
+    const text = (msgToSend ?? inputMessage).trim()
+    if (!text || isSending) return
+
+    setInputMessage('')
+    setIsSending(true)
+    setStreamingContent('')
+
+    const tempUserMsgId = `user-${Date.now()}`
+    const userMsg: DisplayMessage = {
+      id: tempUserMsgId,
+      role: 'user',
+      content: text,
+      created: new Date().toISOString(),
+    }
+    setMessages((prev) => [...prev, userMsg])
+
+    const abortController = new AbortController()
+    abortControllerRef.current = abortController
+
+    try {
+      const res = await fetch(
+        `${import.meta.env.VITE_POCKETBASE_URL}/backend/v1/tributacao/chat-stream`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: pb.authStore.token,
+          },
+          body: JSON.stringify({
+            message: text,
+            conversation_id: conversationId,
+            title: text.slice(0, 50),
+          }),
+          signal: abortController.signal,
+        },
+      )
+
+      let latestCitations: AgentCitation[] | undefined = undefined
+
+      const result = await streamAgentChat(res, {
+        onChunk: (_delta, full) => {
+          setStreamingContent(full)
+        },
+        onCitations: (citations) => {
+          latestCitations = citations
+        },
+        signal: abortController.signal,
+      })
+
+      const newConvId = res.headers.get('X-Conversation-Id') || result.conversation_id
+      if (newConvId && newConvId !== conversationId) {
+        setConversationId(newConvId)
+        localStorage.setItem('agro_tax_active_conv', newConvId)
+        carregarConversas()
+      }
+
+      const assistantMsg: DisplayMessage = {
+        id: result.message_id || `assistant-${Date.now()}`,
+        role: 'assistant',
+        content: result.content,
+        citations: latestCitations || result.citations,
+        created: new Date().toISOString(),
+      }
+
+      setMessages((prev) => [...prev, assistantMsg])
+      setStreamingContent('')
+    } catch (err: unknown) {
+      if (err instanceof Error && err.name === 'AbortError') {
+        // Envio cancelado pelo usuário
+        return
+      }
+      console.error('Erro na resposta do agente tributário:', err)
+      toast({
+        variant: 'destructive',
+        title: 'Falha na resposta do assistente',
+        description:
+          err instanceof Error
+            ? err.message
+            : 'Não foi possível obter resposta agora. Tente novamente.',
+      })
+    } finally {
+      setIsSending(false)
+      abortControllerRef.current = null
+      textareaRef.current?.focus()
+    }
+  }
+
+  // Interceptar Enter (sem shift) no textarea
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault()
+      handleSendMessage()
+    }
+  }
+
+  // --- CARREGAMENTO DA TABELA PANORAMA (SEGUNDA ABA) ---
   const buildFilterString = useCallback(() => {
     const filters: string[] = []
-    if (search.trim()) {
-      const clean = search.trim().replace(/'/g, "\\'")
+    if (searchTabela.trim()) {
+      const clean = searchTabela.trim().replace(/'/g, "\\'")
       filters.push(
         `(nome_completo ~ '${clean}' || marca_padronizada ~ '${clean}' || ncm_padrao ~ '${clean}' || principio_ativo ~ '${clean}' || registro_mapa ~ '${clean}' || titular_fabricante ~ '${clean}')`,
       )
@@ -158,11 +383,11 @@ export function Tributacao() {
       }
     }
     return filters.join(' && ')
-  }, [search, filtroMacro, filtroEnquadramento])
+  }, [searchTabela, filtroMacro, filtroEnquadramento])
 
   const carregarProdutos = useCallback(async () => {
     loadingInitialRef.current = true
-    setLoading(true)
+    setLoadingTabela(true)
     pageRef.current = 1
     try {
       const filterStr = buildFilterString()
@@ -179,14 +404,9 @@ export function Tributacao() {
       hasMoreRef.current = more
     } catch (err) {
       console.error('Erro ao carregar produtos na Tributação Agro:', err)
-      toast({
-        variant: 'destructive',
-        title: 'Erro ao carregar dados',
-        description: 'Não foi possível carregar a base de tributação dos produtos.',
-      })
     } finally {
       loadingInitialRef.current = false
-      setLoading(false)
+      setLoadingTabela(false)
     }
   }, [buildFilterString])
 
@@ -222,32 +442,19 @@ export function Tributacao() {
   }, [buildFilterString])
 
   useEffect(() => {
-    carregarProdutos()
-  }, [carregarProdutos])
+    if (activeTab === 'tabela' && produtos.length === 0) {
+      carregarProdutos()
+    }
+  }, [activeTab, produtos.length, carregarProdutos])
 
-  // Sentinel com IntersectionObserver para rolagem infinita contínua
-  useEffect(() => {
-    const sentinel = sentinelRef.current
-    if (!sentinel) return
+  const toggleRowExpanded = (id: string) => {
+    setExpandedRowIds((prev) => ({
+      ...prev,
+      [id]: !prev[id],
+    }))
+  }
 
-    const observer = new IntersectionObserver(
-      (entries) => {
-        if (entries[0]?.isIntersecting) {
-          carregarMaisProdutos()
-        }
-      },
-      {
-        root: tableContainerRef.current,
-        rootMargin: '250px',
-        threshold: 0,
-      },
-    )
-
-    observer.observe(sentinel)
-    return () => observer.disconnect()
-  }, [carregarMaisProdutos, produtos.length])
-
-  // Exportação CSV segura (somente leitura)
+  // Exportação CSV segura
   const handleExportCSV = () => {
     if (produtos.length === 0) {
       toast({ title: 'Aviso', description: 'Nenhum produto exibido para exportar.' })
@@ -261,19 +468,12 @@ export function Tributacao() {
       'Principio_Ativo',
       'Macro_Grupo',
       'NCM_Padrao',
-      'NCM_Faixa1_Ate_300g',
-      'NCM_Faixa2_300g_a_7_5kg',
-      'NCM_Faixa3_7_5kg_a_10kg',
-      'NCM_Faixa4_Acima_10kg',
-      'NCM_Granel_Tecnico',
-      'Regra_TIPI',
       'Enquadramento_PIS_COFINS',
-      'CST_Recomendado_Saida',
-      'CST_Entrada_Revenda',
-      'Aliquota_Vigente_Hoje_PIS_COFINS',
+      'CST_Saida',
+      'Aliquota_Hoje',
       'Aliquota_Pos_Abr2026_Real',
       'Aliquota_Pos_Abr2026_Presumido',
-      'Transicao_IBS_CBS_LC214_2025',
+      'IBS_CBS_2027',
       'Titular_Fabricante',
     ]
 
@@ -281,25 +481,18 @@ export function Tributacao() {
       const enq = deduzirEnquadramentoFiscal(p)
       const ncmPadrao = p.ncm_padrao || p.ncm || ''
       return [
-        `"${(p.nome_completo || p.nome_produto || '').replace(/"/g, '""')}"`,
+        `"${(p.nome_completo || p.marca_padronizada || p.nome_produto || '').replace(/"/g, '""')}"`,
         `"${(p.marca_padronizada || p.nome_produto || '').replace(/"/g, '""')}"`,
         `"${sanitizarRegistroMapa(p.registro_mapa)}"`,
         `"${(p.principio_ativo || '').replace(/"/g, '""')}"`,
         `"${(p.macro_grupo || 'Defensivos').replace(/"/g, '""')}"`,
         `"${formatarNcmMascara(ncmPadrao)}"`,
-        `"${formatarNcmMascara(p.ncm_faixa1_ate_300g || ncmPadrao)}"`,
-        `"${formatarNcmMascara(p.ncm_faixa2_300g_a_7_5kg || ncmPadrao)}"`,
-        `"${formatarNcmMascara(p.ncm_faixa3_7_5kg_a_10kg || ncmPadrao)}"`,
-        `"${formatarNcmMascara(p.ncm_faixa4_acima_10kg || ncmPadrao)}"`,
-        `"${formatarNcmMascara(p.ncm_faixa4_acima_10kg || ncmPadrao)}"`,
-        `"${(p.regra_tipi || '').replace(/"/g, '""')}"`,
         `"${enq.categoria}"`,
         `"${enq.cstSugerido}"`,
-        `"${p.cst_entrada || 'CST 73'}"`,
         `"${enq.aliquotaHoje}"`,
         `"${enq.aliquotaPosAbr2026Real}"`,
         `"${enq.aliquotaPosAbr2026Presumido}"`,
-        `"${(p.ibs_cbs_2027 || 'Redução de 60% + Diferimento (LC 214/2025)').replace(/"/g, '""')}"`,
+        `"${(p.ibs_cbs_2027 || 'Redução de 60% + Diferimento').replace(/"/g, '""')}"`,
         `"${(p.titular_fabricante || p.fabricante || '').replace(/"/g, '""')}"`,
       ].join(';')
     })
@@ -309,7 +502,7 @@ export function Tributacao() {
     const url = URL.createObjectURL(blob)
     const link = document.createElement('a')
     link.href = url
-    link.download = `tributacao_agro_produtos_${new Date().toISOString().slice(0, 10)}.csv`
+    link.download = `tributacao_agro_panorama_${new Date().toISOString().slice(0, 10)}.csv`
     document.body.appendChild(link)
     link.click()
     document.body.removeChild(link)
@@ -317,590 +510,674 @@ export function Tributacao() {
 
     toast({
       title: 'Relatório Exportado',
-      description: `CSV de panorama tributário com ${produtos.length} produtos gerado com sucesso.`,
+      description: `CSV gerado com sucesso contendo ${produtos.length} produtos.`,
     })
   }
 
   return (
-    <div className="flex-1 flex flex-col space-y-4 min-h-0 animate-in fade-in duration-200">
+    <div className="flex-1 flex flex-col min-h-0 space-y-3 animate-in fade-in duration-200">
       {/* ------------------------------------------------------------------ */}
-      {/* CABEÇALHO DA TELA DE CONSULTA TRIBUTÁRIA AGRO */}
+      {/* CABEÇALHO COM TABS: CHAT COM IA (PRINCIPAL) E PANORAMA (SECUNDÁRIO) */}
       {/* ------------------------------------------------------------------ */}
-      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 border-b border-[#DCE5DC] pb-2">
         <div>
-          <h2 className="text-xl font-bold text-[#1C2B1C] flex items-center gap-2">
-            <Scale className="w-6 h-6 text-[#1B5E20]" />
-            <span>Tributação Agro • Panorama Fiscal por Produto</span>
-          </h2>
-          <p className="text-xs text-[#5A6D5A] mt-0.5">
-            Consulta consolidada de enquadramento tributário dos produtos agropecuários da Base
-            Mestre: matriz TIPI por embalagem, PIS/COFINS temporal (Decreto nº 5.630/05 e LC nº
-            224/2025) e transição da Reforma Tributária IBS/CBS (LC nº 214/2025).
-          </p>
+          <div className="flex items-center gap-2">
+            <div className="w-8 h-8 rounded-xl bg-gradient-to-tr from-[#1B5E20] to-[#2E7D32] flex items-center justify-center text-white shadow-xs">
+              <Bot className="w-5 h-5 text-emerald-200" />
+            </div>
+            <div>
+              <h2 className="text-lg font-bold text-[#1C2B1C] flex items-center gap-2">
+                <span>Especialista em Tributação Agro</span>
+                <Badge className="bg-emerald-100 text-emerald-800 border-emerald-300 text-[10px] font-semibold py-0">
+                  Agente Nativo Skip Cloud
+                </Badge>
+              </h2>
+              <p className="text-xs text-[#5A6D5A]">
+                Converse sobre qualquer dúvida de tributação agrícola, PIS/COFINS, LC 224/2025,
+                IBS/CBS, TIPI ou consulte dados da Base Mestre.
+              </p>
+            </div>
+          </div>
         </div>
 
-        <div className="flex items-center gap-2 w-full sm:w-auto justify-end">
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={handleExportCSV}
-            className="text-xs h-9 border-[#DCE5DC] text-[#1C2B1C] hover:bg-emerald-50 hover:text-[#1B5E20]"
+        {/* Alternância de Abas: Chat IA (Foco) vs Tabela Panorama */}
+        <div className="flex items-center gap-2 w-full sm:w-auto justify-between sm:justify-end">
+          <Tabs
+            value={activeTab}
+            onValueChange={(v) => setActiveTab(v as 'chat' | 'tabela')}
+            className="w-auto"
           >
-            <Download className="w-3.5 h-3.5 mr-1.5 text-[#1B5E20]" />
-            <span>Exportar Panorama CSV</span>
-          </Button>
+            <TabsList className="bg-white border border-[#DCE5DC] p-0.5 h-9">
+              <TabsTrigger
+                value="chat"
+                className="text-xs data-[state=active]:bg-[#1B5E20] data-[state=active]:text-white data-[state=active]:font-semibold px-3 flex items-center gap-1.5"
+              >
+                <MessageSquare className="w-3.5 h-3.5" />
+                <span>Chat com IA</span>
+              </TabsTrigger>
+              <TabsTrigger
+                value="tabela"
+                className="text-xs data-[state=active]:bg-[#1B5E20] data-[state=active]:text-white data-[state=active]:font-semibold px-3 flex items-center gap-1.5"
+              >
+                <Scale className="w-3.5 h-3.5" />
+                <span>Tabela Panorama</span>
+              </TabsTrigger>
+            </TabsList>
+          </Tabs>
+
+          {activeTab === 'chat' && (
+            <div className="flex items-center gap-1.5">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setShowHistoryDrawer(!showHistoryDrawer)}
+                className="h-9 px-2.5 text-xs border-[#DCE5DC] text-[#1C2B1C] hover:bg-emerald-50"
+                title="Histórico de conversas"
+              >
+                <History className="w-3.5 h-3.5 mr-1 text-[#1B5E20]" />
+                <span className="hidden md:inline">Histórico</span>
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handleNovaConversa}
+                className="h-9 px-2.5 text-xs border-[#DCE5DC] text-[#1C2B1C] hover:bg-emerald-50"
+                title="Iniciar nova conversa"
+              >
+                <Plus className="w-3.5 h-3.5 mr-1 text-[#1B5E20]" />
+                <span className="hidden md:inline">Nova Conversa</span>
+              </Button>
+            </div>
+          )}
+
+          {activeTab === 'tabela' && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleExportCSV}
+              className="h-9 text-xs border-[#DCE5DC] text-[#1C2B1C] hover:bg-emerald-50 hover:text-[#1B5E20]"
+            >
+              <Download className="w-3.5 h-3.5 mr-1.5 text-[#1B5E20]" />
+              <span>Exportar CSV</span>
+            </Button>
+          )}
         </div>
       </div>
 
       {/* ------------------------------------------------------------------ */}
-      {/* CARDS RESUMO DO MOTOR TRIBUTÁRIO TEMPORAL */}
+      {/* ABA 1: CHAT COM O ASSISTENTE DE IA ESPECIALISTA (FOCO CENTRAL) */}
       {/* ------------------------------------------------------------------ */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-        <Card className="rounded-2xl border-[#DCE5DC] bg-white p-3.5 shadow-xs">
-          <div className="flex items-start gap-3">
-            <div className="w-8 h-8 rounded-xl bg-emerald-100 flex items-center justify-center text-[#1B5E20] flex-shrink-0">
-              <CheckCircle2 className="w-4 h-4 text-[#1B5E20]" />
-            </div>
-            <div className="flex-1 min-w-0">
-              <div className="flex items-center justify-between">
-                <span className="text-xs font-bold text-[#1C2B1C]">Regra Vigente HOJE</span>
-                <Badge className="bg-emerald-100 text-emerald-800 text-[10px] py-0">
-                  Até 31/Mar/26
-                </Badge>
+      {activeTab === 'chat' && (
+        <div className="flex-1 flex min-h-0 gap-3 relative">
+          {/* Painel lateral expansível com histórico de conversas (desktop/drawer) */}
+          {showHistoryDrawer && (
+            <div className="w-64 border border-[#DCE5DC] bg-white rounded-2xl p-3 flex flex-col flex-shrink-0 shadow-sm animate-in slide-in-from-left duration-150">
+              <div className="flex items-center justify-between pb-2 border-b border-[#DCE5DC] mb-2">
+                <span className="text-xs font-bold text-[#1C2B1C] flex items-center gap-1.5">
+                  <History className="w-3.5 h-3.5 text-[#1B5E20]" />
+                  Conversas Anteriores
+                </span>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={handleNovaConversa}
+                  className="h-7 px-2 text-[11px] text-[#1B5E20] hover:bg-emerald-50"
+                >
+                  <Plus className="w-3 h-3 mr-0.5" /> Nova
+                </Button>
               </div>
-              <p className="text-[11px] text-[#5A6D5A] mt-1 leading-snug">
-                <strong>Alíquota 0,00%</strong> de PIS/COFINS para insumos e defensivos agrícolas
-                (Lei nº 10.925/2004) ou condicionado à destinação (Dec. 5.630/05).
-              </p>
-            </div>
-          </div>
-        </Card>
-
-        <Card className="rounded-2xl border-amber-200 bg-amber-50/40 p-3.5 shadow-xs">
-          <div className="flex items-start gap-3">
-            <div className="w-8 h-8 rounded-xl bg-amber-100 flex items-center justify-center text-amber-800 flex-shrink-0">
-              <Calendar className="w-4 h-4 text-amber-700" />
-            </div>
-            <div className="flex-1 min-w-0">
-              <div className="flex items-center justify-between">
-                <span className="text-xs font-bold text-[#1C2B1C]">Reoneração Residual</span>
-                <Badge className="bg-amber-100 text-amber-900 border-amber-300 text-[10px] py-0">
-                  Pós-01/Abr/26
-                </Badge>
+              <div className="flex-1 overflow-y-auto space-y-1 custom-scrollbar text-xs">
+                {loadingConversas ? (
+                  <div className="py-6 text-center text-[#5A6D5A]">
+                    <Loader2 className="w-4 h-4 animate-spin mx-auto text-[#1B5E20] mb-1" />
+                    Carregando histórico...
+                  </div>
+                ) : conversasAnteriores.length === 0 ? (
+                  <div className="py-6 text-center text-[#5A6D5A] text-[11px]">
+                    Nenhuma conversa anterior registrada.
+                  </div>
+                ) : (
+                  conversasAnteriores.map((c) => (
+                    <button
+                      key={c.id}
+                      type="button"
+                      onClick={() => handleSelecionarConversa(c.id)}
+                      className={`w-full text-left p-2 rounded-xl transition-colors truncate block ${
+                        conversationId === c.id
+                          ? 'bg-emerald-50 text-[#1B5E20] font-semibold border border-emerald-200'
+                          : 'text-[#1C2B1C] hover:bg-[#F5F7F1]'
+                      }`}
+                    >
+                      <div className="truncate font-medium">{c.title || 'Conversa sem título'}</div>
+                    </button>
+                  ))
+                )}
               </div>
-              <p className="text-[11px] text-[#5A6D5A] mt-1 leading-snug">
-                <strong>0,925%</strong> no Lucro Real e <strong>0,365%</strong> no Presumido pela LC
-                nº 224/2025 (fim da alíquota zero plena para insumos formulados).
-              </p>
             </div>
-          </div>
-        </Card>
+          )}
 
-        <Card className="rounded-2xl border-blue-200 bg-blue-50/40 p-3.5 shadow-xs">
-          <div className="flex items-start gap-3">
-            <div className="w-8 h-8 rounded-xl bg-blue-100 flex items-center justify-center text-blue-800 flex-shrink-0">
-              <Sparkles className="w-4 h-4 text-blue-700" />
-            </div>
-            <div className="flex-1 min-w-0">
-              <div className="flex items-center justify-between">
-                <span className="text-xs font-bold text-[#1C2B1C]">Reforma IBS / CBS</span>
-                <Badge className="bg-blue-100 text-blue-900 border-blue-300 text-[10px] py-0">
-                  LC 214/2025
-                </Badge>
-              </div>
-              <p className="text-[11px] text-[#5A6D5A] mt-1 leading-snug">
-                <strong>Redução de 60%</strong> da alíquota de referência (26,5%) + Diferimento
-                integral nas operações com produtor rural (Art. 138 e Anexo IX).
-              </p>
-            </div>
-          </div>
-        </Card>
-      </div>
-
-      {/* ------------------------------------------------------------------ */}
-      {/* FILTROS E BUSCA */}
-      {/* ------------------------------------------------------------------ */}
-      <Card className="rounded-2xl border-[#DCE5DC] bg-white shadow-sm p-4 space-y-3">
-        <div className="flex flex-col md:flex-row items-center gap-3">
-          <div className="relative flex-1 w-full">
-            <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-[#5A6D5A]" />
-            <Input
-              value={search}
-              onChange={(e) => {
-                const val = e.target.value
-                startTransition(() => {
-                  setSearch(val)
-                })
-              }}
-              placeholder="Buscar por nome comercial, princípio ativo, NCM (ex: 3808.93.24) ou registro MAPA..."
-              className="pl-9 text-xs h-10 border-[#DCE5DC] focus-visible:ring-[#1B5E20]"
-            />
-          </div>
-
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 w-full md:w-auto">
-            {/* Filtro por Enquadramento */}
-            <Select
-              value={filtroEnquadramento}
-              onValueChange={(val) => {
-                setFiltroEnquadramento(val)
-              }}
-            >
-              <SelectTrigger className="h-10 text-xs border-[#DCE5DC] sm:w-56">
-                <SelectValue placeholder="Enquadramento PIS/COFINS" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="todos">Todos Enquadramentos</SelectItem>
-                <SelectItem value="beneficiado">Beneficiado (Lei 10.925/04)</SelectItem>
-                <SelectItem value="condicional">Condicional (Dec. 5.630/05)</SelectItem>
-                <SelectItem value="tributado">Tributado Integralmente</SelectItem>
-              </SelectContent>
-            </Select>
-
-            {/* Filtro por Macro-Grupo */}
-            <Select
-              value={filtroMacro}
-              onValueChange={(val) => {
-                setFiltroMacro(val)
-              }}
-            >
-              <SelectTrigger className="h-10 text-xs border-[#DCE5DC] sm:w-52">
-                <SelectValue placeholder="Macro-Grupo" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="todos">Todos Macro-Grupos</SelectItem>
-                <SelectItem value="Defensivos">Defensivos</SelectItem>
-                <SelectItem value="Fertilizantes">Fertilizantes</SelectItem>
-                <SelectItem value="Inoculantes e Biológicos">Inoculantes / Biológicos</SelectItem>
-                <SelectItem value="Corretivos de Solo">Corretivos de Solo</SelectItem>
-                <SelectItem value="Produtos Técnicos">Produtos Técnicos</SelectItem>
-                <SelectItem value="Adjuvantes">Adjuvantes</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-        </div>
-      </Card>
-
-      {/* ------------------------------------------------------------------ */}
-      {/* TABELA DE CONSULTA TRIBUTÁRIA COM ROLAGEM INFINITA */}
-      {/* ------------------------------------------------------------------ */}
-      <Card className="rounded-2xl border-[#DCE5DC] bg-white shadow-sm overflow-hidden flex-1 flex flex-col min-h-0">
-        <ScrollableTable
-          autoFitHeight={true}
-          bottomOffset={52}
-          containerRef={tableContainerRef}
-          onNearBottom={carregarMaisProdutos}
-          bottomThreshold={250}
-          className="flex-1 min-h-0"
-        >
-          <table className="w-full text-xs">
-            <thead className="sticky top-0 z-20 bg-[#F5F7F1] shadow-[0_1px_0_0_#DCE5DC]">
-              <tr className="bg-[#F5F7F1] border-b border-[#DCE5DC] text-left text-[#5A6D5A]">
-                <th className="py-3 px-3 w-8 text-center" />
-                <th className="py-3 px-3 font-semibold">Nome Comercial</th>
-                <th className="py-3 px-3 font-semibold">Registro MAPA</th>
-                <th className="py-3 px-3 font-semibold">Princípio Ativo</th>
-                <th className="py-3 px-3 font-semibold">NCM</th>
-                <th className="py-3 px-3 font-semibold">Enquadramento PIS/COFINS</th>
-                <th className="py-3 px-3 font-semibold text-center">Vigente HOJE</th>
-                <th className="py-3 px-3 font-semibold text-center">Pós-Abr/2026 (Real)</th>
-                <th className="py-3 px-3 font-semibold">Status IBS / CBS</th>
-                <th className="py-3 px-3 font-semibold text-right">Detalhe</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-[#F0F4F0]">
-              {loading ? (
-                <tr>
-                  <td colSpan={10} className="py-12 text-center text-xs text-[#5A6D5A]">
-                    <Loader2 className="w-6 h-6 animate-spin mx-auto text-[#1B5E20] mb-2" />
-                    Carregando panorama tributário dos produtos agropecuários...
-                  </td>
-                </tr>
-              ) : produtos.length === 0 ? (
-                <tr>
-                  <td colSpan={10} className="py-12 text-center text-xs text-[#5A6D5A]">
-                    <Scale className="w-8 h-8 text-[#5A6D5A]/40 mx-auto mb-2" />
-                    <p className="font-semibold text-sm text-[#1C2B1C]">
-                      Nenhum produto localizado
+          {/* Área Central de Conversa (Card principal) */}
+          <Card className="flex-1 flex flex-col min-h-0 bg-white border-[#DCE5DC] rounded-2xl shadow-xs overflow-hidden">
+            {/* Histórico das Mensagens */}
+            <div className="flex-1 p-4 md:p-6 overflow-y-auto space-y-4 custom-scrollbar">
+              {/* Quando a conversa está vazia, mostra tela de boas-vindas e chips de perguntas */}
+              {messages.length === 0 && !streamingContent && (
+                <div className="max-w-2xl mx-auto py-8 text-center space-y-6">
+                  <div className="w-16 h-16 rounded-2xl bg-emerald-100 flex items-center justify-center mx-auto text-[#1B5E20] shadow-sm">
+                    <Sparkles className="w-8 h-8 text-[#1B5E20]" />
+                  </div>
+                  <div>
+                    <h3 className="text-lg font-bold text-[#1C2B1C]">
+                      Como posso ajudar com a tributação do agro hoje?
+                    </h3>
+                    <p className="text-xs text-[#5A6D5A] mt-1.5 max-w-md mx-auto leading-relaxed">
+                      Sou especialista em PIS/COFINS agrícola, alíquota zero (Lei 10.925/04),
+                      reoneração da LC 224/2025, transição para o IBS/CBS (LC 214/2025),
+                      classificação TIPI (posição 38.08) e cadastro da Base Mestre.
                     </p>
-                    <p className="text-[11px] text-[#5A6D5A] mt-0.5">
-                      Tente alterar os termos de busca ou selecionar outro enquadramento tributário.
-                    </p>
-                  </td>
-                </tr>
-              ) : (
-                produtos.map((p) => {
-                  const isExpanded = Boolean(expandedRowIds[p.id])
-                  const enq = deduzirEnquadramentoFiscal(p)
-                  const ncmPadrao = p.ncm_padrao || p.ncm || ''
+                  </div>
 
-                  return (
-                    <React.Fragment key={p.id}>
-                      <tr
-                        className={`hover:bg-[#F5F7F1]/60 transition-colors cursor-pointer ${
-                          isExpanded ? 'bg-emerald-50/40 font-medium' : ''
-                        }`}
-                        onClick={() => toggleRowExpanded(p.id)}
-                      >
-                        {/* Ícone de Expansão */}
-                        <td className="py-3 px-2 text-center text-[#5A6D5A]">
-                          <button
-                            type="button"
-                            className="p-1 rounded hover:bg-emerald-100/60 text-[#1B5E20]"
-                            aria-label={isExpanded ? 'Recolher detalhes' : 'Expandir detalhes'}
-                          >
-                            {isExpanded ? (
-                              <ChevronUp className="w-3.5 h-3.5" />
-                            ) : (
-                              <ChevronDown className="w-3.5 h-3.5" />
-                            )}
-                          </button>
-                        </td>
-
-                        {/* Nome Comercial */}
-                        <td className="py-3 px-3 font-bold text-[#1C2B1C] max-w-[220px] truncate">
-                          <span
-                            title={p.nome_completo || p.marca_padronizada || p.nome_produto}
-                            className="truncate block"
-                          >
-                            {p.marca_padronizada || p.nome_completo || p.nome_produto}
-                          </span>
-                          <span className="text-[10px] text-[#5A6D5A] font-normal block truncate">
-                            {p.embalagem ? `${p.embalagem} (${p.unidade || 'L'})` : p.macro_grupo}
-                          </span>
-                        </td>
-
-                        {/* Registro MAPA */}
-                        <td className="py-3 px-3 font-mono text-[#1C2B1C] font-semibold whitespace-nowrap">
-                          {sanitizarRegistroMapa(p.registro_mapa)}
-                        </td>
-
-                        {/* Princípio Ativo */}
-                        <td
-                          className="py-3 px-3 text-[#1C2B1C] max-w-[190px] truncate"
-                          title={p.principio_ativo}
+                  {/* Chips de perguntas sugeridas */}
+                  <div className="space-y-2 pt-2">
+                    <span className="text-[11px] font-semibold text-[#5A6D5A] uppercase tracking-wider">
+                      Sugestões de perguntas para iniciar
+                    </span>
+                    <div className="flex flex-wrap gap-2 justify-center max-w-xl mx-auto">
+                      {SUGESTOES_PERGUNTAS.map((sugestao, idx) => (
+                        <button
+                          key={idx}
+                          type="button"
+                          onClick={() => handleSendMessage(sugestao)}
+                          className="text-xs text-left px-3.5 py-2 rounded-xl border border-[#DCE5DC] bg-[#F5F7F1]/80 hover:bg-emerald-50 hover:border-emerald-300 hover:text-[#1B5E20] transition-all duration-150 shadow-2xs font-medium"
                         >
-                          <span className="font-medium truncate block">
-                            {p.principio_ativo || '—'}
-                          </span>
-                          <span className="text-[10px] text-[#5A6D5A] block truncate">
-                            {p.titular_fabricante || p.fabricante || 'Fabricante não informado'}
-                          </span>
-                        </td>
-
-                        {/* NCM Padrão Formatado */}
-                        <td className="py-3 px-3 font-mono font-bold text-[#1B5E20] whitespace-nowrap">
-                          {formatarNcmMascara(ncmPadrao)}
-                        </td>
-
-                        {/* Badge de Enquadramento */}
-                        <td className="py-3 px-3 whitespace-nowrap">
-                          {enq.badgeVariant === 'beneficiado' ? (
-                            <Badge className="bg-emerald-100 text-emerald-900 border border-emerald-300 text-[10px] py-0 px-2 font-semibold">
-                              Beneficiado
-                            </Badge>
-                          ) : enq.badgeVariant === 'condicional' ? (
-                            <Badge className="bg-blue-100 text-blue-900 border border-blue-300 text-[10px] py-0 px-2 font-semibold">
-                              Condicional
-                            </Badge>
-                          ) : (
-                            <Badge className="bg-amber-100 text-amber-900 border border-amber-300 text-[10px] py-0 px-2 font-semibold">
-                              Tributado
-                            </Badge>
-                          )}
-                        </td>
-
-                        {/* Alíquota Vigente HOJE */}
-                        <td className="py-3 px-3 text-center whitespace-nowrap font-medium text-[#1C2B1C]">
-                          <span className="inline-block px-2 py-0.5 rounded bg-emerald-50 text-emerald-900 font-mono text-[11px] font-bold">
-                            {enq.aliquotaHoje.includes('0,00%') ? '0,00%' : enq.aliquotaHoje}
-                          </span>
-                        </td>
-
-                        {/* Alíquota Pós-Abr/2026 (Real) */}
-                        <td className="py-3 px-3 text-center whitespace-nowrap font-medium text-[#1C2B1C]">
-                          <span className="inline-block px-2 py-0.5 rounded bg-amber-50 text-amber-900 font-mono text-[11px] font-bold border border-amber-200">
-                            {enq.aliquotaPosAbr2026Real}
-                          </span>
-                        </td>
-
-                        {/* Transição IBS / CBS */}
-                        <td className="py-3 px-3 max-w-[210px] truncate whitespace-nowrap text-[#1C2B1C]">
-                          <span
-                            className="text-[11px] text-blue-950 font-medium truncate block"
-                            title={
-                              p.ibs_cbs_2027 ||
-                              'Redução de 60% da alíquota de referência (26,5%) + Diferimento'
-                            }
-                          >
-                            {p.ibs_cbs_2027
-                              ? p.ibs_cbs_2027.split('+')[0].trim()
-                              : 'Redução 60% + Diferimento'}
-                          </span>
-                          <span className="text-[10px] text-[#5A6D5A] block">
-                            LC nº 214/2025 • Art. 138
-                          </span>
-                        </td>
-
-                        {/* Ação / Ver Detalhes */}
-                        <td className="py-3 px-3 text-right whitespace-nowrap">
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            className="h-7 px-2 text-[11px] text-[#1B5E20] hover:bg-emerald-100/70 font-semibold"
-                            onClick={(e) => {
-                              e.stopPropagation()
-                              toggleRowExpanded(p.id)
-                            }}
-                          >
-                            {isExpanded ? 'Fechar' : 'Ver Detalhe'}
-                          </Button>
-                        </td>
-                      </tr>
-
-                      {/* ------------------------------------------------------------------ */}
-                      {/* PAINEL EXPANDIDO: DETALHAMENTO TRIBUTÁRIO COMPLETO */}
-                      {/* ------------------------------------------------------------------ */}
-                      {isExpanded && (
-                        <tr className="bg-gradient-to-r from-emerald-50/30 via-white to-amber-50/20">
-                          <td colSpan={10} className="py-4 px-6 border-y border-[#DCE5DC]">
-                            <div className="space-y-4 text-xs">
-                              {/* Cabeçalho do Detalhe */}
-                              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-[#DCE5DC] pb-2.5">
-                                <div className="flex items-center gap-2">
-                                  <Layers className="w-4 h-4 text-[#1B5E20]" />
-                                  <span className="font-bold text-sm text-[#1C2B1C]">
-                                    Prontuário Tributário • {p.nome_completo || p.marca_padronizada}
-                                  </span>
-                                  <Badge
-                                    variant="outline"
-                                    className="text-[10px] bg-white border-emerald-300 text-emerald-900"
-                                  >
-                                    MAPA: {sanitizarRegistroMapa(p.registro_mapa)}
-                                  </Badge>
-                                </div>
-                                <div className="flex items-center gap-3 text-[11px] text-[#5A6D5A]">
-                                  {p.url_oficial && (
-                                    <a
-                                      href={p.url_oficial}
-                                      target="_blank"
-                                      rel="noopener noreferrer"
-                                      className="inline-flex items-center gap-1 font-semibold text-[#1B5E20] hover:underline"
-                                    >
-                                      <ExternalLink className="w-3 h-3" />
-                                      Bula / Consulta Oficial
-                                    </a>
-                                  )}
-                                  <span className="font-mono text-[10px]">ID: {p.id}</span>
-                                </div>
-                              </div>
-
-                              {/* Grid com os 4 Blocos Tributários */}
-                              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3.5">
-                                {/* Bloco 1: Matriz NCM por Faixa de Embalagem TIPI */}
-                                <div className="p-3.5 rounded-xl bg-white border border-[#DCE5DC] shadow-xs space-y-2.5">
-                                  <div className="flex items-center gap-1.5 font-bold text-[#1B5E20] border-b border-emerald-100 pb-1.5">
-                                    <Package className="w-3.5 h-3.5" />
-                                    <span>NCM por Faixa de Embalagem (TIPI)</span>
-                                  </div>
-                                  <div className="space-y-1.5 font-mono text-[11px]">
-                                    <div className="flex items-center justify-between p-1 rounded bg-[#F5F7F1]">
-                                      <span className="text-[#5A6D5A]">Faixa 1 (≤ 300g/mL):</span>
-                                      <span className="font-bold text-[#1C2B1C]">
-                                        {formatarNcmMascara(p.ncm_faixa1_ate_300g || ncmPadrao)}
-                                      </span>
-                                    </div>
-                                    <div className="flex items-center justify-between p-1 rounded bg-[#F5F7F1]">
-                                      <span className="text-[#5A6D5A]">
-                                        Faixa 2 (300g a 7,5kg):
-                                      </span>
-                                      <span className="font-bold text-[#1C2B1C]">
-                                        {formatarNcmMascara(p.ncm_faixa2_300g_a_7_5kg || ncmPadrao)}
-                                      </span>
-                                    </div>
-                                    <div className="flex items-center justify-between p-1 rounded bg-[#F5F7F1]">
-                                      <span className="text-[#5A6D5A]">
-                                        Faixa 3 (7,5kg a 10kg):
-                                      </span>
-                                      <span className="font-bold text-[#1C2B1C]">
-                                        {formatarNcmMascara(p.ncm_faixa3_7_5kg_a_10kg || ncmPadrao)}
-                                      </span>
-                                    </div>
-                                    <div className="flex items-center justify-between p-1 rounded bg-[#F5F7F1]">
-                                      <span className="text-[#5A6D5A]">Faixa 4 (&gt; 10kg):</span>
-                                      <span className="font-bold text-[#1C2B1C]">
-                                        {formatarNcmMascara(p.ncm_faixa4_acima_10kg || ncmPadrao)}
-                                      </span>
-                                    </div>
-                                    <div className="flex items-center justify-between p-1 rounded bg-emerald-50/60 border border-emerald-200">
-                                      <span className="text-[#1B5E20] font-sans text-[10px] font-semibold">
-                                        Granel / Técnico:
-                                      </span>
-                                      <span className="font-bold text-[#1B5E20]">
-                                        {formatarNcmMascara(p.ncm_faixa4_acima_10kg || ncmPadrao)}
-                                      </span>
-                                    </div>
-                                  </div>
-                                </div>
-
-                                {/* Bloco 2: Regra TIPI da Embalagem */}
-                                <div className="p-3.5 rounded-xl bg-white border border-[#DCE5DC] shadow-xs space-y-2">
-                                  <div className="flex items-center gap-1.5 font-bold text-[#1C2B1C] border-b border-[#DCE5DC] pb-1.5">
-                                    <FileSpreadsheet className="w-3.5 h-3.5 text-[#1B5E20]" />
-                                    <span>Regra TIPI da Embalagem</span>
-                                  </div>
-                                  <div className="space-y-1.5 text-[11px] leading-relaxed">
-                                    <div className="p-2 rounded-lg bg-[#FAFBF9] border border-[#DCE5DC]/60">
-                                      <p className="text-[#1C2B1C] italic">
-                                        {p.regra_tipi ||
-                                          p.regra_tipi_embalagem ||
-                                          'Classificação aduaneira escalonada conforme Tabela TIPI da Receita Federal. O enquadramento na subposição correta depende do peso líquido/bruto comercializado.'}
-                                      </p>
-                                    </div>
-                                    <div className="flex items-center justify-between text-[10px] text-[#5A6D5A] pt-1">
-                                      <span>Nota Subposições 2 (TIPI):</span>
-                                      <span className="font-bold text-[#1C2B1C]">
-                                        {p.nota_subpos_2 === 'SIM'
-                                          ? 'SIM (Rol Taxativo)'
-                                          : 'NÃO (Geral)'}
-                                      </span>
-                                    </div>
-                                    <div className="flex items-center justify-between text-[10px] text-[#5A6D5A]">
-                                      <span>Embalagem Comercial Base:</span>
-                                      <span className="font-bold text-[#1C2B1C]">
-                                        {p.embalagem || 'Padrão Bula'}
-                                      </span>
-                                    </div>
-                                  </div>
-                                </div>
-
-                                {/* Bloco 3: Enquadramento PIS/COFINS & CST */}
-                                <div className="p-3.5 rounded-xl bg-white border border-[#DCE5DC] shadow-xs space-y-2">
-                                  <div className="flex items-center gap-1.5 font-bold text-amber-900 border-b border-amber-100 pb-1.5">
-                                    <Percent className="w-3.5 h-3.5 text-amber-700" />
-                                    <span>PIS/COFINS & Regime Tributário</span>
-                                  </div>
-                                  <div className="space-y-1 text-[11px]">
-                                    <div>
-                                      <span className="text-[#5A6D5A] block text-[10px]">
-                                        Fundamentação Legal do Benefício:
-                                      </span>
-                                      <span className="font-medium text-[#1C2B1C] leading-tight block mt-0.5">
-                                        {enq.descricao}
-                                      </span>
-                                    </div>
-                                    <div className="pt-2 border-t border-amber-50 space-y-1">
-                                      <div className="flex justify-between font-mono">
-                                        <span className="text-[#5A6D5A]">
-                                          CST Saída Recomendado:
-                                        </span>
-                                        <span className="font-bold text-[#1B5E20]">
-                                          {p.cst_saida || enq.cstSugerido}
-                                        </span>
-                                      </div>
-                                      <div className="flex justify-between font-mono">
-                                        <span className="text-[#5A6D5A]">
-                                          CST Entrada (Revenda):
-                                        </span>
-                                        <span className="font-bold text-[#1C2B1C]">
-                                          {p.cst_entrada || 'CST 73'}
-                                        </span>
-                                      </div>
-                                      <div className="flex justify-between font-mono">
-                                        <span className="text-[#5A6D5A]">
-                                          Ajuste EFD-Contribuições:
-                                        </span>
-                                        <span className="font-semibold text-[#1C2B1C] text-[10px]">
-                                          Registros M220 / M620
-                                        </span>
-                                      </div>
-                                    </div>
-                                  </div>
-                                </div>
-
-                                {/* Bloco 4: Projeção Reforma Tributária IBS / CBS */}
-                                <div className="p-3.5 rounded-xl bg-white border border-blue-200 shadow-xs space-y-2 bg-blue-50/20">
-                                  <div className="flex items-center gap-1.5 font-bold text-blue-900 border-b border-blue-100 pb-1.5">
-                                    <Sparkles className="w-3.5 h-3.5 text-blue-700" />
-                                    <span>Projeção IBS / CBS (LC 214/2025)</span>
-                                  </div>
-                                  <div className="space-y-1.5 text-[11px]">
-                                    <div>
-                                      <span className="text-[#5A6D5A] block text-[10px]">
-                                        Alíquota Referência da Reforma:
-                                      </span>
-                                      <span className="font-bold text-[#1C2B1C]">
-                                        26,50% (Projetada)
-                                      </span>
-                                    </div>
-                                    <div>
-                                      <span className="text-[#5A6D5A] block text-[10px]">
-                                        Carga Efetiva com Redução de 60%:
-                                      </span>
-                                      <span className="font-bold text-blue-900">
-                                        10,60% (IBS + CBS)
-                                      </span>
-                                    </div>
-                                    <div className="p-2 rounded-lg bg-white border border-blue-100 text-[10px] text-blue-950 mt-1">
-                                      <p className="font-semibold">
-                                        Regime de Diferimento Aplicável:
-                                      </p>
-                                      <p className="text-[#5A6D5A] mt-0.5 leading-snug">
-                                        {p.ibs_cbs_2027 ||
-                                          'Diferimento integral do IBS e da CBS na venda a produtor rural contribuinte ou agroindústria (Art. 138 e Anexo IX da LC nº 214/2025).'}
-                                      </p>
-                                    </div>
-                                  </div>
-                                </div>
-                              </div>
-                            </div>
-                          </td>
-                        </tr>
-                      )}
-                    </React.Fragment>
-                  )
-                })
+                          {sugestao}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                </div>
               )}
-            </tbody>
-          </table>
-        </ScrollableTable>
 
-        {/* Sentinel para rolagem infinita */}
-        <div ref={sentinelRef} className="h-1 w-full" aria-hidden="true" />
+              {/* Lista de Mensagens */}
+              {messages.map((m) => {
+                const isUser = m.role === 'user'
+                return (
+                  <div
+                    key={m.id}
+                    className={`flex items-start gap-3 ${isUser ? 'justify-end' : 'justify-start'}`}
+                  >
+                    {!isUser && (
+                      <div className="w-8 h-8 rounded-xl bg-gradient-to-tr from-[#1B5E20] to-[#2E7D32] flex items-center justify-center text-white flex-shrink-0 shadow-xs mt-0.5">
+                        <Bot className="w-4 h-4 text-emerald-200" />
+                      </div>
+                    )}
 
-        {/* ------------------------------------------------------------------ */}
-        {/* RODAPÉ FIXO INFORMATIVO DE ROLAGEM E CONTAGEM */}
-        {/* ------------------------------------------------------------------ */}
-        <div className="flex items-center justify-between p-3.5 border-t border-[#DCE5DC] bg-[#FAFBF9] text-xs text-[#5A6D5A]">
-          <div className="flex items-center gap-2">
-            <span className="font-semibold text-[#1C2B1C]">
-              {produtos.length} {produtos.length === 1 ? 'produto exibido' : 'produtos exibidos'}
-            </span>
-            <span className="text-[#8A9A86]">•</span>
-            <span>Ordenação alfabética por nome comercial</span>
-            <span className="text-[#8A9A86]">•</span>
-            <span>Total na base com filtros: {totalCount}</span>
-          </div>
+                    <div
+                      className={`max-w-[85%] sm:max-w-[78%] rounded-2xl p-4 text-xs leading-relaxed shadow-2xs ${
+                        isUser
+                          ? 'bg-[#1B5E20] text-white rounded-tr-xs'
+                          : 'bg-[#F9FAF8] text-[#1C2B1C] border border-[#DCE5DC] rounded-tl-xs'
+                      }`}
+                    >
+                      <div className="whitespace-pre-wrap font-sans break-words selection:bg-emerald-200 selection:text-emerald-950">
+                        {m.content}
+                      </div>
 
-          <div className="flex items-center gap-2">
-            {loadingMore && (
-              <div className="inline-flex items-center gap-1.5 text-xs text-[#1B5E20] font-medium bg-emerald-50 px-2.5 py-1 rounded-md border border-emerald-200">
-                <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                <span>Carregando próximo lote...</span>
+                      {/* Exibição de citações e fontes caso existam */}
+                      {m.citations && m.citations.length > 0 && (
+                        <div className="mt-3 pt-2.5 border-t border-[#DCE5DC]/60 text-[10px] text-[#5A6D5A] space-y-1">
+                          <span className="font-semibold block text-[#1B5E20]">
+                            Fontes consultadas:
+                          </span>
+                          <div className="space-y-0.5">
+                            {m.citations.map((c, i) => (
+                              <div key={i} className="truncate">
+                                • {c.excerpt}
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+
+                    {isUser && (
+                      <div className="w-8 h-8 rounded-xl bg-emerald-100 flex items-center justify-center text-[#1B5E20] flex-shrink-0 mt-0.5">
+                        <User className="w-4 h-4 text-[#1B5E20]" />
+                      </div>
+                    )}
+                  </div>
+                )
+              })}
+
+              {/* Bolha de streaming da resposta em andamento */}
+              {isSending && (
+                <div className="flex items-start gap-3 justify-start">
+                  <div className="w-8 h-8 rounded-xl bg-gradient-to-tr from-[#1B5E20] to-[#2E7D32] flex items-center justify-center text-white flex-shrink-0 shadow-xs mt-0.5">
+                    <Bot className="w-4 h-4 text-emerald-200" />
+                  </div>
+                  <div className="max-w-[85%] sm:max-w-[78%] rounded-2xl rounded-tl-xs p-4 text-xs leading-relaxed bg-[#F9FAF8] text-[#1C2B1C] border border-[#DCE5DC] shadow-2xs">
+                    {streamingContent ? (
+                      <div className="whitespace-pre-wrap font-sans break-words selection:bg-emerald-200">
+                        {streamingContent}
+                        <span className="inline-block w-1.5 h-3.5 bg-[#1B5E20] ml-1 animate-pulse align-middle" />
+                      </div>
+                    ) : (
+                      <div className="flex items-center gap-2 text-[#5A6D5A]">
+                        <Loader2 className="w-4 h-4 animate-spin text-[#1B5E20]" />
+                        <span>Consultando legislação e dados da Base Mestre...</span>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              <div ref={messagesEndRef} />
+            </div>
+
+            {/* Sugestões rápidas acima do input quando a conversa já começou */}
+            {messages.length > 0 && (
+              <div className="px-4 py-1.5 bg-[#FAFBF9] border-t border-[#DCE5DC]/60 flex items-center gap-2 overflow-x-auto no-scrollbar">
+                <span className="text-[10px] text-[#5A6D5A] font-semibold flex-shrink-0">
+                  Perguntas rápidas:
+                </span>
+                {SUGESTOES_PERGUNTAS.slice(0, 3).map((sug, i) => (
+                  <button
+                    key={i}
+                    type="button"
+                    onClick={() => handleSendMessage(sug)}
+                    disabled={isSending}
+                    className="text-[11px] whitespace-nowrap px-2.5 py-1 rounded-full bg-white border border-[#DCE5DC] hover:border-emerald-300 hover:text-[#1B5E20] transition-colors"
+                  >
+                    {sug}
+                  </button>
+                ))}
               </div>
             )}
-            {!hasMore && produtos.length > 0 && !loading && (
-              <span className="text-[11px] text-[#5A6D5A] bg-[#F5F7F1] px-2.5 py-1 rounded-md border border-[#DCE5DC]">
-                Fim dos registros — todos os {produtos.length} produtos carregados
-              </span>
-            )}
-            {hasMore && !loadingMore && !loading && (
-              <span className="text-[11px] text-[#8A9A86] hidden sm:inline">
-                Role verticalmente para carregar mais produtos automaticamente
-              </span>
-            )}
-          </div>
+
+            {/* Área de Entrada (Input com botão Enviar e dica de Enter) */}
+            <div className="p-3 md:p-4 border-t border-[#DCE5DC] bg-white">
+              <div className="relative flex items-end gap-2 bg-[#F5F7F1] border border-[#DCE5DC] rounded-2xl p-2 focus-within:border-[#1B5E20] focus-within:ring-1 focus-within:ring-[#1B5E20] transition-all">
+                <Textarea
+                  ref={textareaRef}
+                  value={inputMessage}
+                  onChange={(e) => setInputMessage(e.target.value)}
+                  onKeyDown={handleKeyDown}
+                  placeholder="Pergunte qualquer dúvida sobre tributação no agro (ex: NCM de defensivo, reoneração em 2026, alíquota de produto)..."
+                  className="min-h-[44px] max-h-36 resize-none border-0 bg-transparent text-xs text-[#1C2B1C] placeholder:text-[#5A6D5A] focus-visible:ring-0 p-1.5"
+                  rows={1}
+                  disabled={isSending}
+                />
+
+                <Button
+                  type="button"
+                  size="sm"
+                  onClick={() => handleSendMessage()}
+                  disabled={!inputMessage.trim() || isSending}
+                  className="h-9 px-3.5 rounded-xl bg-[#1B5E20] hover:bg-[#2E7D32] text-white flex-shrink-0 font-medium"
+                >
+                  {isSending ? (
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                  ) : (
+                    <>
+                      <Send className="w-3.5 h-3.5 mr-1" />
+                      <span>Enviar</span>
+                    </>
+                  )}
+                </Button>
+              </div>
+
+              <div className="flex items-center justify-between mt-2 px-1 text-[10px] text-[#5A6D5A]">
+                <span>
+                  Pressione <kbd className="font-mono bg-gray-100 px-1 rounded">Enter</kbd> para
+                  enviar ou <kbd className="font-mono bg-gray-100 px-1 rounded">Shift + Enter</kbd>{' '}
+                  para nova linha
+                </span>
+                <span>O agente possui memória persistente da conversa</span>
+              </div>
+            </div>
+          </Card>
         </div>
-      </Card>
+      )}
+
+      {/* ------------------------------------------------------------------ */}
+      {/* ABA 2: TABELA PANORAMA TRIBUTÁRIO DA BASE MESTRE (SECUNDÁRIA) */}
+      {/* ------------------------------------------------------------------ */}
+      {activeTab === 'tabela' && (
+        <div className="flex-1 flex flex-col min-h-0 space-y-3">
+          {/* Cards Resumo */}
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+            <Card className="rounded-2xl border-[#DCE5DC] bg-white p-3 shadow-xs">
+              <div className="flex items-start gap-2.5">
+                <div className="w-7 h-7 rounded-lg bg-emerald-100 flex items-center justify-center text-[#1B5E20] flex-shrink-0">
+                  <CheckCircle2 className="w-4 h-4 text-[#1B5E20]" />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-bold text-[#1C2B1C]">Regra Vigente HOJE</span>
+                    <Badge className="bg-emerald-100 text-emerald-800 text-[10px] py-0">
+                      Até 31/Mar/26
+                    </Badge>
+                  </div>
+                  <p className="text-[11px] text-[#5A6D5A] mt-0.5 leading-snug">
+                    Alíquota 0,00% de PIS/COFINS para insumos e defensivos agrícolas (Lei nº
+                    10.925/2004).
+                  </p>
+                </div>
+              </div>
+            </Card>
+
+            <Card className="rounded-2xl border-amber-200 bg-amber-50/40 p-3 shadow-xs">
+              <div className="flex items-start gap-2.5">
+                <div className="w-7 h-7 rounded-lg bg-amber-100 flex items-center justify-center text-amber-800 flex-shrink-0">
+                  <Calendar className="w-4 h-4 text-amber-700" />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-bold text-[#1C2B1C]">Reoneração Residual</span>
+                    <Badge className="bg-amber-100 text-amber-900 border-amber-300 text-[10px] py-0">
+                      Pós-01/Abr/26
+                    </Badge>
+                  </div>
+                  <p className="text-[11px] text-[#5A6D5A] mt-0.5 leading-snug">
+                    0,925% no Lucro Real e 0,365% no Presumido pela LC nº 224/2025.
+                  </p>
+                </div>
+              </div>
+            </Card>
+
+            <Card className="rounded-2xl border-blue-200 bg-blue-50/40 p-3 shadow-xs">
+              <div className="flex items-start gap-2.5">
+                <div className="w-7 h-7 rounded-lg bg-blue-100 flex items-center justify-center text-blue-800 flex-shrink-0">
+                  <Sparkles className="w-4 h-4 text-blue-700" />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-bold text-[#1C2B1C]">Reforma IBS / CBS</span>
+                    <Badge className="bg-blue-100 text-blue-900 border-blue-300 text-[10px] py-0">
+                      LC 214/2025
+                    </Badge>
+                  </div>
+                  <p className="text-[11px] text-[#5A6D5A] mt-0.5 leading-snug">
+                    Redução de 60% da alíquota (carga ~10,60%) + Diferimento com produtor rural.
+                  </p>
+                </div>
+              </div>
+            </Card>
+          </div>
+
+          {/* Filtros e Busca */}
+          <Card className="rounded-2xl border-[#DCE5DC] bg-white shadow-xs p-3 space-y-2">
+            <div className="flex flex-col md:flex-row items-center gap-2">
+              <div className="relative flex-1 w-full">
+                <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-[#5A6D5A]" />
+                <Input
+                  value={searchTabela}
+                  onChange={(e) => {
+                    const val = e.target.value
+                    startTransition(() => {
+                      setSearchTabela(val)
+                    })
+                  }}
+                  placeholder="Buscar por nome comercial, princípio ativo, NCM ou registro MAPA..."
+                  className="pl-9 text-xs h-9 border-[#DCE5DC] focus-visible:ring-[#1B5E20]"
+                />
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 w-full md:w-auto">
+                <Select
+                  value={filtroEnquadramento}
+                  onValueChange={(val) => setFiltroEnquadramento(val)}
+                >
+                  <SelectTrigger className="h-9 text-xs border-[#DCE5DC] sm:w-52">
+                    <SelectValue placeholder="Enquadramento PIS/COFINS" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="todos">Todos Enquadramentos</SelectItem>
+                    <SelectItem value="beneficiado">Beneficiado (Lei 10.925/04)</SelectItem>
+                    <SelectItem value="condicional">Condicional (Dec. 5.630/05)</SelectItem>
+                    <SelectItem value="tributado">Tributado Integralmente</SelectItem>
+                  </SelectContent>
+                </Select>
+
+                <Select value={filtroMacro} onValueChange={(val) => setFiltroMacro(val)}>
+                  <SelectTrigger className="h-9 text-xs border-[#DCE5DC] sm:w-48">
+                    <SelectValue placeholder="Macro-Grupo" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="todos">Todos Macro-Grupos</SelectItem>
+                    <SelectItem value="Defensivos">Defensivos</SelectItem>
+                    <SelectItem value="Fertilizantes">Fertilizantes</SelectItem>
+                    <SelectItem value="Inoculantes e Biológicos">
+                      Inoculantes / Biológicos
+                    </SelectItem>
+                    <SelectItem value="Corretivos de Solo">Corretivos de Solo</SelectItem>
+                    <SelectItem value="Produtos Técnicos">Produtos Técnicos</SelectItem>
+                    <SelectItem value="Adjuvantes">Adjuvantes</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+          </Card>
+
+          {/* Tabela de Produtos */}
+          <Card className="rounded-2xl border-[#DCE5DC] bg-white shadow-xs overflow-hidden flex-1 flex flex-col min-h-0">
+            <ScrollableTable
+              autoFitHeight={true}
+              bottomOffset={52}
+              containerRef={tableContainerRef}
+              onNearBottom={carregarMaisProdutos}
+              bottomThreshold={250}
+              className="flex-1 min-h-0"
+            >
+              <table className="w-full text-xs">
+                <thead className="sticky top-0 z-20 bg-[#F5F7F1] shadow-[0_1px_0_0_#DCE5DC]">
+                  <tr className="bg-[#F5F7F1] border-b border-[#DCE5DC] text-left text-[#5A6D5A]">
+                    <th className="py-2.5 px-3 w-8 text-center" />
+                    <th className="py-2.5 px-3 font-semibold">Nome Comercial</th>
+                    <th className="py-2.5 px-3 font-semibold">Registro MAPA</th>
+                    <th className="py-2.5 px-3 font-semibold">Princípio Ativo</th>
+                    <th className="py-2.5 px-3 font-semibold">NCM</th>
+                    <th className="py-2.5 px-3 font-semibold">Enquadramento</th>
+                    <th className="py-2.5 px-3 font-semibold text-center">Vigente HOJE</th>
+                    <th className="py-2.5 px-3 font-semibold text-center">Pós-Abr/2026</th>
+                    <th className="py-2.5 px-3 font-semibold">Status IBS / CBS</th>
+                    <th className="py-2.5 px-3 font-semibold text-right">Ação</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-[#F0F4F0]">
+                  {loadingTabela ? (
+                    <tr>
+                      <td colSpan={10} className="py-12 text-center text-xs text-[#5A6D5A]">
+                        <Loader2 className="w-5 h-5 animate-spin mx-auto text-[#1B5E20] mb-2" />
+                        Carregando panorama tributário dos produtos...
+                      </td>
+                    </tr>
+                  ) : produtos.length === 0 ? (
+                    <tr>
+                      <td colSpan={10} className="py-12 text-center text-xs text-[#5A6D5A]">
+                        <Scale className="w-8 h-8 text-[#5A6D5A]/40 mx-auto mb-2" />
+                        <p className="font-semibold text-sm text-[#1C2B1C]">
+                          Nenhum produto localizado
+                        </p>
+                      </td>
+                    </tr>
+                  ) : (
+                    produtos.map((p) => {
+                      const isExpanded = Boolean(expandedRowIds[p.id])
+                      const enq = deduzirEnquadramentoFiscal(p)
+                      const ncmPadrao = p.ncm_padrao || p.ncm || ''
+
+                      return (
+                        <React.Fragment key={p.id}>
+                          <tr
+                            className={`hover:bg-[#F5F7F1]/60 transition-colors cursor-pointer ${
+                              isExpanded ? 'bg-emerald-50/40 font-medium' : ''
+                            }`}
+                            onClick={() => toggleRowExpanded(p.id)}
+                          >
+                            <td className="py-2.5 px-2 text-center text-[#5A6D5A]">
+                              <button
+                                type="button"
+                                className="p-1 rounded hover:bg-emerald-100/60 text-[#1B5E20]"
+                                aria-label={isExpanded ? 'Recolher detalhes' : 'Expandir detalhes'}
+                              >
+                                {isExpanded ? (
+                                  <ChevronUp className="w-3.5 h-3.5" />
+                                ) : (
+                                  <ChevronDown className="w-3.5 h-3.5" />
+                                )}
+                              </button>
+                            </td>
+                            <td className="py-2.5 px-3 font-bold text-[#1C2B1C] max-w-[200px] truncate">
+                              <span className="truncate block">
+                                {p.marca_padronizada || p.nome_completo || p.nome_produto}
+                              </span>
+                              <span className="text-[10px] text-[#5A6D5A] font-normal block truncate">
+                                {p.macro_grupo}
+                              </span>
+                            </td>
+                            <td className="py-2.5 px-3 font-mono text-[#1C2B1C] font-semibold whitespace-nowrap">
+                              {sanitizarRegistroMapa(p.registro_mapa)}
+                            </td>
+                            <td
+                              className="py-2.5 px-3 text-[#1C2B1C] max-w-[180px] truncate"
+                              title={p.principio_ativo}
+                            >
+                              <span className="font-medium truncate block">
+                                {p.principio_ativo || '—'}
+                              </span>
+                            </td>
+                            <td className="py-2.5 px-3 font-mono font-bold text-[#1B5E20] whitespace-nowrap">
+                              {formatarNcmMascara(ncmPadrao)}
+                            </td>
+                            <td className="py-2.5 px-3 whitespace-nowrap">
+                              <Badge
+                                className={
+                                  enq.badgeVariant === 'beneficiado'
+                                    ? 'bg-emerald-100 text-emerald-900 border-emerald-300 text-[10px] py-0 px-2'
+                                    : enq.badgeVariant === 'condicional'
+                                      ? 'bg-blue-100 text-blue-900 border-blue-300 text-[10px] py-0 px-2'
+                                      : 'bg-amber-100 text-amber-900 border-amber-300 text-[10px] py-0 px-2'
+                                }
+                              >
+                                {enq.rotuloCurto}
+                              </Badge>
+                            </td>
+                            <td className="py-2.5 px-3 text-center whitespace-nowrap font-medium text-[#1C2B1C]">
+                              <span className="inline-block px-2 py-0.5 rounded bg-emerald-50 text-emerald-900 font-mono text-[11px] font-bold">
+                                {enq.aliquotaHoje.includes('0,00%') ? '0,00%' : enq.aliquotaHoje}
+                              </span>
+                            </td>
+                            <td className="py-2.5 px-3 text-center whitespace-nowrap font-medium text-[#1C2B1C]">
+                              <span className="inline-block px-2 py-0.5 rounded bg-amber-50 text-amber-900 font-mono text-[11px] font-bold border border-amber-200">
+                                {enq.aliquotaPosAbr2026Real}
+                              </span>
+                            </td>
+                            <td className="py-2.5 px-3 max-w-[200px] truncate whitespace-nowrap text-[#1C2B1C]">
+                              <span className="text-[11px] text-blue-950 font-medium truncate block">
+                                {p.ibs_cbs_2027
+                                  ? p.ibs_cbs_2027.split('+')[0].trim()
+                                  : 'Redução 60% + Diferimento'}
+                              </span>
+                            </td>
+                            <td className="py-2.5 px-3 text-right whitespace-nowrap">
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                className="h-7 px-2 text-[11px] text-[#1B5E20] hover:bg-emerald-100/70 font-semibold"
+                                onClick={(e) => {
+                                  e.stopPropagation()
+                                  toggleRowExpanded(p.id)
+                                }}
+                              >
+                                {isExpanded ? 'Fechar' : 'Detalhe'}
+                              </Button>
+                            </td>
+                          </tr>
+
+                          {isExpanded && (
+                            <tr className="bg-gradient-to-r from-emerald-50/30 via-white to-amber-50/20">
+                              <td colSpan={10} className="py-3 px-6 border-y border-[#DCE5DC]">
+                                <div className="space-y-3 text-xs">
+                                  <div className="flex items-center justify-between border-b border-[#DCE5DC] pb-2">
+                                    <div className="flex items-center gap-2">
+                                      <Layers className="w-4 h-4 text-[#1B5E20]" />
+                                      <span className="font-bold text-sm text-[#1C2B1C]">
+                                        {p.nome_completo || p.marca_padronizada}
+                                      </span>
+                                    </div>
+                                    <Button
+                                      size="sm"
+                                      variant="outline"
+                                      onClick={() => {
+                                        setActiveTab('chat')
+                                        handleSendMessage(
+                                          `Qual é a situação tributária completa do produto ${p.marca_padronizada || p.nome_completo} (Registro MAPA: ${p.registro_mapa})?`,
+                                        )
+                                      }}
+                                      className="h-7 text-xs border-emerald-300 text-[#1B5E20] hover:bg-emerald-50 font-semibold"
+                                    >
+                                      <Bot className="w-3.5 h-3.5 mr-1" />
+                                      Perguntar à IA sobre este produto
+                                    </Button>
+                                  </div>
+
+                                  <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                                    <div className="p-3 rounded-xl bg-white border border-[#DCE5DC]">
+                                      <span className="font-bold text-[#1B5E20] block mb-1">
+                                        NCM & Embalagem
+                                      </span>
+                                      <p className="text-[11px] text-[#5A6D5A]">
+                                        {p.regra_tipi ||
+                                          'Classificação conforme Tabela TIPI da Receita Federal.'}
+                                      </p>
+                                    </div>
+                                    <div className="p-3 rounded-xl bg-white border border-[#DCE5DC]">
+                                      <span className="font-bold text-amber-900 block mb-1">
+                                        PIS/COFINS
+                                      </span>
+                                      <p className="text-[11px] text-[#5A6D5A]">{enq.descricao}</p>
+                                      <div className="mt-1 font-mono text-[10px]">
+                                        CST Saída: {p.cst_saida || enq.cstSugerido}
+                                      </div>
+                                    </div>
+                                    <div className="p-3 rounded-xl bg-white border border-[#DCE5DC]">
+                                      <span className="font-bold text-blue-900 block mb-1">
+                                        IBS/CBS Reforma
+                                      </span>
+                                      <p className="text-[11px] text-[#5A6D5A]">
+                                        Redução de 60% e diferimento entre contribuintes regulares.
+                                      </p>
+                                    </div>
+                                  </div>
+                                </div>
+                              </td>
+                            </tr>
+                          )}
+                        </React.Fragment>
+                      )
+                    })
+                  )}
+                </tbody>
+              </table>
+            </ScrollableTable>
+
+            <div ref={sentinelRef} className="h-1 w-full" aria-hidden="true" />
+
+            <div className="flex items-center justify-between p-3 border-t border-[#DCE5DC] bg-[#FAFBF9] text-xs text-[#5A6D5A]">
+              <span>
+                {produtos.length} produtos exibidos • Total: {totalCount}
+              </span>
+              {loadingMore && (
+                <div className="inline-flex items-center gap-1.5 text-xs text-[#1B5E20]">
+                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                  <span>Carregando...</span>
+                </div>
+              )}
+            </div>
+          </Card>
+        </div>
+      )}
     </div>
   )
 }
