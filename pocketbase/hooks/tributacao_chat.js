@@ -3,23 +3,26 @@
  * Assistente de IA especialista em tributação agrícola brasileira.
  *
  * Recursos:
- * - Streaming SSE com tool calls e persistência de histórico
+ * - Streaming SSE com watchdog de segurança e garantia de evento terminal (done/error)
  * - Chat síncrono
  * - Listagem de conversas do usuário autenticado
  * - Listagem de mensagens de uma conversa
- * - Criação e limpeza de conversas
  *
  * NOTA CRÍTICA DE ARQUITETURA POCKETBASE JSVM:
  * Todas as funções auxiliares e variáveis devem ser declaradas INLINE dentro do corpo
  * do callback de cada routerAdd para respeitar o isolamento da VM pool do PocketBase.
  */
 
-// 1. Streaming de resposta com SSE
+// 1. Streaming de resposta com SSE blindado
 routerAdd(
   'POST',
   '/backend/v1/tributacao/chat-stream',
   (e) => {
     const agentSlug = 'consultor-tributario-agro'
+    const startTime = Date.now()
+    let resolvedUserId = null
+    let questionPreview = ''
+
     try {
       let userId = e.auth && e.auth.id ? e.auth.id : null
       if (!userId) {
@@ -36,12 +39,14 @@ routerAdd(
           'Autenticação necessária para consultar o especialista tributário.',
         )
       }
+      resolvedUserId = userId
 
       const body = e.requestInfo().body || {}
       const message = String(body.message || '').trim()
       if (!message) {
         return e.badRequestError('A mensagem não pode estar vazia.')
       }
+      questionPreview = message.slice(0, 60)
 
       const convId = body.conversation_id ? String(body.conversation_id).trim() : null
       const convTitle = body.title ? String(body.title).slice(0, 80) : message.slice(0, 60)
@@ -59,15 +64,61 @@ routerAdd(
         stream: true,
       })
 
+      // Gerador envelopado que insere logs, watchdog de segurança e garante término limpo
+      function* safeIterator() {
+        let sawDone = false
+        let chunkCount = 0
+
+        try {
+          for (const ev of iter) {
+            if (ev && ev.type === 'done') {
+              sawDone = true
+            }
+            if (ev && ev.type === 'chunk') {
+              chunkCount++
+            }
+            yield ev
+          }
+
+          // Se o iterador nativo encerrou sem emitir 'done' nem lançar erro
+          if (!sawDone) {
+            console.warn(
+              `[tributacao_chat] Stream terminou sem evento 'done'. Emitindo done sintético. conv=${conv.id} chunks=${chunkCount} elapsed=${Date.now() - startTime}ms`,
+            )
+            yield {
+              type: 'done',
+              conversation_id: conv.id,
+              message_id: 'gen-' + Date.now(),
+            }
+          }
+        } catch (iterErr) {
+          console.error(
+            `[tributacao_chat] Erro durante a iteração do agente: ${iterErr && iterErr.message ? iterErr.message : iterErr}. conv=${conv.id} chunks=${chunkCount} user=${resolvedUserId}`,
+          )
+          // Emite evento de erro no SSE para o cliente receber o diagnóstico sem travar
+          yield {
+            type: 'error',
+            message:
+              'Falha no processamento da resposta: ' +
+              (iterErr && iterErr.message
+                ? iterErr.message
+                : 'tempo limite ou erro interno do agente'),
+          }
+        }
+      }
+
       e.response.header().set('Content-Type', 'text/event-stream')
       e.response.header().set('Cache-Control', 'no-cache, no-transform')
       e.response.header().set('Connection', 'keep-alive')
       e.response.header().set('X-Accel-Buffering', 'no')
       e.response.header().set('X-Conversation-Id', conv.id)
 
-      $response.stream(e, iter)
+      $response.stream(e, safeIterator())
       return null
     } catch (err) {
+      console.error(
+        `[tributacao_chat] Exceção antes do início do stream: ${err && err.message ? err.message : err}. user=${resolvedUserId} q="${questionPreview}"`,
+      )
       if (err instanceof SkipAiConfigError) {
         return e.json(503, {
           error: 'Serviço de IA temporariamente indisponível. Tente novamente em instantes.',
@@ -94,13 +145,14 @@ routerAdd(
       return e.json(500, {
         error:
           'Não foi possível consultar o especialista agora — tente novamente. (' +
-          (err.message || 'Erro desconhecido') +
+          (err && err.message ? err.message : 'Erro desconhecido') +
           ')',
       })
     }
   },
   $apis.requireAuth(),
 )
+
 // 2. Chat síncrono
 routerAdd(
   'POST',
@@ -178,7 +230,7 @@ routerAdd(
       return e.json(500, {
         error:
           'Não foi possível consultar o especialista agora — tente novamente. (' +
-          (err.message || 'Erro desconhecido') +
+          (err && err.message ? err.message : 'Erro desconhecido') +
           ')',
       })
     }

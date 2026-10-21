@@ -307,16 +307,57 @@ export function Tributacao() {
     const abortController = new AbortController()
     abortControllerRef.current = abortController
 
-    // Timeout de 70 segundos para evitar travamento infinito caso haja falha de conexão/upstream
-    let timeoutId: ReturnType<typeof setTimeout> | null = setTimeout(() => {
+    // Watchdogs duplos:
+    // 1. Timeout geral absoluto de 70 segundos
+    // 2. Watchdog de inatividade (25 segundos sem receber NENHUM chunk ou evento aborta preventivamente)
+    let globalTimeoutId: ReturnType<typeof setTimeout> | null = setTimeout(() => {
       if (abortControllerRef.current) {
         abortController.abort(
-          new Error('Tempo limite de espera excedido. O assistente demorou para responder.'),
+          new Error('Tempo limite de espera excedido (70s). O assistente demorou para responder.'),
         )
       }
     }, 70000)
 
+    let inactivityTimeoutId: ReturnType<typeof setTimeout> | null = null
+    const resetInactivityWatchdog = () => {
+      if (inactivityTimeoutId) clearTimeout(inactivityTimeoutId)
+      inactivityTimeoutId = setTimeout(() => {
+        if (abortControllerRef.current) {
+          abortController.abort(
+            new Error(
+              'A conexão com o especialista ficou inativa sem receber dados por mais de 25s.',
+            ),
+          )
+        }
+      }, 25000)
+    }
+
+    // Inicia watchdog de inatividade para a espera do primeiro chunk
+    resetInactivityWatchdog()
+
     let partialContent = ''
+    let latestFlushTime = 0
+    let pendingFlushTimer: ReturnType<typeof setTimeout> | null = null
+
+    // Throttle de atualização visual (flush a cada 60ms) para não travar a renderização do React/Markdown
+    const flushStreamingContent = (full: string, immediate = false) => {
+      partialContent = full
+      const now = Date.now()
+      if (immediate || now - latestFlushTime > 60) {
+        if (pendingFlushTimer) {
+          clearTimeout(pendingFlushTimer)
+          pendingFlushTimer = null
+        }
+        latestFlushTime = now
+        setStreamingContent(full)
+      } else if (!pendingFlushTimer) {
+        pendingFlushTimer = setTimeout(() => {
+          latestFlushTime = Date.now()
+          setStreamingContent(partialContent)
+          pendingFlushTimer = null
+        }, 60)
+      }
+    }
 
     try {
       const res = await fetch(
@@ -340,14 +381,28 @@ export function Tributacao() {
 
       const result = await streamAgentChat(res, {
         onChunk: (_delta, full) => {
-          partialContent = full
-          setStreamingContent(full)
+          resetInactivityWatchdog()
+          flushStreamingContent(full)
+        },
+        onToolCallStart: () => {
+          resetInactivityWatchdog()
+        },
+        onToolCallDone: () => {
+          resetInactivityWatchdog()
         },
         onCitations: (citations) => {
+          resetInactivityWatchdog()
           latestCitations = citations
         },
         signal: abortController.signal,
       })
+
+      // Garante flush final imediato com o texto completo
+      if (pendingFlushTimer) {
+        clearTimeout(pendingFlushTimer)
+        pendingFlushTimer = null
+      }
+      partialContent = result.content
 
       const newConvId = res.headers.get('X-Conversation-Id') || result.conversation_id
       if (newConvId && newConvId !== conversationId) {
@@ -427,9 +482,17 @@ export function Tributacao() {
             : 'Não foi possível obter resposta agora. Tente novamente.',
       })
     } finally {
-      if (timeoutId) {
-        clearTimeout(timeoutId)
-        timeoutId = null
+      if (globalTimeoutId) {
+        clearTimeout(globalTimeoutId)
+        globalTimeoutId = null
+      }
+      if (inactivityTimeoutId) {
+        clearTimeout(inactivityTimeoutId)
+        inactivityTimeoutId = null
+      }
+      if (pendingFlushTimer) {
+        clearTimeout(pendingFlushTimer)
+        pendingFlushTimer = null
       }
       setIsSending(false)
       abortControllerRef.current = null
