@@ -6,7 +6,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 
-export default function Login() {
+export function Login() {
   const { login } = useAuth()
   const navigate = useNavigate()
   const [email, setEmail] = useState('roogerio99@gmail.com')
@@ -130,10 +130,13 @@ export default function Login() {
             </span>
           </div>
           <p className="text-xs text-slate-500 max-w-xs mx-auto">
-            Sistema restrito. Entrada exclusivamente por convite do administrador. Auto-cadastro desativado.
+            Sistema restrito. Entrada exclusivamente por convite do administrador. Auto-cadastro
+            desativado.
           </p>
         </div>
       </div>
     </div>
   )
 }
+
+export default Login

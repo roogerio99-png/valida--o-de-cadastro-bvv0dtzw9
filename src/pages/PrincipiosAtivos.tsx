@@ -695,36 +695,39 @@ export function PrincipiosAtivos() {
                               />
                             </Button>
 
-                            {isAdmin && (
-                              <Button
-                                variant="ghost"
-                                size="icon"
-                                title="Editar registro da Matriz"
-                                onClick={(e) => handleOpenForm(pa, e)}
-                                className="h-7 w-7 text-gray-700 hover:bg-gray-100"
-                              >
-                                <Edit className="w-3.5 h-3.5" />
-                              </Button>
-                            )}
-
-                            {isAdmin && (
-                              <Button
-                                variant="ghost"
-                                size="icon"
-                                title={
-                                  vinculados > 0
-                                    ? 'Exclusão bloqueada: existem produtos vinculados (ON DELETE RESTRICT)'
-                                    : 'Excluir Princípio Ativo'
-                                }
-                                onClick={(e) => handleExcluir(pa, e)}
-                                className={`h-7 w-7 ${
-                                  vinculados > 0
-                                    ? 'text-gray-300 hover:bg-transparent cursor-not-allowed'
-                                    : 'text-red-600 hover:bg-red-50'
-                                }`}
-                              >
-                                <Trash2 className="w-3.5 h-3.5" />
-                              </Button>
+                            {isAdmin ? (
+                              <>
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  title="Editar registro da Matriz"
+                                  onClick={(e) => handleOpenForm(pa, e)}
+                                  className="h-7 w-7 text-gray-700 hover:bg-gray-100"
+                                >
+                                  <Edit className="w-3.5 h-3.5" />
+                                </Button>
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  title={
+                                    vinculados > 0
+                                      ? 'Exclusão bloqueada: existem produtos vinculados (ON DELETE RESTRICT)'
+                                      : 'Excluir Princípio Ativo'
+                                  }
+                                  onClick={(e) => handleExcluir(pa, e)}
+                                  className={`h-7 w-7 ${
+                                    vinculados > 0
+                                      ? 'text-gray-300 hover:bg-transparent cursor-not-allowed'
+                                      : 'text-red-600 hover:bg-red-50'
+                                  }`}
+                                >
+                                  <Trash2 className="w-3.5 h-3.5" />
+                                </Button>
+                              </>
+                            ) : (
+                              <span className="text-[10px] text-slate-400 italic px-1">
+                                Leitura
+                              </span>
                             )}
                           </div>
                         </div>

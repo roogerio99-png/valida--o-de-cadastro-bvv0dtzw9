@@ -29,6 +29,7 @@ import {
   atualizarRegraNcm,
   excluirRegraNcm,
 } from '@/services/agroService'
+import { useAuth } from '@/contexts/AuthContext'
 import { useRealtime } from '@/hooks/use-realtime'
 import type { RegraNcmEmbalagem } from '@/types/agro'
 
@@ -80,7 +81,8 @@ function parseEmbalagens(raw: unknown): string[] {
   return []
 }
 
-export default function Regras() {
+export function Regras() {
+  const { isAdmin } = useAuth()
   const [regras, setRegras] = useState<RegraNcmEmbalagem[]>([])
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState('')
@@ -259,14 +261,16 @@ export default function Regras() {
             <Download className="w-3.5 h-3.5 mr-1.5 text-[#1B5E20]" />
             Exportar CSV
           </Button>
-          <Button
-            size="sm"
-            onClick={handleOpenCreate}
-            className="text-xs h-9 bg-[#1B5E20] hover:bg-[#2E7D32] text-white"
-          >
-            <Plus className="w-4 h-4 mr-1" />
-            Nova Regra NCM
-          </Button>
+          {isAdmin && (
+            <Button
+              size="sm"
+              onClick={handleOpenCreate}
+              className="text-xs h-9 bg-[#1B5E20] hover:bg-[#2E7D32] text-white"
+            >
+              <Plus className="w-4 h-4 mr-1" />
+              Nova Regra NCM
+            </Button>
+          )}
         </div>
       </div>
 
@@ -384,24 +388,30 @@ export default function Regras() {
                         )}
                       </td>
                       <td className="py-3 px-4 text-right whitespace-nowrap">
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          onClick={() => handleOpenEdit(r)}
-                          className="h-7 w-7 text-[#5A6D5A] hover:text-[#1B5E20] hover:bg-emerald-50 mr-1"
-                          title="Editar regra"
-                        >
-                          <Edit2 className="w-3.5 h-3.5" />
-                        </Button>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          onClick={() => handleDelete(r.id, r.ncm)}
-                          className="h-7 w-7 text-[#5A6D5A] hover:text-red-600 hover:bg-red-50"
-                          title="Excluir regra"
-                        >
-                          <Trash2 className="w-3.5 h-3.5" />
-                        </Button>
+                        {isAdmin ? (
+                          <>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              onClick={() => handleOpenEdit(r)}
+                              className="h-7 w-7 text-[#5A6D5A] hover:text-[#1B5E20] hover:bg-emerald-50 mr-1"
+                              title="Editar regra"
+                            >
+                              <Edit2 className="w-3.5 h-3.5" />
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              onClick={() => handleDelete(r.id, r.ncm)}
+                              className="h-7 w-7 text-[#5A6D5A] hover:text-red-600 hover:bg-red-50"
+                              title="Excluir regra"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </Button>
+                          </>
+                        ) : (
+                          <span className="text-[10px] text-slate-400 italic px-2">Leitura</span>
+                        )}
                       </td>
                     </tr>
                   )

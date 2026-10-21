@@ -802,14 +802,23 @@ export function BaseMestre() {
                               </div>
                             </div>
 
-                            <Button
-                              size="sm"
-                              disabled={isResolving}
-                              onClick={() => handleManterUmExcluirOutros(grupo, item.id)}
-                              className="text-[10px] h-7 bg-[#1B5E20] hover:bg-[#2E7D32] text-white font-medium px-2.5 rounded-lg whitespace-nowrap"
-                            >
-                              Manter Este e Excluir Outros
-                            </Button>
+                            {isAdmin ? (
+                              <Button
+                                size="sm"
+                                disabled={isResolving}
+                                onClick={() => handleManterUmExcluirOutros(grupo, item.id)}
+                                className="text-[10px] h-7 bg-[#1B5E20] hover:bg-[#2E7D32] text-white font-medium px-2.5 rounded-lg whitespace-nowrap"
+                              >
+                                Manter Este e Excluir Outros
+                              </Button>
+                            ) : (
+                              <Badge
+                                variant="outline"
+                                className="text-[10px] text-slate-500 bg-slate-50 border-slate-200"
+                              >
+                                Leitura
+                              </Badge>
+                            )}
                           </div>
                         ))}
                       </div>
@@ -1132,7 +1141,9 @@ export function BaseMestre() {
                               <Edit2 className="w-3.5 h-3.5" />
                             </Button>
                           ) : (
-                            <span className="text-[10px] text-slate-400 italic px-2">Visualizar</span>
+                            <span className="text-[10px] text-slate-400 italic px-2">
+                              Visualizar
+                            </span>
                           )}
                         </td>
                       </tr>

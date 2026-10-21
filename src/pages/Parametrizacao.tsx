@@ -12,10 +12,12 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { toast } from '@/hooks/use-toast'
+import { useAuth } from '@/contexts/AuthContext'
 import { listarParametrizacaoFiscal, salvarParametrizacaoFiscal } from '@/services/agroService'
 import type { ParametrizacaoFiscal } from '@/types/agro'
 
-export default function Parametrizacao() {
+export function Parametrizacao() {
+  const { isAdmin } = useAuth()
   const [parametros, setParametros] = useState<ParametrizacaoFiscal[]>([])
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState('')
@@ -129,129 +131,131 @@ export default function Parametrizacao() {
         </p>
       </div>
 
-      {/* Card de Adicionar Novo NCM Tributário */}
-      <Card className="rounded-2xl border-[#DCE5DC] bg-white shadow-sm p-5">
-        <div className="flex items-center gap-2 mb-3">
-          <Plus className="w-4 h-4 text-[#1B5E20]" />
-          <h3 className="text-xs font-bold text-[#1C2B1C] uppercase tracking-wider">
-            Cadastrar Parâmetros Tributários por NCM
-          </h3>
-        </div>
-        <form onSubmit={handleCadastrarNovo} className="space-y-4">
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
-            <div className="space-y-1">
-              <Label className="text-xs font-semibold text-[#1C2B1C]">NCM (8 dígitos) *</Label>
-              <Input
-                required
-                maxLength={10}
-                value={novoNcm}
-                onChange={(e) => setNovoNcm(e.target.value)}
-                placeholder="Ex.: 38089324"
-                className="h-9 text-xs font-mono font-bold text-[#1B5E20] border-[#DCE5DC]"
-              />
+      {/* Card de Adicionar Novo NCM Tributário (Apenas Admin) */}
+      {isAdmin && (
+        <Card className="rounded-2xl border-[#DCE5DC] bg-white shadow-sm p-5">
+          <div className="flex items-center gap-2 mb-3">
+            <Plus className="w-4 h-4 text-[#1B5E20]" />
+            <h3 className="text-xs font-bold text-[#1C2B1C] uppercase tracking-wider">
+              Cadastrar Parâmetros Tributários por NCM
+            </h3>
+          </div>
+          <form onSubmit={handleCadastrarNovo} className="space-y-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+              <div className="space-y-1">
+                <Label className="text-xs font-semibold text-[#1C2B1C]">NCM (8 dígitos) *</Label>
+                <Input
+                  required
+                  maxLength={10}
+                  value={novoNcm}
+                  onChange={(e) => setNovoNcm(e.target.value)}
+                  placeholder="Ex.: 38089324"
+                  className="h-9 text-xs font-mono font-bold text-[#1B5E20] border-[#DCE5DC]"
+                />
+              </div>
+
+              <div className="space-y-1">
+                <Label className="text-xs font-semibold text-[#1C2B1C]">Alíquota PIS (%)</Label>
+                <Input
+                  type="number"
+                  step="0.01"
+                  required
+                  value={novoPis}
+                  onChange={(e) => setNovoPis(parseFloat(e.target.value) || 0)}
+                  className="h-9 text-xs border-[#DCE5DC]"
+                />
+              </div>
+
+              <div className="space-y-1">
+                <Label className="text-xs font-semibold text-[#1C2B1C]">Alíquota COFINS (%)</Label>
+                <Input
+                  type="number"
+                  step="0.01"
+                  required
+                  value={novoCofins}
+                  onChange={(e) => setNovoCofins(parseFloat(e.target.value) || 0)}
+                  className="h-9 text-xs border-[#DCE5DC]"
+                />
+              </div>
+
+              <div className="space-y-1">
+                <Label className="text-xs font-semibold text-[#1C2B1C]">Regime PIS/COFINS</Label>
+                <Select
+                  value={novoRegime}
+                  onValueChange={(val: 'cumulativo' | 'nao_cumulativo') => setNovoRegime(val)}
+                >
+                  <SelectTrigger className="h-9 text-xs border-[#DCE5DC]">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="nao_cumulativo">Não Cumulativo</SelectItem>
+                    <SelectItem value="cumulativo">Cumulativo</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
             </div>
 
-            <div className="space-y-1">
-              <Label className="text-xs font-semibold text-[#1C2B1C]">Alíquota PIS (%)</Label>
-              <Input
-                type="number"
-                step="0.01"
-                required
-                value={novoPis}
-                onChange={(e) => setNovoPis(parseFloat(e.target.value) || 0)}
-                className="h-9 text-xs border-[#DCE5DC]"
-              />
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+              <div className="space-y-1">
+                <Label className="text-xs font-semibold text-[#1C2B1C]">Alíquota IBS (%)</Label>
+                <Input
+                  type="number"
+                  step="0.01"
+                  required
+                  value={novoIbs}
+                  onChange={(e) => setNovoIbs(parseFloat(e.target.value) || 0)}
+                  className="h-9 text-xs border-[#DCE5DC]"
+                />
+              </div>
+
+              <div className="space-y-1">
+                <Label className="text-xs font-semibold text-[#1C2B1C]">Alíquota CBS (%)</Label>
+                <Input
+                  type="number"
+                  step="0.01"
+                  required
+                  value={novoCbs}
+                  onChange={(e) => setNovoCbs(parseFloat(e.target.value) || 0)}
+                  className="h-9 text-xs border-[#DCE5DC]"
+                />
+              </div>
+
+              <div className="space-y-1">
+                <Label className="text-xs font-semibold text-[#1C2B1C]">Classificação</Label>
+                <Input
+                  value={novoClassif}
+                  onChange={(e) => setNovoClassif(e.target.value)}
+                  className="h-9 text-xs border-[#DCE5DC]"
+                />
+              </div>
+
+              <div className="space-y-1">
+                <Label className="text-xs font-semibold text-[#1C2B1C]">Tributação</Label>
+                <Input
+                  value={novoTrib}
+                  onChange={(e) => setNovoTrib(e.target.value)}
+                  className="h-9 text-xs border-[#DCE5DC]"
+                />
+              </div>
             </div>
 
-            <div className="space-y-1">
-              <Label className="text-xs font-semibold text-[#1C2B1C]">Alíquota COFINS (%)</Label>
-              <Input
-                type="number"
-                step="0.01"
-                required
-                value={novoCofins}
-                onChange={(e) => setNovoCofins(parseFloat(e.target.value) || 0)}
-                className="h-9 text-xs border-[#DCE5DC]"
-              />
-            </div>
-
-            <div className="space-y-1">
-              <Label className="text-xs font-semibold text-[#1C2B1C]">Regime PIS/COFINS</Label>
-              <Select
-                value={novoRegime}
-                onValueChange={(val: 'cumulativo' | 'nao_cumulativo') => setNovoRegime(val)}
+            <div className="flex justify-end pt-1">
+              <Button
+                type="submit"
+                disabled={addingNovo}
+                className="text-xs h-9 bg-[#1B5E20] hover:bg-[#2E7D32] text-white px-5"
               >
-                <SelectTrigger className="h-9 text-xs border-[#DCE5DC]">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="nao_cumulativo">Não Cumulativo</SelectItem>
-                  <SelectItem value="cumulativo">Cumulativo</SelectItem>
-                </SelectContent>
-              </Select>
+                {addingNovo ? (
+                  <Loader2 className="w-3.5 h-3.5 animate-spin mr-1" />
+                ) : (
+                  <Plus className="w-3.5 h-3.5 mr-1" />
+                )}
+                Adicionar Parâmetro NCM
+              </Button>
             </div>
-          </div>
-
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
-            <div className="space-y-1">
-              <Label className="text-xs font-semibold text-[#1C2B1C]">Alíquota IBS (%)</Label>
-              <Input
-                type="number"
-                step="0.01"
-                required
-                value={novoIbs}
-                onChange={(e) => setNovoIbs(parseFloat(e.target.value) || 0)}
-                className="h-9 text-xs border-[#DCE5DC]"
-              />
-            </div>
-
-            <div className="space-y-1">
-              <Label className="text-xs font-semibold text-[#1C2B1C]">Alíquota CBS (%)</Label>
-              <Input
-                type="number"
-                step="0.01"
-                required
-                value={novoCbs}
-                onChange={(e) => setNovoCbs(parseFloat(e.target.value) || 0)}
-                className="h-9 text-xs border-[#DCE5DC]"
-              />
-            </div>
-
-            <div className="space-y-1">
-              <Label className="text-xs font-semibold text-[#1C2B1C]">Classificação</Label>
-              <Input
-                value={novoClassif}
-                onChange={(e) => setNovoClassif(e.target.value)}
-                className="h-9 text-xs border-[#DCE5DC]"
-              />
-            </div>
-
-            <div className="space-y-1">
-              <Label className="text-xs font-semibold text-[#1C2B1C]">Tributação</Label>
-              <Input
-                value={novoTrib}
-                onChange={(e) => setNovoTrib(e.target.value)}
-                className="h-9 text-xs border-[#DCE5DC]"
-              />
-            </div>
-          </div>
-
-          <div className="flex justify-end pt-1">
-            <Button
-              type="submit"
-              disabled={addingNovo}
-              className="text-xs h-9 bg-[#1B5E20] hover:bg-[#2E7D32] text-white px-5"
-            >
-              {addingNovo ? (
-                <Loader2 className="w-3.5 h-3.5 animate-spin mr-1" />
-              ) : (
-                <Plus className="w-3.5 h-3.5 mr-1" />
-              )}
-              Adicionar Parâmetro NCM
-            </Button>
-          </div>
-        </form>
-      </Card>
+          </form>
+        </Card>
+      )}
 
       {/* Busca e Tabela Editável Inline */}
       <Card className="rounded-2xl border-[#DCE5DC] bg-white shadow-sm p-4">
@@ -386,18 +390,22 @@ export default function Parametrizacao() {
                       </span>
                     </td>
                     <td className="py-2 px-3 text-right">
-                      <Button
-                        size="sm"
-                        onClick={() => handleSalvarLinha(item)}
-                        disabled={savingId === item.id}
-                        className="h-8 text-xs bg-[#1B5E20] hover:bg-[#2E7D32] text-white"
-                      >
-                        {savingId === item.id ? (
-                          <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                        ) : (
-                          <Save className="w-3.5 h-3.5" />
-                        )}
-                      </Button>
+                      {isAdmin ? (
+                        <Button
+                          size="sm"
+                          onClick={() => handleSalvarLinha(item)}
+                          disabled={savingId === item.id}
+                          className="h-8 text-xs bg-[#1B5E20] hover:bg-[#2E7D32] text-white"
+                        >
+                          {savingId === item.id ? (
+                            <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                          ) : (
+                            <Save className="w-3.5 h-3.5" />
+                          )}
+                        </Button>
+                      ) : (
+                        <span className="text-[10px] text-slate-400 italic px-2">Leitura</span>
+                      )}
                     </td>
                   </tr>
                 ))

@@ -17,11 +17,17 @@
 routerAdd('GET', '/backend/v1/usuarios', (e) => {
   const authRecord = e.auth
   if (!authRecord) {
-    return e.json(401, { sucesso: false, error: 'Acesso não autorizado. É necessário estar autenticado.' })
+    return e.json(401, {
+      sucesso: false,
+      error: 'Acesso não autorizado. É necessário estar autenticado.',
+    })
   }
   const role = authRecord.getString('role') || 'analista'
   if (role !== 'admin') {
-    return e.json(403, { sucesso: false, error: 'Apenas administradores podem realizar esta ação.' })
+    return e.json(403, {
+      sucesso: false,
+      error: 'Apenas administradores podem realizar esta ação.',
+    })
   }
 
   try {
@@ -39,7 +45,9 @@ routerAdd('GET', '/backend/v1/usuarios', (e) => {
     // Buscar convites pendentes
     let convitesList = []
     try {
-      const convRecords = $app.findRecordsByFilter('convites_usuarios', 'status = "pendente"', '-created', 200, 0) || []
+      const convRecords =
+        $app.findRecordsByFilter('convites_usuarios', 'status = "pendente"', '-created', 200, 0) ||
+        []
       convitesList = convRecords.map((c) => ({
         id: c.id,
         email: c.getString('email'),
@@ -70,17 +78,25 @@ routerAdd('GET', '/backend/v1/usuarios', (e) => {
 routerAdd('POST', '/backend/v1/usuarios/convidar', (e) => {
   const authRecord = e.auth
   if (!authRecord) {
-    return e.json(401, { sucesso: false, error: 'Acesso não autorizado. É necessário estar autenticado.' })
+    return e.json(401, {
+      sucesso: false,
+      error: 'Acesso não autorizado. É necessário estar autenticado.',
+    })
   }
   const role = authRecord.getString('role') || 'analista'
   if (role !== 'admin') {
-    return e.json(403, { sucesso: false, error: 'Apenas administradores podem realizar esta ação.' })
+    return e.json(403, {
+      sucesso: false,
+      error: 'Apenas administradores podem realizar esta ação.',
+    })
   }
 
   try {
     const info = e.requestInfo()
     const body = info.body || {}
-    const email = String(body.email || '').trim().toLowerCase()
+    const email = String(body.email || '')
+      .trim()
+      .toLowerCase()
     const nome = String(body.nome || '').trim()
     const roleDesejado = String(body.role || 'analista').trim() === 'admin' ? 'admin' : 'analista'
 
@@ -167,25 +183,36 @@ routerAdd('POST', '/backend/v1/usuarios/convidar', (e) => {
 routerAdd('POST', '/backend/v1/usuarios/alterar-papel', (e) => {
   const authRecord = e.auth
   if (!authRecord) {
-    return e.json(401, { sucesso: false, error: 'Acesso não autorizado. É necessário estar autenticado.' })
+    return e.json(401, {
+      sucesso: false,
+      error: 'Acesso não autorizado. É necessário estar autenticado.',
+    })
   }
   const role = authRecord.getString('role') || 'analista'
   if (role !== 'admin') {
-    return e.json(403, { sucesso: false, error: 'Apenas administradores podem realizar esta ação.' })
+    return e.json(403, {
+      sucesso: false,
+      error: 'Apenas administradores podem realizar esta ação.',
+    })
   }
 
   try {
     const info = e.requestInfo()
     const body = info.body || {}
     const userId = String(body.id || '').trim()
-    const novoRole = String(body.role || '').trim().toLowerCase()
+    const novoRole = String(body.role || '')
+      .trim()
+      .toLowerCase()
 
     if (!userId) {
       return e.json(400, { sucesso: false, error: 'ID do usuário é obrigatório.' })
     }
 
     if (novoRole !== 'admin' && novoRole !== 'analista') {
-      return e.json(400, { sucesso: false, error: 'Papel inválido. Valores aceitos: "admin" ou "analista".' })
+      return e.json(400, {
+        sucesso: false,
+        error: 'Papel inválido. Valores aceitos: "admin" ou "analista".',
+      })
     }
 
     const usuario = $app.findRecordById('users', userId)
@@ -194,7 +221,8 @@ routerAdd('POST', '/backend/v1/usuarios/alterar-papel', (e) => {
     if (emailUsuario === 'roogerio99@gmail.com' && novoRole !== 'admin') {
       return e.json(400, {
         sucesso: false,
-        error: 'O usuário administrador principal (roogerio99@gmail.com) não pode ter seu papel alterado.',
+        error:
+          'O usuário administrador principal (roogerio99@gmail.com) não pode ter seu papel alterado.',
       })
     }
 
@@ -227,11 +255,17 @@ routerAdd('POST', '/backend/v1/usuarios/alterar-papel', (e) => {
 routerAdd('POST', '/backend/v1/usuarios/excluir', (e) => {
   const authRecord = e.auth
   if (!authRecord) {
-    return e.json(401, { sucesso: false, error: 'Acesso não autorizado. É necessário estar autenticado.' })
+    return e.json(401, {
+      sucesso: false,
+      error: 'Acesso não autorizado. É necessário estar autenticado.',
+    })
   }
   const role = authRecord.getString('role') || 'analista'
   if (role !== 'admin') {
-    return e.json(403, { sucesso: false, error: 'Apenas administradores podem realizar esta ação.' })
+    return e.json(403, {
+      sucesso: false,
+      error: 'Apenas administradores podem realizar esta ação.',
+    })
   }
 
   try {
@@ -289,7 +323,14 @@ routerAdd('POST', '/backend/v1/usuarios/excluir', (e) => {
     $app.delete(usuario)
 
     try {
-      const convites = $app.findRecordsByFilter('convites_usuarios', `email = '${emailUsuario.replace(/'/g, "\\'")}'`, '-created', 10, 0) || []
+      const convites =
+        $app.findRecordsByFilter(
+          'convites_usuarios',
+          `email = '${emailUsuario.replace(/'/g, "\\'")}'`,
+          '-created',
+          10,
+          0,
+        ) || []
       for (let i = 0; i < convites.length; i++) {
         $app.delete(convites[i])
       }

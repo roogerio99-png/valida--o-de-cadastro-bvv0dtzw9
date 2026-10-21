@@ -37,7 +37,7 @@ import {
 
 const PIE_COLORS = ['#2E7D32', '#C62828', '#F57F17']
 
-export default function Dashboard() {
+export function Dashboard() {
   const navigate = useNavigate()
   const [totalProdutos, setTotalProdutos] = useState<number>(0)
   const [totalRegras, setTotalRegras] = useState<number>(0)

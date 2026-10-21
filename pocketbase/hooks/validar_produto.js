@@ -772,7 +772,7 @@ routerAdd('POST', '/backend/v1/validar-produto', (e) => {
     const modoValidacao = data.modo === 'existente' ? 'existente' : 'novo'
     const idProdutoExistente = String(data.id_produto_existente || '').trim()
     const authRecord = e.auth
-    const userRole = authRecord ? (authRecord.getString('role') || 'analista') : 'analista'
+    const userRole = authRecord ? authRecord.getString('role') || 'analista' : 'analista'
     // Analistas ou não autenticados NUNCA gravam na base mestre
     const autoCadastrar = userRole === 'admin' && data.auto_cadastrar === true
 

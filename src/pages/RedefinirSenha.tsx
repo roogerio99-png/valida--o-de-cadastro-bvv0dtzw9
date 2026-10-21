@@ -6,7 +6,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import pb from '@/lib/pocketbase/client'
 
-export default function RedefinirSenha() {
+export function RedefinirSenha() {
   const [searchParams] = useSearchParams()
   const token = searchParams.get('token') || ''
 

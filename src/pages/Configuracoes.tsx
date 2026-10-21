@@ -54,7 +54,7 @@ export function Configuracoes() {
           <CardContent className="space-y-4">
             <div className="flex flex-col items-center text-center p-3 rounded-xl bg-[#F5F7F1]">
               <div className="w-16 h-16 rounded-full bg-[#1B5E20] text-white flex items-center justify-center font-bold text-xl mb-2">
-                {user?.name ? user.name.slice(0, 2).toUpperCase() : (isAdmin ? 'AD' : 'AN')}
+                {user?.name ? user.name.slice(0, 2).toUpperCase() : isAdmin ? 'AD' : 'AN'}
               </div>
               <p className="font-semibold text-sm text-[#1C2B1C]">{user?.name || 'Usuário Agro'}</p>
               <p className="text-xs text-[#5A6D5A] font-mono break-all">{user?.email}</p>
@@ -66,7 +66,10 @@ export function Configuracoes() {
                     Administrador
                   </Badge>
                 ) : (
-                  <Badge variant="secondary" className="gap-1 py-1 px-2.5 font-medium text-blue-900 bg-blue-100 dark:bg-blue-950 dark:text-blue-300">
+                  <Badge
+                    variant="secondary"
+                    className="gap-1 py-1 px-2.5 font-medium text-blue-900 bg-blue-100 dark:bg-blue-950 dark:text-blue-300"
+                  >
                     <Eye className="w-3.5 h-3.5 text-blue-600" />
                     Analista (Visualização)
                   </Badge>
@@ -77,16 +80,25 @@ export function Configuracoes() {
             <div className="text-xs text-[#5A6D5A] space-y-2 pt-2 border-t border-slate-100">
               <div className="flex justify-between">
                 <span>Nível de Acesso:</span>
-                <span className="font-medium text-[#1C2B1C]">{isAdmin ? 'Acesso Total' : 'Apenas Leitura'}</span>
+                <span className="font-medium text-[#1C2B1C]">
+                  {isAdmin ? 'Acesso Total' : 'Apenas Leitura'}
+                </span>
               </div>
               <div className="flex justify-between">
                 <span>ID da Conta:</span>
-                <span className="font-mono text-[10px] text-slate-500">{user?.id?.slice(0, 10)}...</span>
+                <span className="font-mono text-[10px] text-slate-500">
+                  {user?.id?.slice(0, 10)}...
+                </span>
               </div>
             </div>
 
             {isAdmin && (
-              <Button asChild variant="outline" size="sm" className="w-full gap-2 border-emerald-300 text-emerald-800 hover:bg-emerald-50">
+              <Button
+                asChild
+                variant="outline"
+                size="sm"
+                className="w-full gap-2 border-emerald-300 text-emerald-800 hover:bg-emerald-50"
+              >
                 <Link to="/usuarios">
                   <Users className="w-4 h-4 text-emerald-600" />
                   Gerenciar Membros
@@ -118,10 +130,7 @@ export function Configuracoes() {
                     Tocar notificação ao encontrar travas ou divergências críticas.
                   </p>
                 </div>
-                <Switch
-                  checked={notifValidation}
-                  onCheckedChange={setNotifValidation}
-                />
+                <Switch checked={notifValidation} onCheckedChange={setNotifValidation} />
               </div>
 
               <div className="flex items-center justify-between py-2 border-b border-slate-100">
@@ -133,10 +142,7 @@ export function Configuracoes() {
                     Manter índices da tabela TIPI em memória para acelerar consultas.
                   </p>
                 </div>
-                <Switch
-                  checked={cacheTipi}
-                  onCheckedChange={setCacheTipi}
-                />
+                <Switch checked={cacheTipi} onCheckedChange={setCacheTipi} />
               </div>
 
               <div className="flex items-center justify-between py-2">
@@ -179,7 +185,9 @@ export function Configuracoes() {
             <CardContent className="space-y-3 text-xs text-[#5A6D5A]">
               <div className="p-3 rounded-lg bg-[#F5F7F1] border border-[#DCE5DC] space-y-1.5">
                 <p className="font-semibold text-slate-800">
-                  {isAdmin ? 'Você está operando como ADMINISTRADOR' : 'Você está operando como ANALISTA'}
+                  {isAdmin
+                    ? 'Você está operando como ADMINISTRADOR'
+                    : 'Você está operando como ANALISTA'}
                 </p>
                 <p>
                   {isAdmin

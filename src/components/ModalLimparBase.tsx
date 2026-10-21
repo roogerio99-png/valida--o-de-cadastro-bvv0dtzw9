@@ -112,7 +112,10 @@ export function ModalLimparBase({
               <ShieldAlert className="w-5 h-5 shrink-0 text-red-600 mt-0.5" />
               <div>
                 <strong>Acesso Restrito a Administradores</strong>
-                <p className="mt-0.5">Seu perfil é de <strong>Analista</strong> (somente leitura). A exclusão e limpeza de bases é bloqueada.</p>
+                <p className="mt-0.5">
+                  Seu perfil é de <strong>Analista</strong> (somente leitura). A exclusão e limpeza
+                  de bases é bloqueada.
+                </p>
               </div>
             </div>
           ) : (

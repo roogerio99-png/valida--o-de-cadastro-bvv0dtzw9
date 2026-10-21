@@ -21,6 +21,7 @@ import { Progress } from '@/components/ui/progress'
 import { Badge } from '@/components/ui/badge'
 import { toast } from '@/hooks/use-toast'
 import { readSpreadsheetFile, type ParsedTable } from '@/lib/importer/csvParser'
+import { useAuth } from '@/contexts/AuthContext'
 import {
   importarEmLote,
   type ItemErroImportacao,
@@ -185,7 +186,8 @@ export function cleanNumber(raw: string): number {
   return isNaN(parsed) ? 0 : parsed
 }
 
-export default function Importar() {
+export function Importar() {
+  const { isAdmin } = useAuth()
   const [activeZone, setActiveZone] = useState<ZoneConfig>(DROP_ZONES[3]) // Aba 4 selecionada por padrão para agilizar o fluxo do usuário
   const [selectedFile, setSelectedFile] = useState<File | null>(null)
   const [availableSheets, setAvailableSheets] = useState<string[]>([])
@@ -914,6 +916,14 @@ export default function Importar() {
 
   // Executa a importação dos válidos
   const handleExecutarImportacao = async () => {
+    if (!isAdmin) {
+      toast({
+        variant: 'destructive',
+        title: 'Acesso Restrito',
+        description: 'Apenas administradores podem importar dados para o banco.',
+      })
+      return
+    }
     if (!parsedData || parsedData.rows.length === 0) return
     setImporting(true)
     setProgress(0)
@@ -1192,23 +1202,34 @@ export default function Importar() {
                 </div>
               </div>
 
-              <Button
-                onClick={handleExecutarImportacao}
-                disabled={importing}
-                className="bg-[#1B5E20] hover:bg-[#2E7D32] text-white rounded-xl text-xs font-semibold px-5 h-10 shadow-md flex items-center gap-2"
-              >
-                {importing ? (
-                  <>
-                    <Loader2 className="w-4 h-4 animate-spin" />
-                    <span>Importando ({progress}%)...</span>
-                  </>
-                ) : (
-                  <>
-                    <span>Confirmar e Importar no Banco</span>
-                    <ArrowRight className="w-4 h-4" />
-                  </>
-                )}
-              </Button>
+              {isAdmin ? (
+                <Button
+                  onClick={handleExecutarImportacao}
+                  disabled={importing}
+                  className="bg-[#1B5E20] hover:bg-[#2E7D32] text-white rounded-xl text-xs font-semibold px-5 h-10 shadow-md flex items-center gap-2"
+                >
+                  {importing ? (
+                    <>
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                      <span>Importando ({progress}%)...</span>
+                    </>
+                  ) : (
+                    <>
+                      <span>Confirmar e Importar no Banco</span>
+                      <ArrowRight className="w-4 h-4" />
+                    </>
+                  )}
+                </Button>
+              ) : (
+                <div className="flex items-center gap-2">
+                  <Badge
+                    variant="outline"
+                    className="text-xs text-amber-700 bg-amber-50 border-amber-300 py-1.5 px-3"
+                  >
+                    Modo Somente Leitura (Apenas Admin pode importar)
+                  </Badge>
+                </div>
+              )}
             </div>
 
             {/* Barra de Progresso durante a carga */}

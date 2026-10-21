@@ -46,10 +46,7 @@ export function App() {
             <Route path="/regras" element={<Regras />} />
             <Route path="/parametrizacao" element={<Parametrizacao />} />
             <Route path="/travas" element={<Travas />} />
-            <Route
-              path="/sincronizacao"
-              element={<SincronizacaoProdutos />}
-            />
+            <Route path="/sincronizacao" element={<SincronizacaoProdutos />} />
             <Route
               path="/sincronizacao-produtos"
               element={<Navigate to="/sincronizacao" replace />}
@@ -59,7 +56,14 @@ export function App() {
               element={<Navigate to="/parametrizacao" replace />}
             />
             <Route path="/tributacao" element={<Tributacao />} />
-            <Route path="/usuarios" element={<Usuarios />} />
+            <Route
+              path="/usuarios"
+              element={
+                <ProtectedRoute requireAdmin>
+                  <Usuarios />
+                </ProtectedRoute>
+              }
+            />
             <Route path="/importar" element={<Importar />} />
             <Route path="/configuracoes" element={<Configuracoes />} />
           </Route>

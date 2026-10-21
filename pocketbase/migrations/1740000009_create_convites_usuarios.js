@@ -17,8 +17,20 @@ migrate(
       fields: [
         { name: 'email', type: 'text', required: true },
         { name: 'nome', type: 'text', required: false },
-        { name: 'role', type: 'select', values: ['admin', 'analista'], maxSelect: 1, required: true },
-        { name: 'status', type: 'select', values: ['pendente', 'aceito', 'cancelado'], maxSelect: 1, required: true },
+        {
+          name: 'role',
+          type: 'select',
+          values: ['admin', 'analista'],
+          maxSelect: 1,
+          required: true,
+        },
+        {
+          name: 'status',
+          type: 'select',
+          values: ['pendente', 'aceito', 'cancelado'],
+          maxSelect: 1,
+          required: true,
+        },
         { name: 'token_convite', type: 'text', required: true },
         { name: 'link_definicao_senha', type: 'text', required: false },
         { name: 'convidado_por', type: 'text', required: false },

@@ -24,7 +24,8 @@ migrate(
     users.createRule = null
     users.listRule = "@request.auth.id != ''"
     users.viewRule = "@request.auth.id != ''"
-    users.updateRule = "@request.auth.id != '' && id = @request.auth.id && @request.body.role:changed = false"
+    users.updateRule =
+      "@request.auth.id != '' && id = @request.auth.id && @request.body.role:changed = false"
     users.deleteRule = null
 
     app.save(users)
@@ -47,7 +48,12 @@ migrate(
 
     // 4. Backfill em quaisquer outros usuários existentes sem role: definir como 'analista'
     try {
-      app.db().newQuery("UPDATE users SET role = 'analista' WHERE (role IS NULL OR role = '') AND email != 'roogerio99@gmail.com'").execute()
+      app
+        .db()
+        .newQuery(
+          "UPDATE users SET role = 'analista' WHERE (role IS NULL OR role = '') AND email != 'roogerio99@gmail.com'",
+        )
+        .execute()
     } catch (_) {}
   },
   (app) => {

@@ -54,30 +54,48 @@ export async function listarUsuarios(): Promise<ListarUsuariosResponse> {
   })
 }
 
-export async function convidarUsuario(dados: ConvidarUsuarioInput): Promise<ConvidarUsuarioResponse> {
+export async function convidarUsuario(
+  dados: ConvidarUsuarioInput,
+): Promise<ConvidarUsuarioResponse> {
   return pb.send<ConvidarUsuarioResponse>('/backend/v1/usuarios/convidar', {
     method: 'POST',
     body: dados,
   })
 }
 
-export async function alterarPapelUsuario(id: string, role: 'admin' | 'analista'): Promise<{ sucesso: boolean; mensagem: string; error?: string }> {
-  return pb.send<{ sucesso: boolean; mensagem: string; error?: string }>('/backend/v1/usuarios/alterar-papel', {
-    method: 'POST',
-    body: { id, role },
-  })
+export async function alterarPapelUsuario(
+  id: string,
+  role: 'admin' | 'analista',
+): Promise<{ sucesso: boolean; mensagem: string; error?: string }> {
+  return pb.send<{ sucesso: boolean; mensagem: string; error?: string }>(
+    '/backend/v1/usuarios/alterar-papel',
+    {
+      method: 'POST',
+      body: { id, role },
+    },
+  )
 }
 
-export async function excluirUsuario(id: string): Promise<{ sucesso: boolean; mensagem: string; error?: string }> {
-  return pb.send<{ sucesso: boolean; mensagem: string; error?: string }>('/backend/v1/usuarios/excluir', {
-    method: 'POST',
-    body: { id },
-  })
+export async function excluirUsuario(
+  id: string,
+): Promise<{ sucesso: boolean; mensagem: string; error?: string }> {
+  return pb.send<{ sucesso: boolean; mensagem: string; error?: string }>(
+    '/backend/v1/usuarios/excluir',
+    {
+      method: 'POST',
+      body: { id },
+    },
+  )
 }
 
-export async function cancelarConvite(conviteId: string): Promise<{ sucesso: boolean; mensagem: string; error?: string }> {
-  return pb.send<{ sucesso: boolean; mensagem: string; error?: string }>('/backend/v1/usuarios/excluir', {
-    method: 'POST',
-    body: { convite_id: conviteId },
-  })
+export async function cancelarConvite(
+  conviteId: string,
+): Promise<{ sucesso: boolean; mensagem: string; error?: string }> {
+  return pb.send<{ sucesso: boolean; mensagem: string; error?: string }>(
+    '/backend/v1/usuarios/excluir',
+    {
+      method: 'POST',
+      body: { convite_id: conviteId },
+    },
+  )
 }

@@ -447,9 +447,9 @@ export function SincronizacaoProdutos() {
                 </p>
               </div>
               <Switch
-                checked={autoInclusao}
+                checked={isAdmin && autoInclusao}
                 onCheckedChange={setAutoInclusao}
-                disabled={sincronizando}
+                disabled={sincronizando || !isAdmin}
                 className="data-[state=checked]:bg-[#1B5E20]"
               />
             </div>

@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react'
+import { useAuth } from '@/contexts/AuthContext'
 import {
   CheckCircle2,
   XCircle,
@@ -56,7 +57,7 @@ const ETAPAS_PROGRESSO = [
   { etapa: 6, texto: 'Confrontando travas regulatórias e consolidando parecer...' },
 ]
 
-export default function Validar() {
+export function Validar() {
   // Modo de validação: "novo" (Validar Cadastro) ou "existente" (Validar Existente)
   const [modo, setModo] = useState<'novo' | 'existente'>('novo')
 
@@ -74,8 +75,18 @@ export default function Validar() {
     useState<BaseMestreProduto | null>(null)
   const [buscandoExistentes, setBuscandoExistentes] = useState(false)
 
-  // Interruptor de auto-cadastro na Base Mestre
-  const [autoCadastrar, setAutoCadastrar] = useState(true)
+  const { isAdmin } = useAuth()
+  // Interruptor de auto-cadastro na Base Mestre (apenas para Admin)
+  const [autoCadastrar, setAutoCadastrar] = useState(false)
+
+  // Atualiza default baseado em isAdmin
+  useEffect(() => {
+    if (isAdmin) {
+      setAutoCadastrar(true)
+    } else {
+      setAutoCadastrar(false)
+    }
+  }, [isAdmin])
 
   // Estados de execução e retorno
   const [loading, setLoading] = useState(false)
@@ -778,7 +789,7 @@ export default function Validar() {
                   </div>
                 </div>
 
-                {/* Toggle de Auto-Cadastrar / Atualizar na Base Mestre */}
+                {/* Toggle de Auto-Cadastrar / Atualizar na Base Mestre (Somente Admin) */}
                 <div className="pt-2 border-t border-[#DCE5DC]">
                   <div className="flex items-center justify-between p-3 rounded-xl bg-emerald-50/50 border border-emerald-200/60">
                     <div className="space-y-0.5 pr-2">
@@ -789,16 +800,27 @@ export default function Validar() {
                             ? 'Gravar na Base Mestre se Aprovado'
                             : 'Atualizar Base Mestre se Aprovado'}
                         </span>
+                        {!isAdmin && (
+                          <Badge
+                            variant="outline"
+                            className="text-[10px] text-blue-700 bg-blue-50 border-blue-200 ml-1"
+                          >
+                            Apenas Admin
+                          </Badge>
+                        )}
                       </div>
                       <p className="text-[11px] text-[#5A6D5A] leading-tight">
-                        {modo === 'novo'
-                          ? 'Insere automaticamente o produto no Padrão Canônico de 28 Campos.'
-                          : 'Sincroniza os dados do cadastro existente com o que foi achado na bula.'}
+                        {isAdmin
+                          ? modo === 'novo'
+                            ? 'Insere automaticamente o produto no Padrão Canônico de 28 Campos.'
+                            : 'Sincroniza os dados do cadastro existente com o que foi achado na bula.'
+                          : 'Analistas executam validação e consulta em modo somente leitura (sem gravação na base).'}
                       </p>
                     </div>
                     <Switch
-                      checked={autoCadastrar}
+                      checked={isAdmin && autoCadastrar}
                       onCheckedChange={setAutoCadastrar}
+                      disabled={!isAdmin}
                       className="data-[state=checked]:bg-[#1B5E20]"
                     />
                   </div>
@@ -1012,7 +1034,7 @@ export default function Validar() {
                         <span>Exportar JSON</span>
                       </Button>
 
-                      {/* Ação de Gravar / Salvar na Base Mestre */}
+                      {/* Ação de Gravar / Salvar na Base Mestre (Apenas Admin) */}
                       {resultado.veredito_geral !== 'REPROVADO' && (
                         <div className="flex-shrink-0">
                           {salvoComSucesso || resultado.gravacao_base_mestre?.executada ? (
@@ -1020,7 +1042,7 @@ export default function Validar() {
                               <Check className="w-4 h-4" />
                               <span>Gravado na Base Mestre</span>
                             </Badge>
-                          ) : (
+                          ) : isAdmin ? (
                             <Button
                               onClick={handleGravarBaseMestre}
                               disabled={savingBaseMestre}
@@ -1037,6 +1059,13 @@ export default function Validar() {
                                   : 'Gravar na Base Mestre'}
                               </span>
                             </Button>
+                          ) : (
+                            <Badge
+                              variant="outline"
+                              className="text-xs text-slate-500 bg-slate-50 border-slate-200 px-2.5 py-1.5"
+                            >
+                              Consulta / Somente Leitura
+                            </Badge>
                           )}
                         </div>
                       )}

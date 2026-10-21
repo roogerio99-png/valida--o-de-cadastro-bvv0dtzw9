@@ -36,7 +36,7 @@ const TRAVAS_DEFINICAO = [
   { id: 6, nome: 'Registro MAPA' },
 ]
 
-export default function Travas() {
+export function Travas() {
   const [stats, setStats] = useState<TravaStats[]>([])
   const [logs, setLogs] = useState<LogValidacao[]>([])
   const [loading, setLoading] = useState(true)

@@ -96,7 +96,7 @@ const SUGGESTED_QUESTIONS = [
   },
 ]
 
-export default function Tributacao() {
+export function Tributacao() {
   const [conversations, setConversations] = useState<ConversaItem[]>([])
   const [currentConvId, setCurrentConvId] = useState<string | null>(null)
   const [messages, setMessages] = useState<DisplayMessage[]>([])

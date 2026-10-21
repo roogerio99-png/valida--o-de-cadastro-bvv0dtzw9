@@ -56,7 +56,13 @@ migrate(
   },
   (app) => {
     // Reverter para @request.auth.id != '' em todas
-    const nomes = ['base_mestre', 'dicionario_principios_ativos', 'regras_ncm_embalagem', 'parametrizacao_fiscal', 'sincronizacao_historico']
+    const nomes = [
+      'base_mestre',
+      'dicionario_principios_ativos',
+      'regras_ncm_embalagem',
+      'parametrizacao_fiscal',
+      'sincronizacao_historico',
+    ]
     for (let i = 0; i < nomes.length; i++) {
       try {
         const col = app.findCollectionByNameOrId(nomes[i])

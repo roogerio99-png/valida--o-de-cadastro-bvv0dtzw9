@@ -62,9 +62,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const login = async (email: string, pass: string) => {
     try {
-      const authData = await pb
-        .collection('users')
-        .authWithPassword(email, pass)
+      const authData = await pb.collection('users').authWithPassword(email, pass)
       setUser(authData.record)
       setToken(authData.token)
     } catch (error) {

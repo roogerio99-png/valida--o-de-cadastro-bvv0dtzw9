@@ -152,7 +152,7 @@ export function Layout() {
           <div className="flex items-center gap-2.5 min-w-0">
             <Avatar className="w-8 h-8 border border-emerald-600/50">
               <AvatarFallback className="bg-[#1B5E20] text-emerald-200 text-xs font-semibold">
-                {user?.name ? user.name.slice(0, 2).toUpperCase() : (isAdmin ? 'AD' : 'AN')}
+                {user?.name ? user.name.slice(0, 2).toUpperCase() : isAdmin ? 'AD' : 'AN'}
               </AvatarFallback>
             </Avatar>
             <div className="truncate">
@@ -315,9 +315,7 @@ export function Layout() {
                         </span>
                       )}
                     </div>
-                    <p className="text-xs leading-none text-[#5A6D5A]">
-                      {user?.email || ''}
-                    </p>
+                    <p className="text-xs leading-none text-[#5A6D5A]">{user?.email || ''}</p>
                   </div>
                 </DropdownMenuLabel>
                 <DropdownMenuSeparator />
@@ -326,13 +324,19 @@ export function Layout() {
                   <span>Nova Validação</span>
                 </DropdownMenuItem>
                 {isAdmin && (
-                  <DropdownMenuItem onClick={() => navigate('/importar')} className="cursor-pointer">
+                  <DropdownMenuItem
+                    onClick={() => navigate('/importar')}
+                    className="cursor-pointer"
+                  >
                     <UploadCloud className="mr-2 h-4 h-4 text-[#F57F17]" />
                     <span>Importar Planilhas</span>
                   </DropdownMenuItem>
                 )}
                 {isAdmin && (
-                  <DropdownMenuItem onClick={() => navigate('/usuarios')} className="cursor-pointer text-emerald-800 font-medium">
+                  <DropdownMenuItem
+                    onClick={() => navigate('/usuarios')}
+                    className="cursor-pointer text-emerald-800 font-medium"
+                  >
                     <Users className="mr-2 h-4 h-4 text-emerald-600" />
                     <span>Gestão de Usuários</span>
                   </DropdownMenuItem>
