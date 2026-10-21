@@ -46,6 +46,7 @@ import {
   type DisplayMessage,
   type AgentCitation,
 } from '@/lib/skipAi'
+import { MarkdownRenderer } from '@/components/MarkdownRenderer'
 import { listarBaseMestre } from '@/services/agroService'
 import { formatarNcmMascara, sanitizarRegistroMapa } from '@/lib/motorCanonico'
 import type { BaseMestreProduto } from '@/types/agro'
@@ -713,15 +714,19 @@ export function Tributacao() {
                     )}
 
                     <div
-                      className={`max-w-[85%] sm:max-w-[78%] rounded-2xl p-4 text-xs leading-relaxed shadow-2xs ${
+                      className={`max-w-[85%] sm:max-w-[82%] rounded-2xl p-4 text-xs leading-relaxed shadow-2xs ${
                         isUser
                           ? 'bg-[#1B5E20] text-white rounded-tr-xs'
                           : 'bg-[#F9FAF8] text-[#1C2B1C] border border-[#DCE5DC] rounded-tl-xs'
                       }`}
                     >
-                      <div className="whitespace-pre-wrap font-sans break-words selection:bg-emerald-200 selection:text-emerald-950">
-                        {m.content}
-                      </div>
+                      {isUser ? (
+                        <div className="whitespace-pre-wrap font-sans break-words selection:bg-emerald-200 selection:text-emerald-950">
+                          {m.content}
+                        </div>
+                      ) : (
+                        <MarkdownRenderer content={m.content} />
+                      )}
 
                       {/* Exibição de citações e fontes caso existam */}
                       {m.citations && m.citations.length > 0 && (
@@ -755,12 +760,9 @@ export function Tributacao() {
                   <div className="w-8 h-8 rounded-xl bg-gradient-to-tr from-[#1B5E20] to-[#2E7D32] flex items-center justify-center text-white flex-shrink-0 shadow-xs mt-0.5">
                     <Bot className="w-4 h-4 text-emerald-200" />
                   </div>
-                  <div className="max-w-[85%] sm:max-w-[78%] rounded-2xl rounded-tl-xs p-4 text-xs leading-relaxed bg-[#F9FAF8] text-[#1C2B1C] border border-[#DCE5DC] shadow-2xs">
+                  <div className="max-w-[85%] sm:max-w-[82%] rounded-2xl rounded-tl-xs p-4 text-xs leading-relaxed bg-[#F9FAF8] text-[#1C2B1C] border border-[#DCE5DC] shadow-2xs">
                     {streamingContent ? (
-                      <div className="whitespace-pre-wrap font-sans break-words selection:bg-emerald-200">
-                        {streamingContent}
-                        <span className="inline-block w-1.5 h-3.5 bg-[#1B5E20] ml-1 animate-pulse align-middle" />
-                      </div>
+                      <MarkdownRenderer content={streamingContent} isStreaming={true} />
                     ) : (
                       <div className="flex items-center gap-2 text-[#5A6D5A]">
                         <Loader2 className="w-4 h-4 animate-spin text-[#1B5E20]" />
