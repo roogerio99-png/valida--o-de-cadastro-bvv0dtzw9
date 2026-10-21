@@ -135,3 +135,128 @@ routerAdd('POST', '/backend/v1/limpar-bases', (e) => {
     timestamp: new Date().toISOString(),
   })
 })
+
+/**
+ * POST /backend/v1/limpar-bula
+ * Endpoint protegido para limpeza total das 7 coleções do Cadastro de Bula:
+ * - bula_produtos (Mestre)
+ * - bula_composicao (Composição em Linhas)
+ * - bula_empresas (Cadeia de Empresas)
+ * - bula_embalagens (Embalagens x NCM)
+ * - bula_culturas (Culturas e Carência)
+ * - bula_alvos (Alvos e Doses)
+ * - bula_aplicacao (Aplicação e EPI)
+ *
+ * Requisitos:
+ * - Autenticação obrigatória (usuário logado via token PocketBase)
+ * - Confirmação explícita no corpo: campo `confirmar: "LIMPAR"`
+ * - NUNCA toca em: base_mestre, users, regras_ncm_embalagem,
+ *   dicionario_principios_ativos, etc.
+ *
+ * Retorno:
+ * - JSON com contagem de registros apagados por cada uma das 7 coleções e total.
+ */
+routerAdd('POST', '/backend/v1/limpar-bula', (e) => {
+  const authRecord = e.auth
+  if (!authRecord) {
+    return e.json(401, {
+      sucesso: false,
+      error:
+        'Acesso não autorizado. É necessário estar autenticado para executar a limpeza do Cadastro de Bula.',
+    })
+  }
+
+  const info = e.requestInfo()
+  const body = info.body || {}
+
+  const confirmacao = String(body.confirmar || '')
+    .trim()
+    .toUpperCase()
+  if (confirmacao !== 'LIMPAR') {
+    return e.json(400, {
+      sucesso: false,
+      error:
+        'Confirmação inválida. É obrigatório informar { confirmar: "LIMPAR" } no corpo da requisição para autorizar a exclusão permanente dos dados de bula.',
+    })
+  }
+
+  const colecoesBula = [
+    'bula_aplicacao',
+    'bula_alvos',
+    'bula_culturas',
+    'bula_embalagens',
+    'bula_empresas',
+    'bula_composicao',
+    'bula_produtos',
+  ]
+
+  const contagens = {
+    bula_produtos: 0,
+    bula_composicao: 0,
+    bula_empresas: 0,
+    bula_embalagens: 0,
+    bula_culturas: 0,
+    bula_alvos: 0,
+    bula_aplicacao: 0,
+    total: 0,
+  }
+
+  // Obter contagens antes de truncar
+  for (let i = 0; i < colecoesBula.length; i++) {
+    const nomeCol = colecoesBula[i]
+    try {
+      contagens[nomeCol] = $app.countRecords(nomeCol)
+    } catch (_) {
+      contagens[nomeCol] = 0
+    }
+  }
+
+  // Truncar as coleções na ordem inversa de dependência (acessórias primeiro, depois mestre)
+  for (let i = 0; i < colecoesBula.length; i++) {
+    const nomeCol = colecoesBula[i]
+    try {
+      const col = $app.findCollectionByNameOrId(nomeCol)
+      $app.truncateCollection(col)
+    } catch (err) {
+      console.log('Aviso ao truncar ' + nomeCol + ':', err.message)
+      try {
+        $app
+          .db()
+          .newQuery('DELETE FROM ' + nomeCol)
+          .execute()
+      } catch (sqlErr) {
+        return e.json(500, {
+          sucesso: false,
+          error: 'Falha ao limpar ' + nomeCol + ': ' + sqlErr.message,
+        })
+      }
+    }
+  }
+
+  const totalGeral =
+    contagens.bula_produtos +
+    contagens.bula_composicao +
+    contagens.bula_empresas +
+    contagens.bula_embalagens +
+    contagens.bula_culturas +
+    contagens.bula_alvos +
+    contagens.bula_aplicacao
+  contagens.total = totalGeral
+
+  return e.json(200, {
+    sucesso: true,
+    mensagem: 'Limpeza do Cadastro de Bula executada com sucesso.',
+    executado_por: authRecord.getString('email') || authRecord.id,
+    apagados: contagens,
+    preservados: [
+      'base_mestre',
+      'dicionario_principios_ativos',
+      'regras_ncm_embalagem',
+      'parametrizacao_fiscal',
+      'log_validacoes',
+      'sincronizacao_historico',
+      'users',
+    ],
+    timestamp: new Date().toISOString(),
+  })
+})

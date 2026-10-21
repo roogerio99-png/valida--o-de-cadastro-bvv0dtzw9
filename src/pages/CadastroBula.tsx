@@ -47,7 +47,10 @@ import {
   listarBulaCulturas,
   listarBulaAlvos,
   listarBulaAplicacao,
+  limparCadastroBula,
 } from '@/services/agroService'
+import { Label } from '@/components/ui/label'
+import { DialogFooter } from '@/components/ui/dialog'
 import type {
   BulaProdutoItem,
   BulaComposicaoItem,
@@ -75,6 +78,11 @@ export function CadastroBula() {
   // Modal para detalhe amplo da Bula com blocos acessórios
   const [selectedBula, setSelectedBula] = useState<BulaProdutoItem | null>(null)
   const [modalBulaOpen, setModalBulaOpen] = useState(false)
+
+  // Modal Limpar Base
+  const [modalLimparOpen, setModalLimparOpen] = useState(false)
+  const [confirmacaoTexto, setConfirmacaoTexto] = useState('')
+  const [executandoLimpeza, setExecutandoLimpeza] = useState(false)
 
   // Rolagem e paginação
   const [totalCount, setTotalCount] = useState(0)
@@ -269,6 +277,32 @@ export function CadastroBula() {
     URL.revokeObjectURL(url)
   }
 
+  const handleLimparBase = async () => {
+    if (confirmacaoTexto.trim() !== 'LIMPAR') return
+    setExecutandoLimpeza(true)
+    try {
+      const res = await limparCadastroBula({ confirmar: 'LIMPAR' })
+      const total = res.apagados.total
+      toast({
+        title: 'Cadastro de Bula limpo com sucesso',
+        description: `Total de ${total} registros removidos de todas as 7 coleções de bula.`,
+      })
+      setModalLimparOpen(false)
+      setConfirmacaoTexto('')
+      await carregarProdutos()
+    } catch (err: unknown) {
+      const msg =
+        err instanceof Error ? err.message : 'Falha ao executar a limpeza da base de bula.'
+      toast({
+        variant: 'destructive',
+        title: 'Erro na limpeza da base',
+        description: msg,
+      })
+    } finally {
+      setExecutandoLimpeza(false)
+    }
+  }
+
   return (
     <div className="flex-1 flex flex-col min-h-0 space-y-3">
       {/* ------------------------------------------------------------------ */}
@@ -307,6 +341,19 @@ export function CadastroBula() {
           >
             <Download className="w-3.5 h-3.5 mr-1.5" />
             <span>Exportar CSV</span>
+          </Button>
+
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => {
+              setConfirmacaoTexto('')
+              setModalLimparOpen(true)
+            }}
+            className="text-xs h-9 rounded-xl border-red-200 text-red-700 bg-red-50/50 hover:bg-red-100/70 hover:text-red-800 hover:border-red-300 flex items-center gap-1.5 transition-colors"
+          >
+            <Trash2 className="w-3.5 h-3.5" />
+            <span>Limpar Base</span>
           </Button>
 
           <Link to="/importar">
@@ -603,6 +650,120 @@ export function CadastroBula() {
           </ScrollableTable>
         </div>
       </Card>
+
+      {/* ------------------------------------------------------------------ */}
+      {/* MODAL LIMPAR BASE DE BULA */}
+      {/* ------------------------------------------------------------------ */}
+      <Dialog
+        open={modalLimparOpen}
+        onOpenChange={(open) => {
+          if (!executandoLimpeza) {
+            setModalLimparOpen(open)
+            if (!open) setConfirmacaoTexto('')
+          }
+        }}
+      >
+        <DialogContent className="max-w-md rounded-2xl border-red-200">
+          <DialogHeader className="space-y-2">
+            <div className="w-11 h-11 rounded-2xl bg-red-100 text-red-700 flex items-center justify-center mx-auto sm:mx-0">
+              <AlertTriangle className="w-6 h-6" />
+            </div>
+            <DialogTitle className="text-base font-bold text-red-950">
+              Limpar Base de Cadastro de Bula
+            </DialogTitle>
+            <DialogDescription className="text-xs text-[#5A6D5A] leading-relaxed">
+              Esta ação é <strong className="text-red-700">irreversível</strong>. TODOS os registros
+              das <strong className="text-[#1C2B1C]">7 coleções do Cadastro de Bula</strong>{' '}
+              (produtos comerciais e os 6 blocos acessórios) serão apagados permanentemente do banco
+              de dados para recomeçar do zero.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-3.5 py-2 text-xs">
+            {/* Caixa de detalhes do que será apagado */}
+            <div className="p-3 bg-red-50/70 rounded-xl border border-red-200 text-red-900 space-y-1">
+              <div className="flex items-center gap-1.5 font-bold text-[11px] text-red-950">
+                <Trash2 className="w-4 h-4 text-red-600" />
+                <span>Coleções que serão totalmente esvaziadas (7 blocos):</span>
+              </div>
+              <ul className="list-disc list-inside text-[11px] text-red-800 space-y-0.5 pl-1">
+                <li>Bula Produtos (Cadastro Mestre 1:1)</li>
+                <li>Composição em Linhas (Ingredientes ativos e garantias)</li>
+                <li>Cadeia de Empresas (Titular, Formulador, Manipulador, Importador)</li>
+                <li>Embalagens × NCM (Capacidades, lavabilidade e TIPI)</li>
+                <li>Culturas e Carência (Intervalos de segurança e reentrada)</li>
+                <li>Alvos e Doses (Pragas, doenças e doses PC)</li>
+                <li>Aplicação e EPI (Recomendações técnicas e proteção)</li>
+              </ul>
+            </div>
+
+            {/* Caixa de garantia de preservação */}
+            <div className="p-3 bg-emerald-50 rounded-xl border border-emerald-200 text-emerald-900 space-y-1">
+              <div className="flex items-center gap-1.5 font-bold text-[11px] text-emerald-950">
+                <ShieldCheck className="w-4 h-4 text-emerald-700" />
+                <span>O que permanece 100% intacto e protegido:</span>
+              </div>
+              <ul className="list-disc list-inside text-[11px] text-emerald-800 space-y-0.5 pl-1">
+                <li>Base Mestre de Produtos e Dicionário de Princípios Ativos</li>
+                <li>Regras Fiscais NCM × Embalagem e Parametrização Tributária</li>
+                <li>Histórico de Validações e Relatórios de Sincronização</li>
+                <li>Usuários, perfis e credenciais do sistema</li>
+              </ul>
+            </div>
+
+            <div className="space-y-1.5">
+              <Label className="text-xs font-semibold text-[#1C2B1C]">
+                Digite <span className="font-mono font-bold text-red-700">LIMPAR</span> para
+                confirmar:
+              </Label>
+              <Input
+                value={confirmacaoTexto}
+                onChange={(e) => setConfirmacaoTexto(e.target.value)}
+                placeholder="Digite LIMPAR"
+                disabled={executandoLimpeza}
+                className="h-9 text-xs font-mono font-bold tracking-wider uppercase border-red-300 focus-visible:ring-red-500"
+                autoFocus
+              />
+            </div>
+          </div>
+
+          <DialogFooter className="pt-2 gap-2 sm:gap-0">
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => {
+                setModalLimparOpen(false)
+                setConfirmacaoTexto('')
+              }}
+              disabled={executandoLimpeza}
+              className="text-xs h-9"
+            >
+              Cancelar
+            </Button>
+            <Button
+              type="button"
+              variant="destructive"
+              size="sm"
+              onClick={handleLimparBase}
+              disabled={confirmacaoTexto.trim() !== 'LIMPAR' || executandoLimpeza}
+              className="text-xs h-9 bg-red-600 hover:bg-red-700 text-white font-semibold flex items-center gap-1.5"
+            >
+              {executandoLimpeza ? (
+                <>
+                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                  Apagando registros...
+                </>
+              ) : (
+                <>
+                  <Trash2 className="w-3.5 h-3.5" />
+                  Confirmar Limpeza Total
+                </>
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* ------------------------------------------------------------------ */}
       {/* MODAL DETALHE COMPLETO DA BULA */}

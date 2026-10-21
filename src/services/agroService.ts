@@ -655,3 +655,50 @@ export async function listarBulaAplicacao(registroMapa: string) {
     sort: 'tipo_aplicacao',
   })
 }
+
+export interface RespostaLimpezaBula {
+  sucesso: boolean
+  mensagem: string
+  executado_por?: string
+  apagados: {
+    bula_produtos: number
+    bula_composicao: number
+    bula_empresas: number
+    bula_embalagens: number
+    bula_culturas: number
+    bula_alvos: number
+    bula_aplicacao: number
+    total: number
+  }
+  preservados: string[]
+  timestamp: string
+}
+
+export async function limparCadastroBula(params: {
+  confirmar: string
+}): Promise<RespostaLimpezaBula> {
+  const token = pb.authStore.token
+  const baseUrl = import.meta.env.VITE_POCKETBASE_URL || ''
+
+  const response = await fetch(`${baseUrl}/backend/v1/limpar-bula`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      ...(token ? { Authorization: token } : {}),
+    },
+    body: JSON.stringify(params),
+  })
+
+  if (!response.ok) {
+    let msg = `Erro na operação de limpeza da bula (HTTP ${response.status})`
+    try {
+      const data = await response.json()
+      if (data?.error || data?.message) msg = data.error || data.message
+    } catch {
+      /* ignore */
+    }
+    throw new Error(msg)
+  }
+
+  return (await response.json()) as RespostaLimpezaBula
+}
