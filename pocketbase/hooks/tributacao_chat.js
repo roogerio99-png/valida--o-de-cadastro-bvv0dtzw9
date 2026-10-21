@@ -168,17 +168,17 @@ routerAdd(
               )
             }
 
-            // Se a recuperação síncrona trouxe texto, emite para o cliente
+            // Se a recuperação síncrona trouxe texto, emite em blocos ou completo
             if (recoveredText) {
               chunkCount++
               accumulatedContent += recoveredText
               yield { type: 'chunk', content: recoveredText }
             } else {
-              // Requisito 3: Se a recuperação síncrona falhar ou vier vazia,
+              // Requisito: Se a recuperação síncrona falhar ou vier vazia,
               // NUNCA encerrar com 0 chars silenciosamente.
               // Emite mensagem amigável em português antes do done.
               const fallbackFriendlyMsg =
-                '> ⚠️ **Aviso:** O especialista tributário não conseguiu gerar uma resposta completa agora. Por favor, tente novamente em instantes.'
+                '> ⚠️ **Aviso:** O especialista tributário está temporariamente ocupado ou a consulta excedeu o tempo de resposta. Por favor, tente novamente em instantes.'
               chunkCount++
               accumulatedContent += fallbackFriendlyMsg
               console.warn(

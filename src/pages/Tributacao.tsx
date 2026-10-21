@@ -5,31 +5,25 @@ import {
   Sparkles,
   Bot,
   User,
-  RotateCcw,
   Scale,
   Search,
   Download,
   Loader2,
   ChevronDown,
   ChevronUp,
-  ExternalLink,
   Layers,
   Calendar,
-  Percent,
   CheckCircle2,
-  FileSpreadsheet,
-  Package,
   History,
   Plus,
-  BookOpen,
   StopCircle,
 } from 'lucide-react'
-import { Card, CardContent } from '@/components/ui/card'
+import { Card } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
 import { Badge } from '@/components/ui/badge'
-import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
+import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { ScrollableTable } from '@/components/ScrollableTable'
 import {
   Select,
@@ -52,7 +46,7 @@ import { listarBaseMestre } from '@/services/agroService'
 import { formatarNcmMascara, sanitizarRegistroMapa } from '@/lib/motorCanonico'
 import type { BaseMestreProduto } from '@/types/agro'
 
-// Sugestões de perguntas pré-configuradas para o usuário
+// 5 sugestões de perguntas pré-configuradas requeridas
 const SUGESTOES_PERGUNTAS = [
   'Qual o enquadramento PIS/COFINS do ROUNDUP WG?',
   'O que muda com a reoneração da LC 224/2025 em Abril/2026?',
@@ -157,7 +151,7 @@ export function Tributacao() {
   const abortControllerRef = useRef<AbortController | null>(null)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
 
-  // --- ESTADO DA TABELA PANORAMA (ABA SECUNDÁRIA) ---
+  // --- ESTADO DA TABELA PANORAMA ---
   const [produtos, setProdutos] = useState<BaseMestreProduto[]>([])
   const [loadingTabela, setLoadingTabela] = useState(false)
   const [searchTabela, setSearchTabela] = useState('')
@@ -175,6 +169,7 @@ export function Tributacao() {
   const sentinelRef = useRef<HTMLDivElement>(null)
   const [, startTransition] = useTransition()
 
+  // Cleanup no unmount: abortar stream pendente
   useEffect(() => {
     return () => {
       if (abortControllerRef.current) {
@@ -184,15 +179,15 @@ export function Tributacao() {
   }, [])
 
   // Rolar suavemente para a última mensagem
-  const scrollToBottom = (behavior: ScrollBehavior = 'smooth') => {
+  const scrollToBottom = useCallback((behavior: ScrollBehavior = 'smooth') => {
     messagesEndRef.current?.scrollIntoView({ behavior })
-  }
+  }, [])
 
   useEffect(() => {
     scrollToBottom('smooth')
-  }, [messages, streamingContent, isSending])
+  }, [messages, streamingContent, isSending, scrollToBottom])
 
-  // Carregar histórico de conversas anteriores do usuário
+  // Carregar lista de conversas anteriores do usuário
   const carregarConversas = useCallback(async () => {
     try {
       setLoadingConversas(true)
@@ -210,13 +205,13 @@ export function Tributacao() {
         setConversasAnteriores(data.conversations)
       }
     } catch (err) {
-      console.warn('Erro ao listar conversas anteriores:', err)
+      console.warn('Erro ao carregar conversas anteriores:', err)
     } finally {
       setLoadingConversas(false)
     }
   }, [])
 
-  // Carregar mensagens de uma conversa específica
+  // Carregar mensagens da conversa ativa
   const carregarMensagensConversa = useCallback(async (convId: string) => {
     try {
       const res = await fetch(
@@ -238,16 +233,16 @@ export function Tributacao() {
     }
   }, [])
 
-  // Inicialização do Chat (apenas no mount inicial)
+  // Mount inicial: carregar lista de conversas e mensagens da conversa ativa se houver
   useEffect(() => {
     carregarConversas()
     if (conversationId) {
       carregarMensagensConversa(conversationId)
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [carregarConversas, carregarMensagensConversa])
+  }, [])
 
-  // Nova conversa limpa
+  // Ação de Nova Conversa
   const handleNovaConversa = () => {
     if (abortControllerRef.current) {
       abortControllerRef.current.abort()
@@ -261,7 +256,7 @@ export function Tributacao() {
     textareaRef.current?.focus()
   }
 
-  // Cancelar geração em andamento
+  // Ação de Interromper Geração
   const handlePararGeracao = () => {
     if (abortControllerRef.current) {
       abortControllerRef.current.abort()
@@ -295,7 +290,7 @@ export function Tributacao() {
     carregarMensagensConversa(convId)
   }
 
-  // Enviar mensagem para o Agente Nativo (Streaming SSE)
+  // Enviar Mensagem para o Chatbot IA (Streaming SSE com Robustez)
   const handleSendMessage = async (msgToSend?: string) => {
     const text = (msgToSend ?? inputMessage).trim()
     if (!text || isSending) return
@@ -316,9 +311,7 @@ export function Tributacao() {
     const abortController = new AbortController()
     abortControllerRef.current = abortController
 
-    // Watchdogs:
-    // Timeout geral de 90 segundos para permitir consultas completas da legislação
-    // Watchdog de inatividade de 45 segundos para dar tempo à geração do modelo do agente
+    // 1. Timeout global de 90s
     let globalTimeoutId: ReturnType<typeof setTimeout> | null = setTimeout(() => {
       if (abortControllerRef.current) {
         abortController.abort(
@@ -327,6 +320,7 @@ export function Tributacao() {
       }
     }, 90000)
 
+    // 2. Watchdog de inatividade de 45s (resetado a cada chunk/toolcall)
     let inactivityTimeoutId: ReturnType<typeof setTimeout> | null = null
     const resetInactivityWatchdog = () => {
       if (inactivityTimeoutId) clearTimeout(inactivityTimeoutId)
@@ -341,14 +335,13 @@ export function Tributacao() {
       }, 45000)
     }
 
-    // Inicia watchdog de inatividade para a espera do primeiro chunk
     resetInactivityWatchdog()
 
     let partialContent = ''
     let latestFlushTime = 0
     let pendingFlushTimer: ReturnType<typeof setTimeout> | null = null
 
-    // Throttle de atualização visual (flush a cada 60ms) para não travar a renderização do React/Markdown
+    // Throttle de ~60ms para renderização suave sem travar o React/DOM
     const flushStreamingContent = (full: string, immediate = false) => {
       partialContent = full
       const now = Date.now()
@@ -410,7 +403,6 @@ export function Tributacao() {
         signal: abortController.signal,
       })
 
-      // Garante flush final imediato com o texto completo
       if (pendingFlushTimer) {
         clearTimeout(pendingFlushTimer)
         pendingFlushTimer = null
@@ -435,7 +427,6 @@ export function Tributacao() {
       setMessages((prev) => [...prev, assistantMsg])
       setStreamingContent('')
     } catch (err: unknown) {
-      // Se abortou voluntariamente pelo usuário (sem reason de watchdog)
       const userVoluntaryAbort =
         err instanceof Error &&
         (err.name === 'AbortError' || err.message.includes('The operation was aborted')) &&
@@ -464,7 +455,6 @@ export function Tributacao() {
 
       console.error('Erro na resposta do agente tributário:', err)
 
-      // Se já tínhamos texto parcial recebido antes da queda do stream, preservamos o texto na conversa
       if (partialContent.trim()) {
         const errorSuffix = isTimeout
           ? '\n\n> ⚠️ *Tempo limite de conexão atingido. A resposta pode estar incompleta.*'
@@ -479,11 +469,10 @@ export function Tributacao() {
         setMessages((prev) => [...prev, fallbackMsg])
         setStreamingContent('')
       } else {
-        // Nenhum conteúdo foi gerado ainda: exibe mensagem de erro limpa na conversa para o usuário
         const errorMessage = isTimeout
           ? 'O servidor demorou para responder (tempo limite excedido). Tente novamente em instantes.'
           : isStreamEndedEarly
-            ? 'A conexão com o especialista tributário foi interrompida durante a inicialização.'
+            ? 'A conexão com o especialista tributário foi interrompida antes de concluir. Tente novamente.'
             : err instanceof Error
               ? err.message
               : 'Não foi possível consultar o especialista tributário no momento.'
@@ -522,7 +511,6 @@ export function Tributacao() {
     }
   }
 
-  // Interceptar Enter (sem shift) no textarea
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault()
@@ -530,7 +518,7 @@ export function Tributacao() {
     }
   }
 
-  // --- CARREGAMENTO DA TABELA PANORAMA (SEGUNDA ABA) ---
+  // --- TABELA PANORAMA: FILTROS E PAGINAÇÃO ---
   const buildFilterString = useCallback(() => {
     const filters: string[] = []
     if (searchTabela.trim()) {
@@ -623,7 +611,7 @@ export function Tributacao() {
     }))
   }
 
-  // Exportação CSV segura
+  // Exportação CSV com 13 cabeçalhos, BOM UTF-8 e delimitador ";"
   const handleExportCSV = () => {
     if (produtos.length === 0) {
       toast({ title: 'Aviso', description: 'Nenhum produto exibido para exportar.' })
@@ -686,7 +674,7 @@ export function Tributacao() {
   return (
     <div className="flex-1 flex flex-col min-h-0 space-y-3 animate-in fade-in duration-200">
       {/* ------------------------------------------------------------------ */}
-      {/* CABEÇALHO COM TABS: CHAT COM IA (PRINCIPAL) E PANORAMA (SECUNDÁRIO) */}
+      {/* CABEÇALHO DA TELA COM BOT E TABS                                  */}
       {/* ------------------------------------------------------------------ */}
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 border-b border-[#DCE5DC] pb-2">
         <div>
@@ -709,7 +697,7 @@ export function Tributacao() {
           </div>
         </div>
 
-        {/* Alternância de Abas: Chat IA (Foco) vs Tabela Panorama */}
+        {/* Alternância de Abas: Chat com IA e Tabela Panorama */}
         <div className="flex items-center gap-2 w-full sm:w-auto justify-between sm:justify-end">
           <Tabs
             value={activeTab}
@@ -774,11 +762,11 @@ export function Tributacao() {
       </div>
 
       {/* ------------------------------------------------------------------ */}
-      {/* ABA 1: CHAT COM O ASSISTENTE DE IA ESPECIALISTA (FOCO CENTRAL) */}
+      {/* ABA 1: CHAT COM IA                                                 */}
       {/* ------------------------------------------------------------------ */}
       {activeTab === 'chat' && (
         <div className="flex-1 flex min-h-0 gap-3 relative">
-          {/* Painel lateral expansível com histórico de conversas (desktop/drawer) */}
+          {/* Drawer lateral de histórico */}
           {showHistoryDrawer && (
             <div className="w-64 border border-[#DCE5DC] bg-white rounded-2xl p-3 flex flex-col flex-shrink-0 shadow-sm animate-in slide-in-from-left duration-150">
               <div className="flex items-center justify-between pb-2 border-b border-[#DCE5DC] mb-2">
@@ -825,11 +813,10 @@ export function Tributacao() {
             </div>
           )}
 
-          {/* Área Central de Conversa (Card principal) */}
+          {/* Card Principal da Conversa */}
           <Card className="flex-1 flex flex-col min-h-0 bg-white border-[#DCE5DC] rounded-2xl shadow-xs overflow-hidden">
-            {/* Histórico das Mensagens */}
+            {/* Mensagens */}
             <div className="flex-1 p-4 md:p-6 overflow-y-auto space-y-4 custom-scrollbar">
-              {/* Quando a conversa está vazia, mostra tela de boas-vindas e chips de perguntas */}
               {messages.length === 0 && !streamingContent && (
                 <div className="max-w-2xl mx-auto py-8 text-center space-y-6">
                   <div className="w-16 h-16 rounded-2xl bg-emerald-100 flex items-center justify-center mx-auto text-[#1B5E20] shadow-sm">
@@ -846,7 +833,7 @@ export function Tributacao() {
                     </p>
                   </div>
 
-                  {/* Chips de perguntas sugeridas */}
+                  {/* Sugestões de perguntas pré-configuradas */}
                   <div className="space-y-2 pt-2">
                     <span className="text-[11px] font-semibold text-[#5A6D5A] uppercase tracking-wider">
                       Sugestões de perguntas para iniciar
@@ -867,7 +854,7 @@ export function Tributacao() {
                 </div>
               )}
 
-              {/* Lista de Mensagens */}
+              {/* Bolhas de Mensagens */}
               {messages.map((m) => {
                 const isUser = m.role === 'user'
                 return (
@@ -896,17 +883,21 @@ export function Tributacao() {
                         <MarkdownRenderer content={m.content} />
                       )}
 
-                      {/* Exibição de citações e fontes caso existam */}
+                      {/* Badges de Citações / Fontes Legais */}
                       {m.citations && m.citations.length > 0 && (
                         <div className="mt-3 pt-2.5 border-t border-[#DCE5DC]/60 text-[10px] text-[#5A6D5A] space-y-1">
                           <span className="font-semibold block text-[#1B5E20]">
-                            Fontes consultadas:
+                            Fontes Legais Consultadas:
                           </span>
-                          <div className="space-y-0.5">
+                          <div className="flex flex-wrap gap-1.5 pt-1">
                             {m.citations.map((c, i) => (
-                              <div key={i} className="truncate">
-                                • {c.excerpt}
-                              </div>
+                              <Badge
+                                key={i}
+                                variant="outline"
+                                className="text-[10px] bg-white border-[#DCE5DC] text-[#1C2B1C]"
+                              >
+                                {c.excerpt}
+                              </Badge>
                             ))}
                           </div>
                         </div>
@@ -922,7 +913,7 @@ export function Tributacao() {
                 )
               })}
 
-              {/* Bolha de streaming da resposta em andamento */}
+              {/* Streaming em tempo real */}
               {isSending && (
                 <div className="flex items-start gap-3 justify-start">
                   <div className="w-8 h-8 rounded-xl bg-gradient-to-tr from-[#1B5E20] to-[#2E7D32] flex items-center justify-center text-white flex-shrink-0 shadow-xs mt-0.5">
@@ -930,12 +921,18 @@ export function Tributacao() {
                   </div>
                   <div className="max-w-[85%] sm:max-w-[82%] rounded-2xl rounded-tl-xs p-4 text-xs leading-relaxed bg-[#F9FAF8] text-[#1C2B1C] border border-[#DCE5DC] shadow-2xs">
                     {streamingContent ? (
-                      <MarkdownRenderer content={streamingContent} isStreaming={true} />
+                      <div className="space-y-2">
+                        <div className="flex items-center gap-1.5 text-[11px] text-[#1B5E20] font-semibold border-b border-[#DCE5DC]/60 pb-1.5">
+                          <Loader2 className="w-3.5 h-3.5 animate-spin text-[#1B5E20]" />
+                          <span>Processando legislação e base mestre...</span>
+                        </div>
+                        <MarkdownRenderer content={streamingContent} isStreaming={true} />
+                      </div>
                     ) : (
                       <div className="space-y-2 py-1">
                         <div className="flex items-center gap-2 text-[#1B5E20] font-medium">
                           <Loader2 className="w-4 h-4 animate-spin text-[#1B5E20]" />
-                          <span>O Consultor Tributário está analisando sua pergunta...</span>
+                          <span>Consultando agente especialista em tributação...</span>
                         </div>
                         <p className="text-[11px] text-[#5A6D5A] pl-6">
                           Consultando a legislação (Lei 10.925/04, LC 224/2025, LC 214/2025 e TIPI).
@@ -950,7 +947,7 @@ export function Tributacao() {
               <div ref={messagesEndRef} />
             </div>
 
-            {/* Sugestões rápidas acima do input quando a conversa já começou */}
+            {/* Sugestões rápidas acima do input */}
             {messages.length > 0 && (
               <div className="px-4 py-1.5 bg-[#FAFBF9] border-t border-[#DCE5DC]/60 flex items-center gap-2 overflow-x-auto no-scrollbar">
                 <span className="text-[10px] text-[#5A6D5A] font-semibold flex-shrink-0">
@@ -970,7 +967,7 @@ export function Tributacao() {
               </div>
             )}
 
-            {/* Área de Entrada (Input com botão Enviar e dica de Enter) */}
+            {/* Input e Controles de Envio */}
             <div className="p-3 md:p-4 border-t border-[#DCE5DC] bg-white">
               <div className="relative flex items-end gap-2 bg-[#F5F7F1] border border-[#DCE5DC] rounded-2xl p-2 focus-within:border-[#1B5E20] focus-within:ring-1 focus-within:ring-[#1B5E20] transition-all">
                 <Textarea
@@ -990,7 +987,7 @@ export function Tributacao() {
                     size="icon"
                     variant="destructive"
                     onClick={handlePararGeracao}
-                    className="h-8 w-8 rounded-lg bg-rose-600 hover:bg-rose-700 text-white"
+                    className="h-8 w-8 rounded-lg bg-rose-600 hover:bg-rose-700 text-white flex-shrink-0"
                     title="Interromper geração"
                   >
                     <StopCircle className="w-4 h-4" />
@@ -1023,7 +1020,7 @@ export function Tributacao() {
       )}
 
       {/* ------------------------------------------------------------------ */}
-      {/* ABA 2: TABELA PANORAMA TRIBUTÁRIO DA BASE MESTRE (SECUNDÁRIA) */}
+      {/* ABA 2: TABELA PANORAMA TRIBUTÁRIO DA BASE MESTRE                    */}
       {/* ------------------------------------------------------------------ */}
       {activeTab === 'tabela' && (
         <div className="flex-1 flex flex-col min-h-0 space-y-3">
@@ -1142,7 +1139,7 @@ export function Tributacao() {
             </div>
           </Card>
 
-          {/* Tabela de Produtos */}
+          {/* Tabela com ScrollableTable */}
           <Card className="rounded-2xl border-[#DCE5DC] bg-white shadow-xs overflow-hidden flex-1 flex flex-col min-h-0">
             <ScrollableTable
               autoFitHeight={true}
@@ -1156,28 +1153,29 @@ export function Tributacao() {
                 <thead className="sticky top-0 z-20 bg-[#F5F7F1] shadow-[0_1px_0_0_#DCE5DC]">
                   <tr className="bg-[#F5F7F1] border-b border-[#DCE5DC] text-left text-[#5A6D5A]">
                     <th className="py-2.5 px-3 w-8 text-center" />
-                    <th className="py-2.5 px-3 font-semibold">Nome Comercial</th>
-                    <th className="py-2.5 px-3 font-semibold">Registro MAPA</th>
-                    <th className="py-2.5 px-3 font-semibold">Princípio Ativo</th>
+                    <th className="py-2.5 px-3 font-semibold">Produto / Marca</th>
                     <th className="py-2.5 px-3 font-semibold">NCM</th>
-                    <th className="py-2.5 px-3 font-semibold">Enquadramento</th>
-                    <th className="py-2.5 px-3 font-semibold text-center">Vigente HOJE</th>
-                    <th className="py-2.5 px-3 font-semibold text-center">Pós-Abr/2026</th>
-                    <th className="py-2.5 px-3 font-semibold">Status IBS / CBS</th>
+                    <th className="py-2.5 px-3 font-semibold">Princípio Ativo</th>
+                    <th className="py-2.5 px-3 font-semibold">Reg. MAPA</th>
+                    <th className="py-2.5 px-3 font-semibold">PIS/COFINS Hoje</th>
+                    <th className="py-2.5 px-3 font-semibold text-center">Pós-Abr/2026 (Real)</th>
+                    <th className="py-2.5 px-3 font-semibold text-center">
+                      Pós-Abr/2026 (Presumido)
+                    </th>
                     <th className="py-2.5 px-3 font-semibold text-right">Ação</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-[#F0F4F0]">
                   {loadingTabela ? (
                     <tr>
-                      <td colSpan={10} className="py-12 text-center text-xs text-[#5A6D5A]">
+                      <td colSpan={9} className="py-12 text-center text-xs text-[#5A6D5A]">
                         <Loader2 className="w-5 h-5 animate-spin mx-auto text-[#1B5E20] mb-2" />
                         Carregando panorama tributário dos produtos...
                       </td>
                     </tr>
                   ) : produtos.length === 0 ? (
                     <tr>
-                      <td colSpan={10} className="py-12 text-center text-xs text-[#5A6D5A]">
+                      <td colSpan={9} className="py-12 text-center text-xs text-[#5A6D5A]">
                         <Scale className="w-8 h-8 text-[#5A6D5A]/40 mx-auto mb-2" />
                         <p className="font-semibold text-sm text-[#1C2B1C]">
                           Nenhum produto localizado
@@ -1219,8 +1217,8 @@ export function Tributacao() {
                                 {p.macro_grupo}
                               </span>
                             </td>
-                            <td className="py-2.5 px-3 font-mono text-[#1C2B1C] font-semibold whitespace-nowrap">
-                              {sanitizarRegistroMapa(p.registro_mapa)}
+                            <td className="py-2.5 px-3 font-mono font-bold text-[#1B5E20] whitespace-nowrap">
+                              {formatarNcmMascara(ncmPadrao)}
                             </td>
                             <td
                               className="py-2.5 px-3 text-[#1C2B1C] max-w-[180px] truncate"
@@ -1230,8 +1228,8 @@ export function Tributacao() {
                                 {p.principio_ativo || '—'}
                               </span>
                             </td>
-                            <td className="py-2.5 px-3 font-mono font-bold text-[#1B5E20] whitespace-nowrap">
-                              {formatarNcmMascara(ncmPadrao)}
+                            <td className="py-2.5 px-3 font-mono text-[#1C2B1C] font-semibold whitespace-nowrap">
+                              {sanitizarRegistroMapa(p.registro_mapa)}
                             </td>
                             <td className="py-2.5 px-3 whitespace-nowrap">
                               <Badge
@@ -1239,28 +1237,22 @@ export function Tributacao() {
                                   enq.badgeVariant === 'beneficiado'
                                     ? 'bg-emerald-100 text-emerald-900 border-emerald-300 text-[10px] py-0 px-2'
                                     : enq.badgeVariant === 'condicional'
-                                      ? 'bg-blue-100 text-blue-900 border-blue-300 text-[10px] py-0 px-2'
-                                      : 'bg-amber-100 text-amber-900 border-amber-300 text-[10px] py-0 px-2'
+                                      ? 'bg-amber-100 text-amber-900 border-amber-300 text-[10px] py-0 px-2'
+                                      : 'bg-rose-100 text-rose-900 border-rose-300 text-[10px] py-0 px-2'
                                 }
                               >
-                                {enq.rotuloCurto}
+                                {enq.rotuloCurto} (
+                                {enq.aliquotaHoje.includes('0,00%') ? '0,00%' : enq.aliquotaHoje})
                               </Badge>
-                            </td>
-                            <td className="py-2.5 px-3 text-center whitespace-nowrap font-medium text-[#1C2B1C]">
-                              <span className="inline-block px-2 py-0.5 rounded bg-emerald-50 text-emerald-900 font-mono text-[11px] font-bold">
-                                {enq.aliquotaHoje.includes('0,00%') ? '0,00%' : enq.aliquotaHoje}
-                              </span>
                             </td>
                             <td className="py-2.5 px-3 text-center whitespace-nowrap font-medium text-[#1C2B1C]">
                               <span className="inline-block px-2 py-0.5 rounded bg-amber-50 text-amber-900 font-mono text-[11px] font-bold border border-amber-200">
                                 {enq.aliquotaPosAbr2026Real}
                               </span>
                             </td>
-                            <td className="py-2.5 px-3 max-w-[200px] truncate whitespace-nowrap text-[#1C2B1C]">
-                              <span className="text-[11px] text-blue-950 font-medium truncate block">
-                                {p.ibs_cbs_2027
-                                  ? p.ibs_cbs_2027.split('+')[0].trim()
-                                  : 'Redução 60% + Diferimento'}
+                            <td className="py-2.5 px-3 text-center whitespace-nowrap font-medium text-[#1C2B1C]">
+                              <span className="inline-block px-2 py-0.5 rounded bg-amber-50/70 text-amber-900 font-mono text-[11px] font-bold border border-amber-200/70">
+                                {enq.aliquotaPosAbr2026Presumido}
                               </span>
                             </td>
                             <td className="py-2.5 px-3 text-right whitespace-nowrap">
@@ -1280,7 +1272,7 @@ export function Tributacao() {
 
                           {isExpanded && (
                             <tr className="bg-gradient-to-r from-emerald-50/30 via-white to-amber-50/20">
-                              <td colSpan={10} className="py-3 px-6 border-y border-[#DCE5DC]">
+                              <td colSpan={9} className="py-3 px-6 border-y border-[#DCE5DC]">
                                 <div className="space-y-3 text-xs">
                                   <div className="flex items-center justify-between border-b border-[#DCE5DC] pb-2">
                                     <div className="flex items-center gap-2">
@@ -1305,31 +1297,36 @@ export function Tributacao() {
                                     </Button>
                                   </div>
 
-                                  <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                                  <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
                                     <div className="p-3 rounded-xl bg-white border border-[#DCE5DC]">
                                       <span className="font-bold text-[#1B5E20] block mb-1">
-                                        NCM & Embalagem
+                                        Fabricante / Titular
                                       </span>
                                       <p className="text-[11px] text-[#5A6D5A]">
-                                        {p.regra_tipi ||
-                                          'Classificação conforme Tabela TIPI da Receita Federal.'}
+                                        {p.titular_fabricante || p.fabricante || 'Não informado'}
                                       </p>
                                     </div>
                                     <div className="p-3 rounded-xl bg-white border border-[#DCE5DC]">
                                       <span className="font-bold text-amber-900 block mb-1">
-                                        PIS/COFINS
+                                        Descrição Enquadramento
                                       </span>
                                       <p className="text-[11px] text-[#5A6D5A]">{enq.descricao}</p>
-                                      <div className="mt-1 font-mono text-[10px]">
-                                        CST Saída: {p.cst_saida || enq.cstSugerido}
-                                      </div>
+                                    </div>
+                                    <div className="p-3 rounded-xl bg-white border border-[#DCE5DC]">
+                                      <span className="font-bold text-emerald-800 block mb-1">
+                                        CST Sugerido
+                                      </span>
+                                      <p className="text-[11px] font-mono font-bold text-[#1B5E20]">
+                                        {p.cst_saida || enq.cstSugerido}
+                                      </p>
                                     </div>
                                     <div className="p-3 rounded-xl bg-white border border-[#DCE5DC]">
                                       <span className="font-bold text-blue-900 block mb-1">
-                                        IBS/CBS Reforma
+                                        IBS/CBS 2027
                                       </span>
                                       <p className="text-[11px] text-[#5A6D5A]">
-                                        Redução de 60% e diferimento entre contribuintes regulares.
+                                        {p.ibs_cbs_2027 ||
+                                          'Redução de 60% e diferimento entre contribuintes regulares.'}
                                       </p>
                                     </div>
                                   </div>
@@ -1349,13 +1346,25 @@ export function Tributacao() {
 
             <div className="flex items-center justify-between p-3 border-t border-[#DCE5DC] bg-[#FAFBF9] text-xs text-[#5A6D5A]">
               <span>
-                {produtos.length} produtos exibidos • Total: {totalCount}
+                {produtos.length} de {totalCount} produtos exibidos
               </span>
-              {loadingMore && (
-                <div className="inline-flex items-center gap-1.5 text-xs text-[#1B5E20]">
-                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                  <span>Carregando...</span>
-                </div>
+              {hasMore && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={carregarMaisProdutos}
+                  disabled={loadingMore}
+                  className="h-7 text-xs border-[#DCE5DC] text-[#1B5E20] hover:bg-emerald-50"
+                >
+                  {loadingMore ? (
+                    <>
+                      <Loader2 className="w-3.5 h-3.5 animate-spin mr-1.5" />
+                      Carregando...
+                    </>
+                  ) : (
+                    `Carregar mais produtos (${produtos.length} de ${totalCount})`
+                  )}
+                </Button>
               )}
             </div>
           </Card>
