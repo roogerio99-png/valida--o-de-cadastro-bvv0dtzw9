@@ -22,7 +22,7 @@ import {
   History,
   Plus,
   BookOpen,
-  Square,
+  StopCircle,
 } from 'lucide-react'
 import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -175,6 +175,14 @@ export function Tributacao() {
   const sentinelRef = useRef<HTMLDivElement>(null)
   const [, startTransition] = useTransition()
 
+  useEffect(() => {
+    return () => {
+      if (abortControllerRef.current) {
+        abortControllerRef.current.abort()
+      }
+    }
+  }, [])
+
   // Rolar suavemente para a última mensagem
   const scrollToBottom = (behavior: ScrollBehavior = 'smooth') => {
     messagesEndRef.current?.scrollIntoView({ behavior })
@@ -230,13 +238,14 @@ export function Tributacao() {
     }
   }, [])
 
-  // Inicialização do Chat
+  // Inicialização do Chat (apenas no mount inicial)
   useEffect(() => {
     carregarConversas()
     if (conversationId) {
       carregarMensagensConversa(conversationId)
     }
-  }, [carregarConversas, carregarMensagensConversa, conversationId])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [carregarConversas, carregarMensagensConversa])
 
   // Nova conversa limpa
   const handleNovaConversa = () => {
@@ -377,6 +386,10 @@ export function Tributacao() {
         },
       )
 
+      if (!res.ok) {
+        throw new Error(`Erro no servidor de chat (${res.status} ${res.statusText})`)
+      }
+
       let latestCitations: AgentCitation[] | undefined = undefined
 
       const result = await streamAgentChat(res, {
@@ -441,7 +454,7 @@ export function Tributacao() {
       // Se já tínhamos texto parcial recebido antes da queda do stream, preservamos o texto na conversa
       if (partialContent.trim()) {
         const errorSuffix = isTimeout
-          ? '\n\n> ⚠️ *Tempo limite de conexão atingido. A resposta pode estar incompleta. Você pode perguntar novamente para continuar.*'
+          ? '\n\n> ⚠️ *Tempo limite de conexão atingido. A resposta pode estar incompleta.*'
           : '\n\n> ⚠️ *A conexão com o especialista foi interrompida. O texto acima foi preservado.*'
 
         const fallbackMsg: DisplayMessage = {
@@ -455,17 +468,17 @@ export function Tributacao() {
       } else {
         // Nenhum conteúdo foi gerado ainda: exibe mensagem de erro limpa na conversa para o usuário
         const errorMessage = isTimeout
-          ? 'O servidor demorou para responder (tempo limite excedido). O especialista tributário está temporariamente sobrecarregado. Por favor, tente enviar sua pergunta novamente.'
+          ? 'O servidor demorou para responder (tempo limite excedido). Tente novamente em instantes.'
           : isStreamEndedEarly
-            ? 'A conexão com o especialista tributário foi interrompida durante a inicialização. Por favor, tente enviar sua pergunta novamente.'
+            ? 'A conexão com o especialista tributário foi interrompida durante a inicialização.'
             : err instanceof Error
               ? err.message
-              : 'Não foi possível consultar o especialista tributário no momento. Tente novamente.'
+              : 'Não foi possível consultar o especialista tributário no momento.'
 
         const errorMsg: DisplayMessage = {
           id: `error-${Date.now()}`,
           role: 'assistant',
-          content: `> ⚠️ **Não foi possível concluir a consulta tributária agora.**\n\n${errorMessage}\n\n*O botão "Enviar" foi reabilitado para nova tentativa.*`,
+          content: `> ⚠️ **Não foi possível concluir a consulta tributária agora.**\n\n${errorMessage}`,
           created: new Date().toISOString(),
         }
         setMessages((prev) => [...prev, errorMsg])
@@ -475,11 +488,7 @@ export function Tributacao() {
       toast({
         variant: 'destructive',
         title: isTimeout ? 'Tempo limite excedido' : 'Falha na resposta do assistente',
-        description: isTimeout
-          ? 'O assistente demorou para responder. Tente novamente em instantes.'
-          : err instanceof Error
-            ? err.message
-            : 'Não foi possível obter resposta agora. Tente novamente.',
+        description: err instanceof Error ? err.message : 'Erro ao obter resposta.',
       })
     } finally {
       if (globalTimeoutId) {
@@ -522,11 +531,11 @@ export function Tributacao() {
     }
     if (filtroEnquadramento !== 'todos') {
       if (filtroEnquadramento === 'beneficiado') {
-        filters.push(`status_pis_cofins ~ 'Beneficiado' || status_pis_cofins = ''`)
+        filters.push(`(status_pis_cofins ~ 'Beneficiado' || status_pis_cofins = '')`)
       } else if (filtroEnquadramento === 'condicional') {
-        filters.push(`status_pis_cofins ~ 'Condicional' || status_pis_cofins ~ '5.630'`)
+        filters.push(`(status_pis_cofins ~ 'Condicional' || status_pis_cofins ~ '5.630')`)
       } else if (filtroEnquadramento === 'tributado') {
-        filters.push(`status_pis_cofins ~ 'Tributado' || status_pis_cofins ~ 'COSIT'`)
+        filters.push(`(status_pis_cofins ~ 'Tributado' || status_pis_cofins ~ 'COSIT')`)
       }
     }
     return filters.join(' && ')
@@ -965,14 +974,13 @@ export function Tributacao() {
                 {isSending ? (
                   <Button
                     type="button"
-                    size="sm"
-                    variant="outline"
+                    size="icon"
+                    variant="destructive"
                     onClick={handlePararGeracao}
-                    className="h-9 px-3 rounded-xl border-amber-300 text-amber-900 bg-amber-50 hover:bg-amber-100 flex-shrink-0 font-medium text-xs flex items-center gap-1"
-                    title="Parar geração"
+                    className="h-8 w-8 rounded-lg bg-rose-600 hover:bg-rose-700 text-white"
+                    title="Interromper geração"
                   >
-                    <Square className="w-3 h-3 fill-amber-800 text-amber-800" />
-                    <span>Parar</span>
+                    <StopCircle className="w-4 h-4" />
                   </Button>
                 ) : (
                   <Button
