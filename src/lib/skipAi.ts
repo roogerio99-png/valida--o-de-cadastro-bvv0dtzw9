@@ -347,5 +347,12 @@ export async function streamAgentChat(
     throw new Error('Agent stream ended before the done event')
   }
 
+  // Se o stream completou com 'done' mas nenhum conteúdo textual foi produzido
+  if (!content.trim()) {
+    throw new Error(
+      'O especialista tributário não retornou conteúdo. Tente novamente em instantes.',
+    )
+  }
+
   return { content, conversation_id: conversationId, message_id: messageId, citations, toolCalls }
 }

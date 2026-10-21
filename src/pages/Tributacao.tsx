@@ -435,16 +435,29 @@ export function Tributacao() {
       setMessages((prev) => [...prev, assistantMsg])
       setStreamingContent('')
     } catch (err: unknown) {
-      if (err instanceof Error && err.name === 'AbortError' && !abortController.signal.reason) {
-        // Envio cancelado voluntariamente pelo usuário
+      // Se abortou voluntariamente pelo usuário (sem reason de watchdog)
+      const userVoluntaryAbort =
+        err instanceof Error &&
+        (err.name === 'AbortError' || err.message.includes('The operation was aborted')) &&
+        !abortController.signal.reason
+
+      if (userVoluntaryAbort) {
         return
       }
 
+      const reasonMsg =
+        abortController.signal.reason instanceof Error
+          ? abortController.signal.reason.message
+          : typeof abortController.signal.reason === 'string'
+            ? abortController.signal.reason
+            : ''
+
       const isTimeout =
-        (err instanceof Error && err.message.includes('Tempo limite')) ||
-        (abortController.signal.aborted &&
-          abortController.signal.reason instanceof Error &&
-          abortController.signal.reason.message.includes('Tempo limite'))
+        (err instanceof Error &&
+          (err.message.includes('Tempo limite') ||
+            err.message.includes('inativa sem receber dados'))) ||
+        reasonMsg.includes('Tempo limite') ||
+        reasonMsg.includes('inativa sem receber dados')
 
       const isStreamEndedEarly =
         err instanceof Error && err.message.includes('Agent stream ended before the done event')

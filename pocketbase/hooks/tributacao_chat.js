@@ -136,6 +136,58 @@ routerAdd(
             yield ev
           }
 
+          // Se nenhum chunk foi emitido pelo stream nativo, executa recuperação ativa antes de concluir
+          if (chunkCount === 0 && !accumulatedContent) {
+            console.warn(
+              `[tributacao_chat] Zero chunks recebidos pelo stream! Tentando recuperar resposta síncrona para não travar o cliente... conv=${conv.id}`,
+            )
+            let recoveredText = ''
+            try {
+              const recoveryResult = $ai.agent(agentSlug).chat({
+                user_id: userId,
+                conversation_id: conv.id,
+                message: message,
+              })
+              if (
+                recoveryResult &&
+                recoveryResult.content &&
+                String(recoveryResult.content).trim()
+              ) {
+                recoveredText = String(recoveryResult.content)
+                console.log(
+                  `[tributacao_chat] Recuperação síncrona bem-sucedida! chars=${recoveredText.length} conv=${conv.id}`,
+                )
+              } else {
+                console.warn(
+                  `[tributacao_chat] Recuperação síncrona retornou conteúdo vazio ou nulo. conv=${conv.id}`,
+                )
+              }
+            } catch (recErr) {
+              console.error(
+                `[tributacao_chat] Falha na recuperação síncrona: ${recErr && recErr.message ? recErr.message : recErr} conv=${conv.id}`,
+              )
+            }
+
+            // Se a recuperação síncrona trouxe texto, emite para o cliente
+            if (recoveredText) {
+              chunkCount++
+              accumulatedContent += recoveredText
+              yield { type: 'chunk', content: recoveredText }
+            } else {
+              // Requisito 3: Se a recuperação síncrona falhar ou vier vazia,
+              // NUNCA encerrar com 0 chars silenciosamente.
+              // Emite mensagem amigável em português antes do done.
+              const fallbackFriendlyMsg =
+                '> ⚠️ **Aviso:** O especialista tributário não conseguiu gerar uma resposta completa agora. Por favor, tente novamente em instantes.'
+              chunkCount++
+              accumulatedContent += fallbackFriendlyMsg
+              console.warn(
+                `[tributacao_chat] Emitindo mensagem amigável de fallback após falha no stream e no sync. conv=${conv.id}`,
+              )
+              yield { type: 'chunk', content: fallbackFriendlyMsg }
+            }
+          }
+
           const totalElapsed = Date.now() - startTime
           console.log(
             `[tributacao_chat] Stream concluído. conv=${conv.id} chunks=${chunkCount} toolCalls=${toolCallCount} firstChunk=${firstChunkTime !== null ? firstChunkTime : 'N/A'}ms total=${totalElapsed}ms sawDone=${sawDone} chars=${accumulatedContent.length}`,
@@ -146,28 +198,6 @@ routerAdd(
             console.warn(
               `[tributacao_chat] Stream terminou sem evento 'done'. Emitindo done sintético. conv=${conv.id} chunks=${chunkCount} elapsed=${totalElapsed}ms chars=${accumulatedContent.length}`,
             )
-
-            // Se nenhum chunk foi emitido antes do término e temos como obter o resultado síncrono
-            if (chunkCount === 0 && !accumulatedContent) {
-              console.warn(
-                `[tributacao_chat] Zero chunks recebidos pelo stream! Tentando recuperar resposta síncrona para não travar o cliente...`,
-              )
-              try {
-                const recoveryResult = $ai.agent(agentSlug).chat({
-                  user_id: userId,
-                  conversation_id: conv.id,
-                  message: message,
-                })
-                if (recoveryResult && recoveryResult.content) {
-                  yield { type: 'chunk', content: recoveryResult.content }
-                }
-              } catch (recErr) {
-                console.error(
-                  `[tributacao_chat] Falha na recuperação síncrona: ${recErr && recErr.message ? recErr.message : recErr}`,
-                )
-              }
-            }
-
             yield {
               type: 'done',
               conversation_id: conv.id,
@@ -183,14 +213,20 @@ routerAdd(
           // Se nenhum conteúdo foi gerado e deu erro na iteração, tenta fallback síncrono
           if (chunkCount === 0) {
             try {
-              console.warn(`[tributacao_chat] Tentando fallback síncrono após erro de iteração...`)
+              console.warn(
+                `[tributacao_chat] Tentando fallback síncrono após erro de iteração... conv=${conv.id}`,
+              )
               const syncResult = $ai.agent(agentSlug).chat({
                 user_id: userId,
                 conversation_id: conv.id,
                 message: message,
               })
-              if (syncResult && syncResult.content) {
-                yield { type: 'chunk', content: syncResult.content }
+              if (syncResult && syncResult.content && String(syncResult.content).trim()) {
+                const recovered = String(syncResult.content)
+                console.log(
+                  `[tributacao_chat] Fallback síncrono após erro de iteração bem-sucedido! chars=${recovered.length} conv=${conv.id}`,
+                )
+                yield { type: 'chunk', content: recovered }
                 yield {
                   type: 'done',
                   conversation_id: (syncResult && syncResult.conversation_id) || conv.id,
@@ -198,10 +234,27 @@ routerAdd(
                 }
                 return
               }
-            } catch (_) {}
+            } catch (errSyncCatch) {
+              console.error(
+                `[tributacao_chat] Falha no fallback síncrono após erro de iteração: ${errSyncCatch && errSyncCatch.message ? errSyncCatch.message : errSyncCatch} conv=${conv.id}`,
+              )
+            }
+
+            // Emite mensagem amigável antes do done/error para não ficar em branco
+            yield {
+              type: 'chunk',
+              content:
+                '> ⚠️ **Aviso:** O especialista tributário encontrou uma instabilidade temporária. Por favor, tente novamente em instantes.',
+            }
+            yield {
+              type: 'done',
+              conversation_id: conv.id,
+              message_id: 'err-done-' + Date.now(),
+            }
+            return
           }
 
-          // Emite evento de erro no SSE para o cliente receber o diagnóstico sem travar
+          // Se já havia emitido chunks e deu erro no meio, emite evento de erro no SSE
           yield {
             type: 'error',
             message:
