@@ -1,44 +1,36 @@
-/* Main App Component - Handles routing (using react-router-dom), query client and other providers */
-import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
-import { Toaster } from '@/components/ui/toaster'
-import { Toaster as Sonner } from '@/components/ui/sonner'
-import { TooltipProvider } from '@/components/ui/tooltip'
-import { AuthProvider } from '@/contexts/AuthContext'
-import { ProtectedRoute } from '@/components/ProtectedRoute'
-import Layout from '@/components/Layout'
+import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom'
+import { Layout } from './components/Layout'
+import { ProtectedRoute } from './components/ProtectedRoute'
+import { Login } from './pages/Login'
+import { EsqueciSenha } from './pages/EsqueciSenha'
+import { RedefinirSenha } from './pages/RedefinirSenha'
+import { Dashboard } from './pages/Dashboard'
+import { Validar } from './pages/Validar'
+import { BaseMestre } from './pages/BaseMestre'
+import { PrincipiosAtivos } from './pages/PrincipiosAtivos'
+import { Regras } from './pages/Regras'
+import { Parametrizacao } from './pages/Parametrizacao'
+import { Travas } from './pages/Travas'
+import { SincronizacaoProdutos } from './pages/SincronizacaoProdutos'
+import { Tributacao } from './pages/Tributacao'
+import { Importar } from './pages/Importar'
+import { Configuracoes } from './pages/Configuracoes'
+import { Usuarios } from './pages/Usuarios'
+import { NotFound } from './pages/NotFound'
+import { AuthProvider } from './contexts/AuthContext'
+import { Toaster } from './components/ui/toaster'
 
-// Páginas de Autenticação
-import Login from '@/pages/Login'
-import EsqueciSenha from '@/pages/EsqueciSenha'
-import RedefinirSenha from '@/pages/RedefinirSenha'
-
-// Páginas do Sistema Agro
-import Dashboard from '@/pages/Dashboard'
-import Validar from '@/pages/Validar'
-import Regras from '@/pages/Regras'
-import PrincipiosAtivos from '@/pages/PrincipiosAtivos'
-import BaseMestre from '@/pages/BaseMestre'
-import Travas from '@/pages/Travas'
-import Parametrizacao from '@/pages/Parametrizacao'
-import Tributacao from '@/pages/Tributacao'
-import Importar from '@/pages/Importar'
-import Configuracoes from '@/pages/Configuracoes'
-import SincronizacaoProdutos from '@/pages/SincronizacaoProdutos'
-import NotFound from '@/pages/NotFound'
-
-const App = () => (
-  <BrowserRouter>
+export function App() {
+  return (
     <AuthProvider>
-      <TooltipProvider>
-        <Toaster />
-        <Sonner />
+      <Router>
         <Routes>
           {/* Rotas Públicas */}
           <Route path="/login" element={<Login />} />
           <Route path="/esqueci-senha" element={<EsqueciSenha />} />
           <Route path="/redefinir-senha" element={<RedefinirSenha />} />
 
-          {/* Rotas Protegidas com Layout Global */}
+          {/* Rotas Protegidas dentro do Layout */}
           <Route
             element={
               <ProtectedRoute>
@@ -49,18 +41,25 @@ const App = () => (
             <Route path="/" element={<Navigate to="/dashboard" replace />} />
             <Route path="/dashboard" element={<Dashboard />} />
             <Route path="/validar" element={<Validar />} />
-            <Route path="/sincronizacao" element={<SincronizacaoProdutos />} />
-            <Route path="/regras" element={<Regras />} />
-            <Route path="/regras-ncm" element={<Navigate to="/regras" replace />} />
-            <Route path="/principios-ativos" element={<PrincipiosAtivos />} />
             <Route path="/base-mestre" element={<BaseMestre />} />
-            <Route path="/travas" element={<Travas />} />
+            <Route path="/principios-ativos" element={<PrincipiosAtivos />} />
+            <Route path="/regras" element={<Regras />} />
             <Route path="/parametrizacao" element={<Parametrizacao />} />
+            <Route path="/travas" element={<Travas />} />
+            <Route
+              path="/sincronizacao"
+              element={<SincronizacaoProdutos />}
+            />
+            <Route
+              path="/sincronizacao-produtos"
+              element={<Navigate to="/sincronizacao" replace />}
+            />
             <Route
               path="/parametrizacao-fiscal"
               element={<Navigate to="/parametrizacao" replace />}
             />
             <Route path="/tributacao" element={<Tributacao />} />
+            <Route path="/usuarios" element={<Usuarios />} />
             <Route path="/importar" element={<Importar />} />
             <Route path="/configuracoes" element={<Configuracoes />} />
           </Route>
@@ -68,9 +67,10 @@ const App = () => (
           {/* 404 */}
           <Route path="*" element={<NotFound />} />
         </Routes>
-      </TooltipProvider>
+        <Toaster />
+      </Router>
     </AuthProvider>
-  </BrowserRouter>
-)
+  )
+}
 
 export default App

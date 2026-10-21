@@ -24,6 +24,13 @@ routerAdd('POST', '/backend/v1/limpar-bases', (e) => {
         'Acesso não autorizado. É necessário estar autenticado para executar a limpeza das bases.',
     })
   }
+  const userRole = authRecord.getString('role') || 'analista'
+  if (userRole !== 'admin') {
+    return e.json(403, {
+      sucesso: false,
+      error: 'Apenas administradores podem realizar esta ação.',
+    })
+  }
 
   const info = e.requestInfo()
   const body = info.body || {}

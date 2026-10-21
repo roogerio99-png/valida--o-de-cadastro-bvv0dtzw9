@@ -121,14 +121,17 @@ export default function Login() {
           </Button>
         </form>
 
-        {/* Card informativo de credenciais de teste para o proprietário */}
-        <div className="mt-6 pt-5 border-t border-[#DCE5DC] text-center">
+        {/* Aviso de acesso exclusivo por convite */}
+        <div className="mt-6 pt-5 border-t border-[#DCE5DC] text-center space-y-2">
           <div className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-50 text-[11px] text-emerald-800 border border-emerald-200">
             <ShieldCheck className="w-3.5 h-3.5 text-emerald-700" />
             <span>
-              Acesso seed padrão: <strong>roogerio99@gmail.com</strong>
+              Administrador: <strong>roogerio99@gmail.com</strong>
             </span>
           </div>
+          <p className="text-xs text-slate-500 max-w-xs mx-auto">
+            Sistema restrito. Entrada exclusivamente por convite do administrador. Auto-cadastro desativado.
+          </p>
         </div>
       </div>
     </div>

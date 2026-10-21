@@ -19,6 +19,9 @@ import {
   ExternalLink,
   User,
   Search,
+  Users,
+  Shield,
+  Eye,
 } from 'lucide-react'
 import { useAuth } from '@/contexts/AuthContext'
 import { Button } from '@/components/ui/button'
@@ -48,8 +51,8 @@ const navItems = [
   { path: '/configuracoes', label: 'Configurações', icon: User },
 ]
 
-export default function Layout() {
-  const { user, logout } = useAuth()
+export function Layout() {
+  const { user, logout, isAdmin, role } = useAuth()
   const navigate = useNavigate()
   const location = useLocation()
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
@@ -67,15 +70,22 @@ export default function Layout() {
     navigate(`/base-mestre?q=${encodeURIComponent(searchQuery)}`)
   }
 
+  const navItemsFiltrados = [
+    ...navItems,
+    ...(isAdmin ? [{ path: '/usuarios', label: 'Gestão de Usuários', icon: Users }] : []),
+  ]
+
   // Título dinâmico da página atual
-  const currentNav = navItems.find((item) => item.path === location.pathname)
+  const currentNav = navItemsFiltrados.find((item) => item.path === location.pathname)
   const pageTitle =
     currentNav?.label ||
     (location.pathname === '/regras-ncm'
       ? 'Regras NCM × Embalagem'
       : location.pathname === '/parametrizacao-fiscal'
         ? 'Parametrização Fiscal'
-        : 'Validador Agro')
+        : location.pathname === '/usuarios'
+          ? 'Gestão de Usuários'
+          : 'Validador Agro')
 
   return (
     <div className="flex h-screen bg-[#F5F7F1] text-[#1C2B1C] font-sans overflow-hidden">
@@ -98,7 +108,7 @@ export default function Layout() {
 
         {/* Navigation Links */}
         <nav className="flex-1 px-3 py-4 space-y-1 overflow-y-auto">
-          {navItems.map((item) => {
+          {navItemsFiltrados.map((item) => {
             const Icon = item.icon
             const isActive = location.pathname === item.path
             return (
@@ -142,16 +152,26 @@ export default function Layout() {
           <div className="flex items-center gap-2.5 min-w-0">
             <Avatar className="w-8 h-8 border border-emerald-600/50">
               <AvatarFallback className="bg-[#1B5E20] text-emerald-200 text-xs font-semibold">
-                {user?.name ? user.name.slice(0, 2).toUpperCase() : 'AG'}
+                {user?.name ? user.name.slice(0, 2).toUpperCase() : (isAdmin ? 'AD' : 'AN')}
               </AvatarFallback>
             </Avatar>
             <div className="truncate">
-              <p className="text-xs font-semibold text-white truncate">
-                {user?.name || user?.email || 'Usuário Agro'}
+              <p className="text-xs font-semibold text-white truncate flex items-center gap-1.5">
+                <span>{user?.name || user?.email || 'Usuário Agro'}</span>
               </p>
-              <p className="text-[10px] text-emerald-400/80 truncate">
-                {user?.email || 'roogerio99@gmail.com'}
-              </p>
+              <div className="flex items-center gap-1 text-[10px]">
+                {isAdmin ? (
+                  <span className="text-emerald-300 font-semibold flex items-center gap-0.5">
+                    <Shield className="w-3 h-3" /> Admin
+                  </span>
+                ) : (
+                  <span className="text-sky-300 font-medium flex items-center gap-0.5">
+                    <Eye className="w-3 h-3" /> Analista
+                  </span>
+                )}
+                <span className="text-emerald-400/60">•</span>
+                <span className="text-emerald-400/80 truncate">{user?.email || ''}</span>
+              </div>
             </div>
           </div>
           <Button
@@ -159,7 +179,7 @@ export default function Layout() {
             size="icon"
             onClick={handleLogout}
             title="Sair do sistema"
-            className="text-emerald-400 hover:text-white hover:bg-emerald-900/60 h-8 w-8"
+            className="text-emerald-400 hover:text-white hover:bg-emerald-900/60 h-8 w-8 shrink-0"
           >
             <LogOut className="w-4 h-4" />
           </Button>
@@ -189,7 +209,7 @@ export default function Layout() {
               </button>
             </div>
             <nav className="flex-1 px-3 py-4 space-y-1 overflow-y-auto">
-              {navItems.map((item) => {
+              {navItemsFiltrados.map((item) => {
                 const Icon = item.icon
                 const isActive = location.pathname === item.path
                 return (
@@ -281,11 +301,22 @@ export default function Layout() {
               <DropdownMenuContent className="w-56" align="end" forceMount>
                 <DropdownMenuLabel className="font-normal">
                   <div className="flex flex-col space-y-1">
-                    <p className="text-sm font-medium leading-none text-[#1C2B1C]">
-                      {user?.name || 'Administrador'}
-                    </p>
+                    <div className="flex items-center justify-between">
+                      <p className="text-sm font-medium leading-none text-[#1C2B1C]">
+                        {user?.name || (isAdmin ? 'Administrador' : 'Analista')}
+                      </p>
+                      {isAdmin ? (
+                        <span className="text-[10px] bg-emerald-100 text-emerald-800 font-bold px-1.5 py-0.5 rounded">
+                          Admin
+                        </span>
+                      ) : (
+                        <span className="text-[10px] bg-blue-100 text-blue-800 font-medium px-1.5 py-0.5 rounded">
+                          Analista
+                        </span>
+                      )}
+                    </div>
                     <p className="text-xs leading-none text-[#5A6D5A]">
-                      {user?.email || 'roogerio99@gmail.com'}
+                      {user?.email || ''}
                     </p>
                   </div>
                 </DropdownMenuLabel>
@@ -294,10 +325,18 @@ export default function Layout() {
                   <CheckCircle2 className="mr-2 h-4 h-4 text-[#1B5E20]" />
                   <span>Nova Validação</span>
                 </DropdownMenuItem>
-                <DropdownMenuItem onClick={() => navigate('/importar')} className="cursor-pointer">
-                  <UploadCloud className="mr-2 h-4 h-4 text-[#F57F17]" />
-                  <span>Importar Planilhas</span>
-                </DropdownMenuItem>
+                {isAdmin && (
+                  <DropdownMenuItem onClick={() => navigate('/importar')} className="cursor-pointer">
+                    <UploadCloud className="mr-2 h-4 h-4 text-[#F57F17]" />
+                    <span>Importar Planilhas</span>
+                  </DropdownMenuItem>
+                )}
+                {isAdmin && (
+                  <DropdownMenuItem onClick={() => navigate('/usuarios')} className="cursor-pointer text-emerald-800 font-medium">
+                    <Users className="mr-2 h-4 h-4 text-emerald-600" />
+                    <span>Gestão de Usuários</span>
+                  </DropdownMenuItem>
+                )}
                 <DropdownMenuItem
                   onClick={() => navigate('/configuracoes')}
                   className="cursor-pointer"

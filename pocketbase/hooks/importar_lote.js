@@ -35,6 +35,21 @@
 
 routerAdd('POST', '/backend/v1/importar-lote', (e) => {
   try {
+    const authRecord = e.auth
+    if (!authRecord) {
+      return e.json(401, {
+        sucesso: false,
+        error: 'Acesso não autorizado. É necessário estar autenticado.',
+      })
+    }
+    const userRole = authRecord.getString('role') || 'analista'
+    if (userRole !== 'admin') {
+      return e.json(403, {
+        sucesso: false,
+        error: 'Apenas administradores podem realizar esta ação.',
+      })
+    }
+
     const info = e.requestInfo()
     const body = info.body || {}
 

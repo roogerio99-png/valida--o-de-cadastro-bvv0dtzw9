@@ -38,9 +38,11 @@ import {
 } from '@/services/agroService'
 import { ModalLimparBase } from '@/components/ModalLimparBase'
 import { useToast } from '@/hooks/use-toast'
+import { useAuth } from '@/contexts/AuthContext'
 import type { DicionarioPrincipioAtivo } from '@/types/agro'
 
-export default function PrincipiosAtivos() {
+export function PrincipiosAtivos() {
+  const { isAdmin } = useAuth()
   const { toast } = useToast()
   const [principios, setPrincipios] = useState<DicionarioPrincipioAtivo[]>([])
   const [contagensVinculados, setContagensVinculados] = useState<Record<string, number>>({})
@@ -153,6 +155,14 @@ export default function PrincipiosAtivos() {
   // Sincronizar produtos vinculados em cascata (Rule Engine)
   const handleSincronizarCascata = async (pa: DicionarioPrincipioAtivo, e?: React.MouseEvent) => {
     e?.stopPropagation()
+    if (!isAdmin) {
+      toast({
+        variant: 'destructive',
+        title: 'Ação não permitida',
+        description: 'Apenas administradores podem realizar esta ação.',
+      })
+      return
+    }
     setSincronizandoId(pa.id)
     try {
       const res = await sincronizarPrincipioAtivoEmCascata(pa.id)
@@ -174,6 +184,14 @@ export default function PrincipiosAtivos() {
   // Excluir com validação de integridade referencial (ON DELETE RESTRICT)
   const handleExcluir = async (pa: DicionarioPrincipioAtivo, e: React.MouseEvent) => {
     e.stopPropagation()
+    if (!isAdmin) {
+      toast({
+        variant: 'destructive',
+        title: 'Ação não permitida',
+        description: 'Apenas administradores podem realizar esta ação.',
+      })
+      return
+    }
     const vinculados = contagensVinculados[pa.id] || 0
     if (vinculados > 0) {
       toast({
@@ -254,6 +272,14 @@ export default function PrincipiosAtivos() {
 
   const handleSaveForm = async (e: React.FormEvent) => {
     e.preventDefault()
+    if (!isAdmin) {
+      toast({
+        variant: 'destructive',
+        title: 'Ação não permitida',
+        description: 'Apenas administradores podem realizar esta ação.',
+      })
+      return
+    }
     if (!formData.principio_ativo_chave.trim()) {
       toast({
         variant: 'destructive',
@@ -419,14 +445,16 @@ export default function PrincipiosAtivos() {
         </div>
 
         <div className="flex items-center gap-2 flex-wrap">
-          <Button
-            size="sm"
-            onClick={() => handleOpenForm()}
-            className="text-xs h-9 bg-[#1B5E20] hover:bg-[#2E7D32] text-white shadow-sm"
-          >
-            <Plus className="w-3.5 h-3.5 mr-1.5" />
-            Novo Princípio Ativo
-          </Button>
+          {isAdmin && (
+            <Button
+              size="sm"
+              onClick={() => handleOpenForm()}
+              className="text-xs h-9 bg-[#1B5E20] hover:bg-[#2E7D32] text-white shadow-sm"
+            >
+              <Plus className="w-3.5 h-3.5 mr-1.5" />
+              Novo Princípio Ativo
+            </Button>
+          )}
 
           <Button
             variant="outline"
@@ -438,16 +466,18 @@ export default function PrincipiosAtivos() {
             Exportar CSV (13 Colunas)
           </Button>
 
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => setModalLimparOpen(true)}
-            className="text-xs h-9 border-red-200 text-red-700 hover:bg-red-50 hover:text-red-800"
-            title="Apaga a matriz respeitando a integridade referencial ON DELETE RESTRICT"
-          >
-            <Trash2 className="w-3.5 h-3.5 mr-1.5 text-red-600" />
-            Limpar Base
-          </Button>
+          {isAdmin && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setModalLimparOpen(true)}
+              className="text-xs h-9 border-red-200 text-red-700 hover:bg-red-50 hover:text-red-800"
+              title="Apaga a matriz respeitando a integridade referencial ON DELETE RESTRICT"
+            >
+              <Trash2 className="w-3.5 h-3.5 mr-1.5 text-red-600" />
+              Limpar Base
+            </Button>
+          )}
         </div>
       </div>
 
@@ -665,33 +695,37 @@ export default function PrincipiosAtivos() {
                               />
                             </Button>
 
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              title="Editar registro da Matriz"
-                              onClick={(e) => handleOpenForm(pa, e)}
-                              className="h-7 w-7 text-gray-700 hover:bg-gray-100"
-                            >
-                              <Edit className="w-3.5 h-3.5" />
-                            </Button>
+                            {isAdmin && (
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                title="Editar registro da Matriz"
+                                onClick={(e) => handleOpenForm(pa, e)}
+                                className="h-7 w-7 text-gray-700 hover:bg-gray-100"
+                              >
+                                <Edit className="w-3.5 h-3.5" />
+                              </Button>
+                            )}
 
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              title={
-                                vinculados > 0
-                                  ? 'Exclusão bloqueada: existem produtos vinculados (ON DELETE RESTRICT)'
-                                  : 'Excluir Princípio Ativo'
-                              }
-                              onClick={(e) => handleExcluir(pa, e)}
-                              className={`h-7 w-7 ${
-                                vinculados > 0
-                                  ? 'text-gray-300 hover:bg-transparent cursor-not-allowed'
-                                  : 'text-red-600 hover:bg-red-50'
-                              }`}
-                            >
-                              <Trash2 className="w-3.5 h-3.5" />
-                            </Button>
+                            {isAdmin && (
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                title={
+                                  vinculados > 0
+                                    ? 'Exclusão bloqueada: existem produtos vinculados (ON DELETE RESTRICT)'
+                                    : 'Excluir Princípio Ativo'
+                                }
+                                onClick={(e) => handleExcluir(pa, e)}
+                                className={`h-7 w-7 ${
+                                  vinculados > 0
+                                    ? 'text-gray-300 hover:bg-transparent cursor-not-allowed'
+                                    : 'text-red-600 hover:bg-red-50'
+                                }`}
+                              >
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </Button>
+                            )}
                           </div>
                         </div>
 

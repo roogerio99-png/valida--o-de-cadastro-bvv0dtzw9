@@ -166,6 +166,21 @@ onRecordCreate((e) => {
 // 3. Endpoint para acionar propagação em cascata sob demanda a partir da UI
 routerAdd('POST', '/backend/v1/sincronizar-pa-cascata/{id}', (e) => {
   try {
+    const authRecord = e.auth
+    if (!authRecord) {
+      return e.json(401, {
+        sucesso: false,
+        error: 'Acesso não autorizado. É necessário estar autenticado.',
+      })
+    }
+    const userRole = authRecord.getString('role') || 'analista'
+    if (userRole !== 'admin') {
+      return e.json(403, {
+        sucesso: false,
+        error: 'Apenas administradores podem realizar esta ação.',
+      })
+    }
+
     const id = e.request.pathValue('id')
     if (!id) {
       return e.json(400, { sucesso: false, error: 'ID do princípio ativo obrigatório.' })
@@ -283,6 +298,21 @@ routerAdd('POST', '/backend/v1/sincronizar-pa-cascata/{id}', (e) => {
 // 4. Endpoint POST /backend/v1/importar-novo-cadastro (Seção 5 da especificação técnica 2.5.0)
 routerAdd('POST', '/backend/v1/importar-novo-cadastro', (e) => {
   try {
+    const authRecord = e.auth
+    if (!authRecord) {
+      return e.json(401, {
+        sucesso: false,
+        error: 'Acesso não autorizado. É necessário estar autenticado.',
+      })
+    }
+    const userRole = authRecord.getString('role') || 'analista'
+    if (userRole !== 'admin') {
+      return e.json(403, {
+        sucesso: false,
+        error: 'Apenas administradores podem realizar esta ação.',
+      })
+    }
+
     const info = e.requestInfo()
     const body = info.body || {}
 

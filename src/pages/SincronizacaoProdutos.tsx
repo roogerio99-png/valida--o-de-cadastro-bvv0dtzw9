@@ -45,6 +45,7 @@ import {
 import { Trash2 } from 'lucide-react'
 import { ModalLimparBase } from '@/components/ModalLimparBase'
 import { PainelRelatorioIntegracao } from '@/components/PainelRelatorioIntegracao'
+import { useAuth } from '@/contexts/AuthContext'
 import type {
   RespostaSincronizacao,
   DetalheFonteSincronizacao,
@@ -94,7 +95,8 @@ const FONTES_DISPONIVEIS: {
   },
 ]
 
-export default function SincronizacaoProdutos() {
+export function SincronizacaoProdutos() {
+  const { isAdmin } = useAuth()
   const { toast } = useToast()
 
   // Configurações da sincronização
@@ -170,6 +172,15 @@ export default function SincronizacaoProdutos() {
 
   // Disparo da sincronização
   const handleSincronizar = async () => {
+    if (!isAdmin) {
+      toast({
+        title: 'Ação não permitida',
+        description: 'Apenas administradores podem realizar esta ação.',
+        variant: 'destructive',
+      })
+      return
+    }
+
     if (fontesSelecionadas.length === 0) {
       toast({
         title: 'Selecione uma fonte',
@@ -380,25 +391,33 @@ export default function SincronizacaoProdutos() {
         </div>
 
         <div className="flex items-center gap-3">
-          <Button
-            variant="outline"
-            onClick={() => setModalLimparOpen(true)}
-            disabled={sincronizando}
-            className="border-red-200 text-red-700 hover:bg-red-50 hover:text-red-800 flex items-center gap-2 h-10 px-4 text-xs font-semibold"
-            title="Apaga permanentemente os registros da Base Mestre e do Dicionário de Princípios Ativos para reiniciar a sincronização do zero"
-          >
-            <Trash2 className="w-4 h-4 text-red-600" />
-            Limpar Bases
-          </Button>
+          {isAdmin ? (
+            <>
+              <Button
+                variant="outline"
+                onClick={() => setModalLimparOpen(true)}
+                disabled={sincronizando}
+                className="border-red-200 text-red-700 hover:bg-red-50 hover:text-red-800 flex items-center gap-2 h-10 px-4 text-xs font-semibold"
+                title="Apaga permanentemente os registros da Base Mestre e do Dicionário de Princípios Ativos para reiniciar a sincronização do zero"
+              >
+                <Trash2 className="w-4 h-4 text-red-600" />
+                Limpar Bases
+              </Button>
 
-          <Button
-            onClick={handleSincronizar}
-            disabled={sincronizando}
-            className="bg-[#1B5E20] hover:bg-[#2E7D32] text-white shadow-md flex items-center gap-2 h-10 px-5 font-semibold transition-all"
-          >
-            <RefreshCw className={`w-4 h-4 ${sincronizando ? 'animate-spin' : ''}`} />
-            {sincronizando ? 'Sincronizando...' : 'Sincronizar Agora'}
-          </Button>
+              <Button
+                onClick={handleSincronizar}
+                disabled={sincronizando}
+                className="bg-[#1B5E20] hover:bg-[#2E7D32] text-white shadow-md flex items-center gap-2 h-10 px-5 font-semibold transition-all"
+              >
+                <RefreshCw className={`w-4 h-4 ${sincronizando ? 'animate-spin' : ''}`} />
+                {sincronizando ? 'Sincronizando...' : 'Sincronizar Agora'}
+              </Button>
+            </>
+          ) : (
+            <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-blue-50 border border-blue-200 text-blue-800 text-xs font-medium">
+              <span>Perfil Analista: modo somente leitura (sincronização bloqueada)</span>
+            </div>
+          )}
         </div>
       </div>
 

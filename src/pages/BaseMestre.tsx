@@ -49,6 +49,7 @@ import {
 } from '@/services/agroService'
 import { ModalLimparBase } from '@/components/ModalLimparBase'
 import { useRealtime } from '@/hooks/use-realtime'
+import { useAuth } from '@/contexts/AuthContext'
 import {
   executarMotorCanonicoFrontend,
   formatarNcmMascara,
@@ -62,7 +63,8 @@ import type {
   UnidadeFisicaCanonica,
 } from '@/types/agro'
 
-export default function BaseMestre() {
+export function BaseMestre() {
+  const { isAdmin } = useAuth()
   const [searchParams] = useSearchParams()
   const initialQuery = searchParams.get('q') || ''
 
@@ -191,6 +193,15 @@ export default function BaseMestre() {
   }
 
   const handleManterUmExcluirOutros = async (grupo: GrupoDuplicidade, mantidoId: string) => {
+    if (!isAdmin) {
+      toast({
+        variant: 'destructive',
+        title: 'Ação não permitida',
+        description: 'Apenas administradores podem realizar esta ação.',
+      })
+      return
+    }
+
     const mantido = grupo.registros.find((r) => r.id === mantidoId)
     const outros = grupo.registros.filter((r) => r.id !== mantidoId)
 
@@ -309,6 +320,15 @@ export default function BaseMestre() {
   }
 
   const handleBulkDelete = async () => {
+    if (!isAdmin) {
+      toast({
+        variant: 'destructive',
+        title: 'Ação não permitida',
+        description: 'Apenas administradores podem realizar esta ação.',
+      })
+      return
+    }
+
     if (selectedIds.length === 0) return
     if (!confirm(`Deseja excluir permanentemente os ${selectedIds.length} produtos selecionados?`))
       return
@@ -428,6 +448,14 @@ export default function BaseMestre() {
 
   const handleSaveEdit = async (e: React.FormEvent) => {
     e.preventDefault()
+    if (!isAdmin) {
+      toast({
+        variant: 'destructive',
+        title: 'Ação não permitida',
+        description: 'Apenas administradores podem realizar esta ação.',
+      })
+      return
+    }
     if (!editingItem) return
     setSavingEdit(true)
     try {
@@ -544,7 +572,7 @@ export default function BaseMestre() {
             </div>
           )}
 
-          {selectedIds.length > 0 && (
+          {selectedIds.length > 0 && isAdmin && (
             <Button
               variant="destructive"
               size="sm"
@@ -568,16 +596,18 @@ export default function BaseMestre() {
               : 'Exportar CSV (28 Campos)'}
           </Button>
 
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => setModalLimparOpen(true)}
-            className="text-xs h-9 border-red-200 text-red-700 hover:bg-red-50 hover:text-red-800"
-            title="Apaga permanentemente todos os registros da Base Mestre para recomeçar do zero"
-          >
-            <Trash2 className="w-3.5 h-3.5 mr-1.5 text-red-600" />
-            Limpar Base
-          </Button>
+          {isAdmin && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setModalLimparOpen(true)}
+              className="text-xs h-9 border-red-200 text-red-700 hover:bg-red-50 hover:text-red-800"
+              title="Apaga permanentemente todos os registros da Base Mestre para recomeçar do zero"
+            >
+              <Trash2 className="w-3.5 h-3.5 mr-1.5 text-red-600" />
+              Limpar Base
+            </Button>
+          )}
         </div>
       </div>
 
@@ -1091,15 +1121,19 @@ export default function BaseMestre() {
                           className="py-3 px-3 text-right whitespace-nowrap"
                           onClick={(e) => e.stopPropagation()}
                         >
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            onClick={() => handleOpenEdit(p)}
-                            className="h-7 w-7 text-[#5A6D5A] hover:text-[#1B5E20] hover:bg-emerald-50"
-                            title="Editar especificações do produto"
-                          >
-                            <Edit2 className="w-3.5 h-3.5" />
-                          </Button>
+                          {isAdmin ? (
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              onClick={() => handleOpenEdit(p)}
+                              className="h-7 w-7 text-[#5A6D5A] hover:text-[#1B5E20] hover:bg-emerald-50"
+                              title="Editar especificações do produto"
+                            >
+                              <Edit2 className="w-3.5 h-3.5" />
+                            </Button>
+                          ) : (
+                            <span className="text-[10px] text-slate-400 italic px-2">Visualizar</span>
+                          )}
                         </td>
                       </tr>
 

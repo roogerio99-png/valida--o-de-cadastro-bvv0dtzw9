@@ -2,13 +2,19 @@ import React, { createContext, useContext, useEffect, useState } from 'react'
 import type { AuthRecord } from 'pocketbase'
 import pb from '@/lib/pocketbase/client'
 
+export type UserRole = 'admin' | 'analista'
+
 interface AuthContextType {
   user: AuthRecord | null
   token: string
   isAuthenticated: boolean
   isLoading: boolean
+  role: UserRole
+  isAdmin: boolean
+  isAnalista: boolean
   login: (email: string, pass: string) => Promise<void>
   logout: () => void
+  refreshUser: () => Promise<void>
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined)
@@ -18,32 +24,36 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [token, setToken] = useState<string>(pb.authStore.token)
   const [isLoading, setIsLoading] = useState<boolean>(true)
 
+  const refreshUser = async () => {
+    try {
+      if (pb.authStore.isValid) {
+        const fresh = await pb.collection('users').authRefresh()
+        setUser(fresh.record)
+        setToken(fresh.token)
+      }
+    } catch (err) {
+      console.warn('Falha ao atualizar dados da sessão:', err)
+    }
+  }
+
   useEffect(() => {
-    // Monitora alterações do authStore
+    // Escuta mudanças no authStore
     const unsubscribe = pb.authStore.onChange((newToken, record) => {
       setToken(newToken)
       setUser(record)
     })
 
-    // Checar validade do token atual
+    // Checa se o token atual é válido
     if (pb.authStore.isValid) {
-      pb.collection('users')
-        .authRefresh()
-        .then(() => {
-          setUser(pb.authStore.record)
-          setToken(pb.authStore.token)
-        })
-        .catch(() => {
-          pb.authStore.clear()
-          setUser(null)
-          setToken('')
-        })
-        .finally(() => {
-          setIsLoading(false)
-        })
+      setUser(pb.authStore.record)
+      setToken(pb.authStore.token)
+      refreshUser()
     } else {
-      setIsLoading(false)
+      pb.authStore.clear()
+      setUser(null)
+      setToken('')
     }
+    setIsLoading(false)
 
     return () => {
       unsubscribe()
@@ -51,9 +61,16 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   }, [])
 
   const login = async (email: string, pass: string) => {
-    await pb.collection('users').authWithPassword(email, pass)
-    setUser(pb.authStore.record)
-    setToken(pb.authStore.token)
+    try {
+      const authData = await pb
+        .collection('users')
+        .authWithPassword(email, pass)
+      setUser(authData.record)
+      setToken(authData.token)
+    } catch (error) {
+      console.error('Erro de autenticação:', error)
+      throw error
+    }
   }
 
   const logout = () => {
@@ -62,15 +79,24 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setToken('')
   }
 
+  const userRole = (user as unknown as { role?: string })?.role
+  const role: UserRole = userRole === 'admin' ? 'admin' : 'analista'
+  const isAdmin = role === 'admin'
+  const isAnalista = !isAdmin
+
   return (
     <AuthContext.Provider
       value={{
         user,
         token,
-        isAuthenticated: !!user && pb.authStore.isValid,
+        isAuthenticated: !!token && !!user,
         isLoading,
+        role,
+        isAdmin,
+        isAnalista,
         login,
         logout,
+        refreshUser,
       }}
     >
       {children}
@@ -80,8 +106,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
 export function useAuth() {
   const context = useContext(AuthContext)
-  if (!context) {
-    throw new Error('useAuth deve ser utilizado dentro de um AuthProvider')
+  if (context === undefined) {
+    throw new Error('useAuth deve ser usado dentro de um AuthProvider')
   }
   return context
 }
