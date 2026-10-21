@@ -71,11 +71,14 @@ export function sanitizarRegistroMapa(reg?: string): string {
   if (upper.startsWith('TC')) return upper
   if (s.includes('-')) return s
 
-  if (s.startsWith('Nº ') || s.startsWith('Nº')) {
-    const semPrefixo = s.replace(/^Nº\s*/i, '').trim()
+  if (s.startsWith('Nº ') || s.startsWith('Nº') || s.startsWith('N° ') || s.startsWith('N°')) {
+    const semPrefixo = s.replace(/^N[º°]\s*/i, '').trim()
     const digits = semPrefixo.replace(/\D/g, '')
     if (digits.length > 0 && digits.length < 4) {
       return `Nº ${digits.padStart(4, '0')}`
+    }
+    if (digits.length > 0) {
+      return `Nº ${digits}`
     }
     return `Nº ${semPrefixo}`
   }
@@ -83,6 +86,9 @@ export function sanitizarRegistroMapa(reg?: string): string {
   const digits = s.replace(/\D/g, '')
   if (digits.length > 0 && digits.length < 4) {
     return `Nº ${digits.padStart(4, '0')}`
+  }
+  if (digits.length > 0) {
+    return `Nº ${digits}`
   }
   if (/^\d+$/.test(s)) {
     return `Nº ${s}`

@@ -141,11 +141,14 @@ routerAdd('POST', '/backend/v1/importar-lote', (e) => {
       if (upper.includes('ISENTO')) return 'ISENTO'
       if (upper.startsWith('TC')) return upper
       if (s.includes('-')) return s
-      if (s.startsWith('Nº ') || s.startsWith('Nº')) {
-        const semPrefixo = s.replace(/^Nº\s*/i, '').trim()
+      if (s.startsWith('Nº ') || s.startsWith('Nº') || s.startsWith('N° ') || s.startsWith('N°')) {
+        const semPrefixo = s.replace(/^N[º°]\s*/i, '').trim()
         const digits = semPrefixo.replace(/\D/g, '')
         if (digits.length > 0 && digits.length < 4) {
           return `Nº ${digits.padStart(4, '0')}`
+        }
+        if (digits.length > 0) {
+          return `Nº ${digits}`
         }
         return `Nº ${semPrefixo}`
       }
@@ -153,7 +156,9 @@ routerAdd('POST', '/backend/v1/importar-lote', (e) => {
       if (digits.length > 0 && digits.length < 4) {
         return `Nº ${digits.padStart(4, '0')}`
       }
-      if (/^\d+$/.test(s)) return `Nº ${s}`
+      if (digits.length > 0) {
+        return `Nº ${digits}`
+      }
       return s
     }
 
@@ -1172,15 +1177,16 @@ routerAdd('POST', '/backend/v1/importar-lote', (e) => {
           const escRazao = razao.replace(/'/g, "\\'")
           const escTipo = tipoRelacao.replace(/'/g, "\\'")
 
-          // Upsert idempotente por registro_mapa + razao_social + tipo_relacao
+          const cnpjLimpo = String(data.cnpj || '').trim()
+          const escCnpj = cnpjLimpo.replace(/'/g, "\\'")
+
+          // Upsert idempotente por registro_mapa + tipo_relacao + razao_social + cnpj
+          const filtroEmp = escCnpj
+            ? `registro_mapa = '${escMapa}' && tipo_relacao = '${escTipo}' && razao_social = '${escRazao}' && cnpj = '${escCnpj}'`
+            : `registro_mapa = '${escMapa}' && tipo_relacao = '${escTipo}' && razao_social = '${escRazao}'`
+
           const existentes =
-            txApp.findRecordsByFilter(
-              'bula_empresas',
-              `registro_mapa = '${escMapa}' && razao_social = '${escRazao}' && tipo_relacao = '${escTipo}'`,
-              '-created',
-              1,
-              0,
-            ) || []
+            txApp.findRecordsByFilter('bula_empresas', filtroEmp, '-created', 1, 0) || []
 
           let rec = null
           let isUpdate = false
@@ -1257,15 +1263,16 @@ routerAdd('POST', '/backend/v1/importar-lote', (e) => {
           const escTipo = (tipoEmb || 'Padrão').replace(/'/g, "\\'")
           const escCap = cap.replace(/'/g, "\\'")
 
-          // Upsert idempotente por registro_mapa + tipo_embalagem + capacidade
+          const materialLimpo = String(data.material || '').trim()
+          const escMat = materialLimpo.replace(/'/g, "\\'")
+
+          // Upsert idempotente por registro_mapa + tipo_embalagem + capacidade + material
+          const filtroEmb = escMat
+            ? `registro_mapa = '${escMapa}' && tipo_embalagem = '${escTipo}' && capacidade = '${escCap}' && material = '${escMat}'`
+            : `registro_mapa = '${escMapa}' && tipo_embalagem = '${escTipo}' && capacidade = '${escCap}'`
+
           const existentes =
-            txApp.findRecordsByFilter(
-              'bula_embalagens',
-              `registro_mapa = '${escMapa}' && tipo_embalagem = '${escTipo}' && capacidade = '${escCap}'`,
-              '-created',
-              1,
-              0,
-            ) || []
+            txApp.findRecordsByFilter('bula_embalagens', filtroEmb, '-created', 1, 0) || []
 
           let rec = null
           let isUpdate = false
@@ -1424,11 +1431,11 @@ routerAdd('POST', '/backend/v1/importar-lote', (e) => {
           const escAlvo = alvo.replace(/'/g, "\\'")
           const escCult = cultura.replace(/'/g, "\\'")
 
-          // Upsert idempotente por registro_mapa + alvo_biologico + cultura
+          // Upsert idempotente por registro_mapa + cultura + alvo_biologico
           const existentes =
             txApp.findRecordsByFilter(
               'bula_alvos',
-              `registro_mapa = '${escMapa}' && alvo_biologico = '${escAlvo}' && cultura = '${escCult}'`,
+              `registro_mapa = '${escMapa}' && cultura = '${escCult}' && alvo_biologico = '${escAlvo}'`,
               '-created',
               1,
               0,

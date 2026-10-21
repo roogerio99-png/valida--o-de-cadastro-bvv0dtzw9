@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-10-21T21:22:34.174Z",
+  "generatedAt": "2026-10-21T22:05:43.846Z",
   "collections": [
     {
       "name": "users",
@@ -1087,8 +1087,8 @@
         }
       ],
       "indexes": [
-        "CREATE INDEX idx_bula_comp_mapa ON bula_composicao (registro_mapa)",
-        "CREATE INDEX idx_bula_comp_ia ON bula_composicao (ingrediente_ativo)"
+        "CREATE UNIQUE INDEX IF NOT EXISTS idx_bula_comp_mapa_ia ON bula_composicao (registro_mapa, ingrediente_ativo)",
+        "CREATE INDEX IF NOT EXISTS idx_bula_comp_mapa ON bula_composicao (registro_mapa)"
       ]
     },
     {
@@ -1184,9 +1184,10 @@
         }
       ],
       "indexes": [
-        "CREATE INDEX idx_bula_emp_mapa ON bula_empresas (registro_mapa)",
-        "CREATE INDEX idx_bula_emp_razao ON bula_empresas (razao_social)",
-        "CREATE INDEX idx_bula_emp_tipo ON bula_empresas (tipo_relacao)"
+        "CREATE INDEX IF NOT EXISTS idx_bula_emp_mapa ON bula_empresas (registro_mapa)",
+        "CREATE INDEX IF NOT EXISTS idx_bula_emp_razao ON bula_empresas (razao_social)",
+        "CREATE INDEX IF NOT EXISTS idx_bula_emp_tipo ON bula_empresas (tipo_relacao)",
+        "CREATE UNIQUE INDEX IF NOT EXISTS idx_bula_emp_natural ON bula_empresas (registro_mapa, tipo_relacao, razao_social, cnpj)"
       ]
     },
     {
@@ -1270,8 +1271,9 @@
         }
       ],
       "indexes": [
-        "CREATE INDEX idx_bula_emb_mapa ON bula_embalagens (registro_mapa)",
-        "CREATE INDEX idx_bula_emb_ncm ON bula_embalagens (ncm)"
+        "CREATE INDEX IF NOT EXISTS idx_bula_emb_mapa ON bula_embalagens (registro_mapa)",
+        "CREATE INDEX IF NOT EXISTS idx_bula_emb_ncm ON bula_embalagens (ncm)",
+        "CREATE UNIQUE INDEX IF NOT EXISTS idx_bula_emb_natural ON bula_embalagens (registro_mapa, tipo_embalagem, capacidade, material)"
       ]
     },
     {
@@ -1355,8 +1357,9 @@
         }
       ],
       "indexes": [
-        "CREATE INDEX idx_bula_cult_mapa ON bula_culturas (registro_mapa)",
-        "CREATE INDEX idx_bula_cult_cultura ON bula_culturas (cultura)"
+        "CREATE INDEX IF NOT EXISTS idx_bula_cult_mapa ON bula_culturas (registro_mapa)",
+        "CREATE INDEX IF NOT EXISTS idx_bula_cult_cultura ON bula_culturas (cultura)",
+        "CREATE UNIQUE INDEX IF NOT EXISTS idx_bula_cult_mapa_cultura ON bula_culturas (registro_mapa, cultura)"
       ]
     },
     {
@@ -1458,9 +1461,10 @@
         }
       ],
       "indexes": [
-        "CREATE INDEX idx_bula_alv_mapa ON bula_alvos (registro_mapa)",
-        "CREATE INDEX idx_bula_alv_alvo ON bula_alvos (alvo_biologico)",
-        "CREATE INDEX idx_bula_alv_cultura ON bula_alvos (cultura)"
+        "CREATE INDEX IF NOT EXISTS idx_bula_alv_mapa ON bula_alvos (registro_mapa)",
+        "CREATE INDEX IF NOT EXISTS idx_bula_alv_alvo ON bula_alvos (alvo_biologico)",
+        "CREATE INDEX IF NOT EXISTS idx_bula_alv_cultura ON bula_alvos (cultura)",
+        "CREATE UNIQUE INDEX IF NOT EXISTS idx_bula_alv_natural ON bula_alvos (registro_mapa, cultura, alvo_biologico)"
       ]
     },
     {
@@ -1550,8 +1554,9 @@
         }
       ],
       "indexes": [
-        "CREATE INDEX idx_bula_apl_mapa ON bula_aplicacao (registro_mapa)",
-        "CREATE INDEX idx_bula_apl_tipo ON bula_aplicacao (tipo_aplicacao)"
+        "CREATE INDEX IF NOT EXISTS idx_bula_apl_mapa ON bula_aplicacao (registro_mapa)",
+        "CREATE INDEX IF NOT EXISTS idx_bula_apl_tipo ON bula_aplicacao (tipo_aplicacao)",
+        "CREATE UNIQUE INDEX IF NOT EXISTS idx_bula_apl_natural ON bula_aplicacao (registro_mapa, tipo_aplicacao)"
       ]
     }
   ]

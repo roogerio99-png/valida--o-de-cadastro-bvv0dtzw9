@@ -28,7 +28,12 @@ import {
   type ItemErroImportacao,
   type ResultadoImportacaoLote,
 } from '@/services/agroService'
-import { executarMotorCanonicoFrontend, formatarNcmMascara } from '@/lib/motorCanonico'
+import {
+  executarMotorCanonicoFrontend,
+  formatarNcmMascara,
+  sanitizarRegistroMapa,
+  sanitizarMarcaComercial,
+} from '@/lib/motorCanonico'
 
 interface ZoneConfig {
   id: string
@@ -1150,9 +1155,9 @@ export function Importar() {
         validos.push({
           originalLine: originalLineNum,
           data: {
-            registro_mapa: mapa,
+            registro_mapa: sanitizarRegistroMapa(mapa),
             nome_comercial: nome,
-            marca_padronizada: nome,
+            marca_padronizada: sanitizarMarcaComercial(nome),
             titular_registro: titular,
             fabricante_formulador: fab,
             principio_ativo: pa,
@@ -1215,7 +1220,7 @@ export function Importar() {
         validos.push({
           originalLine: originalLineNum,
           data: {
-            registro_mapa: mapa,
+            registro_mapa: sanitizarRegistroMapa(mapa),
             nome_produto: nomeProd,
             ingrediente_ativo: ia,
             nome_quimico: nomeQuim,
@@ -1280,7 +1285,7 @@ export function Importar() {
         validos.push({
           originalLine: originalLineNum,
           data: {
-            registro_mapa: mapa,
+            registro_mapa: sanitizarRegistroMapa(mapa),
             nome_produto: nomeProd,
             tipo_relacao: tipoRel || 'Formulador',
             razao_social: razao,
@@ -1330,7 +1335,7 @@ export function Importar() {
         validos.push({
           originalLine: originalLineNum,
           data: {
-            registro_mapa: mapa,
+            registro_mapa: sanitizarRegistroMapa(mapa),
             nome_produto: nomeProd,
             tipo_embalagem: tipoEmb || 'Padrão',
             material: mat,
@@ -1389,7 +1394,7 @@ export function Importar() {
         validos.push({
           originalLine: originalLineNum,
           data: {
-            registro_mapa: mapa,
+            registro_mapa: sanitizarRegistroMapa(mapa),
             nome_produto: nomeProd,
             cultura: cult,
             intervalo_seguranca_dias: car,
@@ -1452,7 +1457,7 @@ export function Importar() {
         validos.push({
           originalLine: originalLineNum,
           data: {
-            registro_mapa: mapa,
+            registro_mapa: sanitizarRegistroMapa(mapa),
             nome_produto: nomeProd,
             cultura: cult,
             alvo_biologico: alvo,
@@ -1513,7 +1518,7 @@ export function Importar() {
         validos.push({
           originalLine: originalLineNum,
           data: {
-            registro_mapa: mapa,
+            registro_mapa: sanitizarRegistroMapa(mapa),
             nome_produto: nomeProd,
             tipo_aplicacao: tipoApl || 'Terrestre',
             equipamento_recomendado: equip,
@@ -1583,10 +1588,10 @@ export function Importar() {
 
       setImportSummary(finalResult)
 
-      if (finalResult.inseridos > 0) {
+      if (finalResult.inseridos > 0 || finalResult.ignorados > 0) {
         toast({
           title: 'Importação Concluída!',
-          description: `${finalResult.inseridos} registros inseridos com sucesso na tabela "${targetCol}".${
+          description: `${finalResult.inseridos} registros inseridos e ${finalResult.ignorados} atualizados/mantidos com sucesso na tabela "${targetCol}".${
             todosErros.length > 0 ? ` (${todosErros.length} linhas com ressalvas/erros).` : ''
           }`,
         })
