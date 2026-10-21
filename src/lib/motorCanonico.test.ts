@@ -78,4 +78,28 @@ describe('Testes de Conformidade do Motor Canônico (Especificação v2.4.0)', (
     expect(res.ncm_padrao).toBe('3808.92.99')
     expect(res.ncm_faixa2_300g_a_7_5kg).toBe('3808.92.99')
   })
+
+  it('deduz FOLICRON (Ciproconazol + Picoxistrobina) canonicamente como Fungicida 3808.92.99', () => {
+    const res = executarMotorCanonicoFrontend({
+      nome_completo: 'FOLICRON',
+      principio_ativo: 'CIPROCONAZOL + PICOXISTROBINA',
+      embalagem: 'Bombona 20 L',
+    })
+
+    expect(res.tipo_produto).toBe('Produto Formulado Comercial')
+    expect(res.sub_grupo).toBe('Fungicida')
+    expect(res.ncm_padrao).toBe('3808.92.99')
+    expect(res.ncm_faixa4_acima_10kg).toBe('3808.92.99')
+  })
+
+  it('quando nenhuma classe for identificada, marca Inconclusivo sem inventar Herbicida', () => {
+    const res = executarMotorCanonicoFrontend({
+      nome_completo: 'PRODUTO XYZ DESCONHECIDO',
+      principio_ativo: 'MOLECULA TOTALMENTE INEDITA ABC',
+      embalagem: 'Frasco 1 L',
+    })
+
+    expect(res.sub_grupo).toBe('Inconclusivo / Não Reconhecido')
+    expect(res.ncm_padrao).toBe('3808.99.99')
+  })
 })

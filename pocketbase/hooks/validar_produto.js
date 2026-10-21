@@ -258,26 +258,60 @@ routerAdd('POST', '/backend/v1/validar-produto', (e) => {
         macroGrupo = 'Defensivos'
         const subL = `${inputSub} ${paUpper} ${nomeUpper}`
 
-        // Reconhecimento químico determinístico das principais moléculas de fungicidas
+        // Reconhecimento químico determinístico das principais moléculas de fungicidas (subposição 3808.92)
         const isFungicidaMolecula =
           paUpper.includes('CIPROCONAZOL') ||
+          paUpper.includes('CYPROCONAZOLE') ||
           paUpper.includes('PICOXISTROBINA') ||
+          paUpper.includes('PICOXYSTROBIN') ||
           paUpper.includes('TEBUCONAZOL') ||
+          paUpper.includes('TEBUCONAZOLE') ||
           paUpper.includes('AZOXISTROBINA') ||
+          paUpper.includes('AZOXYSTROBIN') ||
           paUpper.includes('DIFENOCONAZOL') ||
+          paUpper.includes('DIFENOCONAZOLE') ||
           paUpper.includes('EPOXICONAZOL') ||
+          paUpper.includes('EPOXICONAZOLE') ||
           paUpper.includes('PROTIOCONAZOL') ||
+          paUpper.includes('PROTHIOCONAZOLE') ||
           paUpper.includes('MANCOZEB') ||
+          paUpper.includes('MANCOZEBE') ||
           paUpper.includes('CLOROTALONIL') ||
+          paUpper.includes('CHLOROTHALONIL') ||
           paUpper.includes('TRIFLOXISTROBINA') ||
+          paUpper.includes('TRIFLOXYSTROBIN') ||
           paUpper.includes('PIRACLOSTROBINA') ||
+          paUpper.includes('PYRACLOSTROBIN') ||
           paUpper.includes('CARBENDAZIM') ||
           paUpper.includes('BOSCALIDA') ||
           paUpper.includes('FLUXAPIROXADE') ||
+          paUpper.includes('FLUXAPYROXAD') ||
           paUpper.includes('FOLPET') ||
           paUpper.includes('CAPTANA') ||
+          paUpper.includes('CAPTAN') ||
           paUpper.includes('CUPRICO') ||
           paUpper.includes('COBRE') ||
+          paUpper.includes('OXICLORETO DE COBRE') ||
+          paUpper.includes('HIDROXIDO DE COBRE') ||
+          paUpper.includes('SULFATOCUPRICO') ||
+          paUpper.includes('ENXOFRE') ||
+          paUpper.includes('SULFUR') ||
+          paUpper.includes('PROPICONAZOL') ||
+          paUpper.includes('PROPICONAZOLE') ||
+          paUpper.includes('METCONAZOL') ||
+          paUpper.includes('METCONAZOLE') ||
+          paUpper.includes('KRESOXIM') ||
+          paUpper.includes('DIMETOMORFE') ||
+          paUpper.includes('DIMETHOMORPH') ||
+          paUpper.includes('IPRODIONA') ||
+          paUpper.includes('IPRODIONE') ||
+          paUpper.includes('TIABENDAZOL') ||
+          paUpper.includes('THIABENDAZOLE') ||
+          paUpper.includes('TIOFANATO') ||
+          paUpper.includes('THIOPHANATE') ||
+          paUpper.includes('METALAXIL') ||
+          paUpper.includes('METALAXYL') ||
+          paUpper.includes('MEFENOXAM') ||
           nomeUpper.includes('FOLICRON') ||
           nomeUpper.includes('PRIORI') ||
           nomeUpper.includes('SPHERE') ||
@@ -286,56 +320,175 @@ routerAdd('POST', '/backend/v1/validar-produto', (e) => {
           nomeUpper.includes('OPERA') ||
           nomeUpper.includes('FOX')
 
-        // Reconhecimento químico determinístico de inseticidas
+        // Reconhecimento químico determinístico de inseticidas (subposição 3808.91)
         const isInseticidaMolecula =
           paUpper.includes('TIAMETOXAM') ||
+          paUpper.includes('THIAMETHOXAM') ||
           paUpper.includes('IMIDACLOPRID') ||
           paUpper.includes('CLORANTRANILIPROLE') ||
+          paUpper.includes('CHLORANTRANILIPROLE') ||
           paUpper.includes('ACEFATO') ||
+          paUpper.includes('ACEPHATE') ||
           paUpper.includes('CIPERMETRINA') ||
+          paUpper.includes('CYPERMETHRIN') ||
           paUpper.includes('BIFENTRINA') ||
+          paUpper.includes('BIFENTHRIN') ||
           paUpper.includes('FIPRONIL') ||
           paUpper.includes('LAMBDA-CIALOTRINA') ||
+          paUpper.includes('LAMBDA CIALOTRINA') ||
           paUpper.includes('LUFENURON') ||
           paUpper.includes('ESPINOSADE') ||
-          paUpper.includes('THURINGIENSIS')
+          paUpper.includes('SPINOSAD') ||
+          paUpper.includes('SPINETORAM') ||
+          paUpper.includes('THURINGIENSIS') ||
+          paUpper.includes('BACILLUS THURINGIENSIS') ||
+          paUpper.includes('CLORFENAPIR') ||
+          paUpper.includes('CHLORFENAPYR') ||
+          paUpper.includes('DELTAMETRINA') ||
+          paUpper.includes('DELTAMETHRIN') ||
+          paUpper.includes('MALATIONA') ||
+          paUpper.includes('MALATHION') ||
+          paUpper.includes('PERMETRINA') ||
+          paUpper.includes('PERMETHRIN') ||
+          paUpper.includes('ACETAMIPRIDO') ||
+          paUpper.includes('ACETAMIPRID') ||
+          paUpper.includes('DINOTEFORAN') ||
+          paUpper.includes('CLOTIANIDINA') ||
+          paUpper.includes('CLOTHIANIDIN') ||
+          paUpper.includes('INDOXACARBE') ||
+          paUpper.includes('INDOXACARB') ||
+          paUpper.includes('METOMIL') ||
+          paUpper.includes('METHOMYL') ||
+          paUpper.includes('TEFLUBENZURON') ||
+          paUpper.includes('NOVALURON') ||
+          paUpper.includes('BETA-CIFLUTRINA') ||
+          paUpper.includes('PROFOFOS') ||
+          paUpper.includes('DIAFENTIURON')
 
-        // Reconhecimento químico determinístico de herbicidas
+        // Reconhecimento químico determinístico de herbicidas (subposição 3808.93)
         const isHerbicidaMolecula =
           paUpper.includes('GLIFOSATO') ||
           paUpper.includes('GLYPHOSATE') ||
           paUpper.includes('2,4-D') ||
           paUpper.includes('2-4 D') ||
           paUpper.includes('ATRAZINA') ||
+          paUpper.includes('ATRAZINE') ||
           paUpper.includes('DIURON') ||
           paUpper.includes('CLETODIM') ||
+          paUpper.includes('CLETHODIM') ||
           paUpper.includes('HALOXIFOPE') ||
+          paUpper.includes('HALOXYFOP') ||
           paUpper.includes('MESOTRIONA') ||
+          paUpper.includes('MESOTRIONE') ||
           paUpper.includes('NICOSULFURON') ||
           paUpper.includes('PARAQUAT') ||
           paUpper.includes('DICAMBA') ||
-          paUpper.includes('S-METOLACLORO')
+          paUpper.includes('S-METOLACLORO') ||
+          paUpper.includes('S-METOLACHLOR') ||
+          paUpper.includes('METOLACLORO') ||
+          paUpper.includes('CLOMAZONA') ||
+          paUpper.includes('CLOMAZONE') ||
+          paUpper.includes('FLUMIOXAZINA') ||
+          paUpper.includes('FLUMIOXAZIN') ||
+          paUpper.includes('SULFENTRAZONA') ||
+          paUpper.includes('SULFENTRAZONE') ||
+          paUpper.includes('DICLOSULAM') ||
+          paUpper.includes('IMAZETAPIR') ||
+          paUpper.includes('IMAZETHAPYR') ||
+          paUpper.includes('IMAZAPIC') ||
+          paUpper.includes('IMAZAPIR') ||
+          paUpper.includes('CLORIMURON') ||
+          paUpper.includes('CHLORIMURON') ||
+          paUpper.includes('METSULFURON') ||
+          paUpper.includes('AMETRINA') ||
+          paUpper.includes('AMETRYN') ||
+          paUpper.includes('HEXAZINONA') ||
+          paUpper.includes('HEXAZINONE') ||
+          paUpper.includes('METRIBUZIM') ||
+          paUpper.includes('METRIBUZIN') ||
+          paUpper.includes('GLUFOSINATO') ||
+          paUpper.includes('GLUFOSINATE') ||
+          paUpper.includes('TEMBOTRIONA') ||
+          paUpper.includes('TEMBOTRIONE') ||
+          paUpper.includes('TRICLOPIR') ||
+          paUpper.includes('TRICLOPYR') ||
+          paUpper.includes('PICLORAM') ||
+          paUpper.includes('FLUROXIPIR') ||
+          paUpper.includes('FLUROXYPYR') ||
+          paUpper.includes('SAFLUFENACIL') ||
+          paUpper.includes('QUIZALOFOPE') ||
+          paUpper.includes('QUIZALOFOP') ||
+          paUpper.includes('FOMESAFEM') ||
+          paUpper.includes('FOMESAFEN') ||
+          paUpper.includes('LACTOFEM') ||
+          paUpper.includes('LACTOFEN') ||
+          paUpper.includes('CARFENTRAZONA') ||
+          paUpper.includes('CARFENTRAZONE')
 
-        if (subL.includes('INSETICIDA') && subL.includes('ACARICIDA')) {
+        const isAcaricidaMolecula =
+          paUpper.includes('ABAMECTINA') ||
+          paUpper.includes('ABAMECTIN') ||
+          paUpper.includes('SPIROMESIFEN') ||
+          paUpper.includes('ESPIROMESIFENO') ||
+          paUpper.includes('CI-HEXATINA') ||
+          paUpper.includes('FENPIROXIMATO') ||
+          paUpper.includes('HEXITIAZOX') ||
+          paUpper.includes('HEXYTHIAZOX') ||
+          paUpper.includes('CLORFENAPIR') ||
+          paUpper.includes('PROPARGITO') ||
+          paUpper.includes('PROPARGITE')
+
+        const isNematicidaMolecula =
+          paUpper.includes('FLUOPIRAM') ||
+          paUpper.includes('FLUOPYRAM') ||
+          paUpper.includes('CANDIDATUS') ||
+          paUpper.includes('PASTEURIA') ||
+          paUpper.includes('PURPUREOCILLIUM') ||
+          paUpper.includes('CADUSAFOS') ||
+          paUpper.includes('FOSTIAZATO')
+
+        const isRaticidaMolecula =
+          paUpper.includes('BRODIFACOUM') ||
+          paUpper.includes('BROMADIOLONA') ||
+          paUpper.includes('BROMADIOLONE') ||
+          paUpper.includes('DIFENACOUM') ||
+          paUpper.includes('FLOCOUMAFEN') ||
+          paUpper.includes('COUMATETRALIL') ||
+          paUpper.includes('WARFARINA')
+
+        const isReguladorMolecula =
+          paUpper.includes('ETEFOM') ||
+          paUpper.includes('ETHEPHON') ||
+          paUpper.includes('PACLOBUTRAZOL') ||
+          paUpper.includes('GIBERELINA') ||
+          paUpper.includes('GIBBERELLIN') ||
+          paUpper.includes('TRINEXAPAC') ||
+          paUpper.includes('CLORETO DE MEPIQUAT') ||
+          paUpper.includes('MEPIQUAT')
+
+        if (subL.includes('INSETICIDA') && (subL.includes('ACARICIDA') || isAcaricidaMolecula)) {
           subGrupo = 'Inseticida / Acaricida'
         } else if (subL.includes('FUNGICIDA') || isFungicidaMolecula) {
           subGrupo = 'Fungicida'
         } else if (subL.includes('INSETICIDA') || isInseticidaMolecula) {
           subGrupo = 'Inseticida'
-        } else if (subL.includes('NEMATICIDA')) {
+        } else if (subL.includes('NEMATICIDA') || isNematicidaMolecula) {
           subGrupo = 'Nematicida'
         } else if (
-          subL.includes('REGULADOR') ||
-          paUpper.includes('ETEFOM') ||
-          paUpper.includes('PACLOBUTRAZOL')
+          subL.includes('RATICIDA') ||
+          subL.includes('RODENTICIDA') ||
+          isRaticidaMolecula
         ) {
+          subGrupo = 'Raticida / Rodenticida'
+        } else if (subL.includes('REGULADOR') || isReguladorMolecula) {
           subGrupo = 'Regulador de Crescimento'
-        } else if (subL.includes('ACARICIDA')) {
+        } else if (subL.includes('ACARICIDA') || isAcaricidaMolecula) {
           subGrupo = 'Acaricida'
         } else if (subL.includes('HERBICIDA') || isHerbicidaMolecula) {
           subGrupo = 'Herbicida'
         } else {
-          subGrupo = 'Herbicida'
+          // Quando não reconhecido, marca Inconclusivo (sem default arbitrário)
+          subGrupo = 'Inconclusivo / Não Reconhecido'
         }
         categoriaTributaria = 'beneficiado'
       }
@@ -455,7 +608,19 @@ routerAdd('POST', '/backend/v1/validar-produto', (e) => {
           }
         } else if (subGrupo.includes('Nematicida') || paUpper.includes('NEMATICIDA')) {
           ncmPadrao = '3808.99.95'
-        } else {
+        } else if (
+          subGrupo.includes('Raticida') ||
+          subGrupo.includes('Rodenticida') ||
+          paUpper.includes('RATICIDA') ||
+          paUpper.includes('RODENTICIDA')
+        ) {
+          ncmPadrao = '3808.94.90'
+        } else if (
+          subGrupo.includes('Inseticida') ||
+          subGrupo.includes('Acaricida') ||
+          paUpper.includes('INSETICIDA') ||
+          paUpper.includes('ACARICIDA')
+        ) {
           if (paUpper.includes('ACEFATO') || paUpper.includes('THURINGIENSIS')) {
             ncmPadrao = '3808.91.91'
           } else if (paUpper.includes('CIPERMETRINA') || paUpper.includes('CYPERMETHRIN')) {
@@ -463,6 +628,9 @@ routerAdd('POST', '/backend/v1/validar-produto', (e) => {
           } else {
             ncmPadrao = '3808.91.99'
           }
+        } else {
+          // Inconclusivo / Não Reconhecido: mantém código neutro residual 3808.99.99 sem inventar herbicida
+          ncmPadrao = '3808.99.99'
         }
         ncmFaixa1 = ncmPadrao
         ncmFaixa2 = ncmPadrao
@@ -872,20 +1040,124 @@ Consulte a base pública oficial do AGROFIT e a BULA oficial registrada no MAPA 
         ? produtoBaseMestreEncontrado.getString('embalagem')
         : 'Bombona 20 L')
 
-    // Determinar classe de uso com prioridade: bula > dicionário de PA > base mestre (se coerente) > dedução
+    // -------------------------------------------------------------------------
+    // CASCATA DE 4 ETAPAS PARA DEDUÇÃO DE CLASSE AGRONÔMICA E NCM CANÔNICO:
+    // 1º. Consultar a matriz de princípios ativos (dicionario_principios_ativos) buscando a(s) molécula(s)
+    // 2º. Se não resolver, consultar a Base Mestre (base_mestre) por produtos com mesmo PA e usar a NCM/classe
+    // 3º. Se ainda não resolver, usar a busca de bula/AGROFIT (classe de uso declarada na bula)
+    // 4º. Último recurso: lista fixa de moléculas conhecidas no código
+    // Se NENHUMA etapa determinar a classe, a validação deve sair como INCONCLUSIVO ("ressalva")
+    // -------------------------------------------------------------------------
     let classeUsoFinal = ''
-    if (
-      bulaExtraida?.classe_uso &&
-      !bulaExtraida.classe_uso.toLowerCase().includes('defensivo fitossanit')
-    ) {
-      classeUsoFinal = bulaExtraida.classe_uso
-    } else if (paDicionarioEncontrado) {
-      classeUsoFinal =
-        paDicionarioEncontrado.getString('macro_grupo_subgrupo_padrao') ||
-        paDicionarioEncontrado.getString('classe') ||
-        ''
-    } else if (produtoBaseMestreEncontrado) {
-      classeUsoFinal = produtoBaseMestreEncontrado.getString('sub_grupo') || ''
+    let etapaOrigemClasse = ''
+    let ncmSugeridoCascata = ''
+
+    // Helper para extrair nomes de moléculas do texto do PA
+    const extrairMoleculasTexto = function (txt) {
+      if (!txt) return []
+      return String(txt)
+        .replace(/[\(\)\[\],;\/\+\&]/g, ' ')
+        .split(/\s+/)
+        .map((s) => s.trim().toUpperCase())
+        .filter(
+          (s) =>
+            s.length >= 4 &&
+            !/^\d+$/.test(s) &&
+            !['COM', 'PARA', 'AGRO', 'TECNICO', 'SOLUVEL', 'CONCENTRADO'].includes(s),
+        )
+    }
+
+    // ETAPA 1: Consultar a Matriz de Princípios Ativos (dicionario_principios_ativos)
+    let paMatrizRecord = paDicionarioEncontrado
+    if (!paMatrizRecord && (principioAtivoFinal || nomeComercial)) {
+      const tokensMoleculas = extrairMoleculasTexto(`${principioAtivoFinal} ${nomeComercial}`)
+      for (const token of tokensMoleculas) {
+        try {
+          const escToken = token.replace(/'/g, "\\'")
+          const achouPa = $app.findRecordsByFilter(
+            'dicionario_principios_ativos',
+            `principio_ativo = '${escToken}' || principio_ativo_chave = '${escToken}' || principio_ativo ~ '${escToken}'`,
+            '-created',
+            1,
+            0,
+          )
+          if (achouPa && achouPa.length > 0) {
+            paMatrizRecord = achouPa[0]
+            break
+          }
+        } catch (_) {}
+      }
+    }
+
+    if (paMatrizRecord) {
+      const cl =
+        paMatrizRecord.getString('classe') ||
+        paMatrizRecord.getString('macro_grupo_subgrupo_padrao')
+      if (
+        cl &&
+        !cl.toLowerCase().includes('inconclusivo') &&
+        !cl.toLowerCase().includes('defensivo fitossanit')
+      ) {
+        classeUsoFinal = cl
+        etapaOrigemClasse = '1ª Etapa (Matriz de Princípios Ativos)'
+        ncmSugeridoCascata = paMatrizRecord.getString('ncm_padrao_referencia') || ''
+      }
+    }
+
+    // ETAPA 2: Se não resolver, consultar a Base Mestre (base_mestre) por produtos com mesmo PA
+    if (!classeUsoFinal && principioAtivoFinal) {
+      try {
+        const tokensMoleculas = extrairMoleculasTexto(principioAtivoFinal)
+        for (const token of tokensMoleculas) {
+          const escToken = token.replace(/'/g, "\\'")
+          const matchesBm =
+            $app.findRecordsByFilter(
+              'base_mestre',
+              `principio_ativo ~ '${escToken}'`,
+              '-created',
+              5,
+              0,
+            ) || []
+          for (const bm of matchesBm) {
+            const sub = bm.getString('sub_grupo')
+            const ncmBm = bm.getString('ncm_padrao') || bm.getString('ncm')
+            if (
+              sub &&
+              !sub.toLowerCase().includes('inconclusivo') &&
+              !sub.toLowerCase().includes('defensivo fitossanit')
+            ) {
+              classeUsoFinal = sub
+              etapaOrigemClasse = '2ª Etapa (Base Mestre por Princípio Ativo)'
+              if (!ncmSugeridoCascata && ncmBm) {
+                ncmSugeridoCascata = ncmBm
+              }
+              break
+            }
+          }
+          if (classeUsoFinal) break
+        }
+      } catch (errBm) {
+        console.log('Aviso ao consultar base_mestre por PA:', errBm.message)
+      }
+    }
+
+    // ETAPA 3: Se ainda não resolver, usar a busca de bula/AGROFIT (classe de uso declarada na bula)
+    if (!classeUsoFinal && bulaExtraida?.classe_uso) {
+      const bCl = bulaExtraida.classe_uso
+      if (
+        !bCl.toLowerCase().includes('defensivo fitossanit') &&
+        !bCl.toLowerCase().includes('fitossanitário') &&
+        !bCl.toLowerCase().includes('não informado') &&
+        !bCl.toLowerCase().includes('inconclusivo')
+      ) {
+        classeUsoFinal = bCl
+        etapaOrigemClasse = '3ª Etapa (Bulário Oficial AGROFIT / MAPA)'
+      }
+    }
+
+    // ETAPA 4: Último recurso - Lista fixa de moléculas conhecidas no código (executada via motor químico)
+    if (!classeUsoFinal) {
+      etapaOrigemClasse = '4ª Etapa (Lista Químico-Aduaneira de Moléculas)'
     }
 
     const dadosMotorInput = {
@@ -900,7 +1172,24 @@ Consulte a base pública oficial do AGROFIT e a BULA oficial registrada no MAPA 
     }
 
     const motorCanonico = motor.executarMotorCanonico(dadosMotorInput)
+
+    // Se a etapa 1 ou 2 já tiver NCM homologado específico e o motor não aplicou Nota 2, sincroniza
+    if (ncmSugeridoCascata && motorCanonico.nota_subpos_2 !== 'SIM') {
+      const cleanSug = ncmSugeridoCascata.replace(/\D/g, '')
+      if (cleanSug.length === 8) {
+        // Se a NCM sugerida pela matriz/base mestre for da mesma subposição da classe determinada, preserva
+        const subposSug = cleanSug.slice(0, 6)
+        const subposCalc = motorCanonico.ncm_padrao.replace(/\D/g, '').slice(0, 6)
+        if (subposSug === subposCalc || !subposCalc || subposCalc === '380899') {
+          motorCanonico.ncm_padrao = motor.formatarNcmMascara(cleanSug)
+        }
+      }
+    }
+
     const ncmCanonicoDeterminado = motorCanonico.ncm_padrao
+    const classeAgronomicaInconclusiva =
+      motorCanonico.sub_grupo.includes('Inconclusivo') ||
+      motorCanonico.sub_grupo.includes('Não Reconhecido')
 
     // Helper para obter a descrição da subposição/família da NCM
     const descreverGrupoNcm = function (codigo8) {
@@ -1035,17 +1324,27 @@ Consulte a base pública oficial do AGROFIT e a BULA oficial registrada no MAPA 
     const travas = []
 
     // Trava 0/Coerência: Coerência de Classificação Fiscal (Classe Agronômica × Subposição NCM)
-    const travaCoerenciaPassou = !divergenciaCoerenciaClasseNcm
+    // Se a classe agronômica for INCONCLUSIVA, não reprova: aprova com ressalva sem inventar classe
+    const travaCoerenciaPassou = classeAgronomicaInconclusiva
+      ? true
+      : !divergenciaCoerenciaClasseNcm
     const descInfGrupo = descreverGrupoNcm(ncmCleanInf)
     const descCanonicoGrupo = descreverGrupoNcm(ncmCleanCanonico)
+
+    let msgTravaCoerencia = ''
+    if (classeAgronomicaInconclusiva) {
+      msgTravaCoerencia = `Classe agronômica inconclusiva para as moléculas informadas. Enquadramento mantido com ressalva sem penalização fiscal.`
+    } else if (travaCoerenciaPassou) {
+      msgTravaCoerencia = `NCM ${ncmFormatado} perfeitamente compatível com a classe do produto ("${motorCanonico.sub_grupo}").`
+    } else {
+      msgTravaCoerencia = `Divergência de Enquadramento: NCM informada (${descInfGrupo}) diverge da classe agronômica do produto ("${motorCanonico.sub_grupo}"). NCM correta: ${descCanonicoGrupo}.`
+    }
 
     travas.push({
       id_trava: 0,
       trava_nome: 'Coerência Classe × Subposição NCM (TIPI)',
       aprovado: travaCoerenciaPassou,
-      mensagem: travaCoerenciaPassou
-        ? `NCM ${ncmFormatado} perfeitamente compatível com a classe do produto ("${motorCanonico.sub_grupo}").`
-        : `Divergência de Enquadramento: NCM informada (${descInfGrupo}) diverge da classe agronômica do produto ("${motorCanonico.sub_grupo}"). NCM correta: ${descCanonicoGrupo}.`,
+      mensagem: msgTravaCoerencia,
     })
 
     // Trava 1: NCM Obrigatório e Válido (com Fallback Dinâmico BrasilAPI / Siscomex)
@@ -1421,6 +1720,9 @@ Consulte a base pública oficial do AGROFIT e a BULA oficial registrada no MAPA 
     if (!trava1Passou) {
       statusNcm = 'DIVERGENTE'
       explNcm = `Trava 1 Reprovada: ${trava1Mensagem}`
+    } else if (classeAgronomicaInconclusiva) {
+      statusNcm = 'RESSALVA'
+      explNcm = `Classe agronômica inconclusiva após cascata de 4 etapas (Matriz PA, Base Mestre, AGROFIT e lista química). Classificação aduaneira inconclusiva; NCM informada ${ncmFormatado} aceita sob ressalva.`
     } else if (ncmCleanInf === ncmCleanCanonico) {
       statusNcm = 'OK'
       explNcm = `NCM informada (${ncmFormatado}) confere com a classificação química e aduaneira recomendada pelo motor canônico para a classe "${motorCanonico.sub_grupo}" e está homologada.`
@@ -1433,7 +1735,7 @@ Consulte a base pública oficial do AGROFIT e a BULA oficial registrada no MAPA 
       const descCanonica = descreverGrupoNcm(ncmCleanCanonico)
 
       if (subposInformada !== subposCanonica) {
-        explNcm = `Divergência de Classificação Fiscal: A NCM informada (${descInf}) pertence a uma subposição incompatível com a classe agronômica do produto ("${motorCanonico.sub_grupo}"). A NCM correta determinada é ${descCanonica}.`
+        explNcm = `Divergência de Subposição TIPI: NCM informada foi ${ncmFormatado} (${descInf}), mas a classificação canônica para a classe agronômica "${motorCanonico.sub_grupo}" é ${ncmCanonicoDeterminado} (${descCanonica}).`
       } else {
         explNcm = `Divergência de Subitem TIPI: NCM informada foi ${ncmFormatado}, mas a classificação canônica para este produto/embalagem é ${ncmCanonicoDeterminado} (${descCanonica}).`
       }
@@ -1537,17 +1839,21 @@ Consulte a base pública oficial do AGROFIT e a BULA oficial registrada no MAPA 
     if (
       !trava1Passou ||
       (modoValidacao !== 'existente' && !trava4Passou) ||
-      divergenciaCoerenciaClasseNcm
+      (divergenciaCoerenciaClasseNcm && !classeAgronomicaInconclusiva)
     ) {
       vereditoGeral = 'REPROVADO'
       if (!trava1Passou) {
         vereditoMotivo = 'NCM informado inválido ou inexistente nas tabelas oficiais Siscomex/TIPI.'
-      } else if (divergenciaCoerenciaClasseNcm) {
-        vereditoMotivo = `Divergência Crítica de Classificação Fiscal: NCM informada (${ncmFormatado}) pertence a grupo/classe diferente da classe agronômica do produto (${motorCanonico.sub_grupo}). NCM canônica correta: ${ncmCanonicoDeterminado}.`
+      } else if (divergenciaCoerenciaClasseNcm && !classeAgronomicaInconclusiva) {
+        vereditoMotivo = `Divergência de Subposição TIPI: NCM informada (${ncmFormatado}) pertence a grupo/classe diferente da classe agronômica do produto (${motorCanonico.sub_grupo}). NCM canônica correta: ${ncmCanonicoDeterminado}.`
       } else {
         vereditoMotivo =
           'Produto com marca ou registro idêntico já cadastrado na Base Mestre (duplicidade).'
       }
+    } else if (classeAgronomicaInconclusiva) {
+      vereditoGeral = 'APROVADO COM RESSALVAS'
+      vereditoMotivo =
+        'Classe agronômica e enquadramento aduaneiro inconclusivos após consulta na Matriz de PAs, Base Mestre e Bulário. Produto aprovado sob ressalva sem atribuição de classe arbitrária.'
     } else if (algumaTravaReprovada) {
       // Se qualquer outra trava estiver reprovada (ex: Trava 2 Embalagem vs NCM ou Trava 3 PA), nunca APROVADO
       vereditoGeral = 'APROVADO COM RESSALVAS'
@@ -1717,45 +2023,7 @@ Consulte a base pública oficial do AGROFIT e a BULA oficial registrada no MAPA 
  * GET /backend/v1/relatorio-duplicidades
  * Retorna grupos de duplicidades identificados na collection base_mestre
  */
-routerAdd('GET', '/backend/v1/ping-teste', (e) => {
-  try {
-    const res = $http.send({
-      url: 'https://validacao-de-cadastro-c8eaa.shrd01.internal.goskip.dev/backend/v1/validar-produto',
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      data: JSON.stringify({
-        nome_comercial: 'FOLICRON',
-        ncm: '38089399',
-        embalagem: 'Bombona 20 L',
-        modo: 'novo',
-        auto_cadastrar: false,
-      }),
-      timeout: 20,
-    })
-    const body = typeof res.json === 'function' ? res.json() : JSON.parse(res.raw || '{}')
-    return e.json(200, {
-      teste_status: res.statusCode,
-      veredito_geral: body.veredito_geral,
-      status: body.status,
-      ncm_canonico: body.produto_canonico?.ncm_padrao,
-      campos: body.campos_validacao?.map((c) => ({
-        campo: c.campo,
-        informado: c.informado,
-        bula: c.encontrado_bula,
-        status: c.status,
-        explicacao: c.explicacao,
-      })),
-      travas: body.travas?.map((t) => ({
-        id: t.id_trava,
-        nome: t.trava_nome,
-        aprovado: t.aprovado,
-        msg: t.mensagem,
-      })),
-    })
-  } catch (err) {
-    return e.json(500, { error: err.message || String(err) })
-  }
-})
+// Endpoint de teste interno mantido limpo
 
 routerAdd('GET', '/backend/v1/relatorio-duplicidades', (e) => {
   try {

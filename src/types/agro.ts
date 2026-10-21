@@ -180,7 +180,12 @@ export interface RelatorioValidacao {
   produto_validado: ProdutoValidadoConsolidado
 }
 
-export type StatusValidacaoCampo = 'OK' | 'DIVERGENTE' | 'NÃO INFORMADO' | 'NÃO LOCALIZADO'
+export type StatusValidacaoCampo =
+  | 'OK'
+  | 'DIVERGENTE'
+  | 'RESSALVA'
+  | 'NÃO INFORMADO'
+  | 'NÃO LOCALIZADO'
 
 export interface CampoValidadoResultado {
   campo: string

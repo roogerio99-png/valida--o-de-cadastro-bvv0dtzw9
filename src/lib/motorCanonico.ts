@@ -279,23 +279,57 @@ export function executarMotorCanonicoFrontend(
     // Reconhecimento químico determinístico das principais moléculas de fungicidas
     const isFungicidaMolecula =
       paUpper.includes('CIPROCONAZOL') ||
+      paUpper.includes('CYPROCONAZOLE') ||
       paUpper.includes('PICOXISTROBINA') ||
+      paUpper.includes('PICOXYSTROBIN') ||
       paUpper.includes('TEBUCONAZOL') ||
+      paUpper.includes('TEBUCONAZOLE') ||
       paUpper.includes('AZOXISTROBINA') ||
+      paUpper.includes('AZOXYSTROBIN') ||
       paUpper.includes('DIFENOCONAZOL') ||
+      paUpper.includes('DIFENOCONAZOLE') ||
       paUpper.includes('EPOXICONAZOL') ||
+      paUpper.includes('EPOXICONAZOLE') ||
       paUpper.includes('PROTIOCONAZOL') ||
+      paUpper.includes('PROTHIOCONAZOLE') ||
       paUpper.includes('MANCOZEB') ||
+      paUpper.includes('MANCOZEBE') ||
       paUpper.includes('CLOROTALONIL') ||
+      paUpper.includes('CHLOROTHALONIL') ||
       paUpper.includes('TRIFLOXISTROBINA') ||
+      paUpper.includes('TRIFLOXYSTROBIN') ||
       paUpper.includes('PIRACLOSTROBINA') ||
+      paUpper.includes('PYRACLOSTROBIN') ||
       paUpper.includes('CARBENDAZIM') ||
       paUpper.includes('BOSCALIDA') ||
       paUpper.includes('FLUXAPIROXADE') ||
+      paUpper.includes('FLUXAPYROXAD') ||
       paUpper.includes('FOLPET') ||
       paUpper.includes('CAPTANA') ||
+      paUpper.includes('CAPTAN') ||
       paUpper.includes('CUPRICO') ||
       paUpper.includes('COBRE') ||
+      paUpper.includes('OXICLORETO DE COBRE') ||
+      paUpper.includes('HIDROXIDO DE COBRE') ||
+      paUpper.includes('SULFATOCUPRICO') ||
+      paUpper.includes('ENXOFRE') ||
+      paUpper.includes('SULFUR') ||
+      paUpper.includes('PROPICONAZOL') ||
+      paUpper.includes('PROPICONAZOLE') ||
+      paUpper.includes('METCONAZOL') ||
+      paUpper.includes('METCONAZOLE') ||
+      paUpper.includes('KRESOXIM') ||
+      paUpper.includes('DIMETOMORFE') ||
+      paUpper.includes('DIMETHOMORPH') ||
+      paUpper.includes('IPRODIONA') ||
+      paUpper.includes('IPRODIONE') ||
+      paUpper.includes('TIABENDAZOL') ||
+      paUpper.includes('THIABENDAZOLE') ||
+      paUpper.includes('TIOFANATO') ||
+      paUpper.includes('THIOPHANATE') ||
+      paUpper.includes('METALAXIL') ||
+      paUpper.includes('METALAXYL') ||
+      paUpper.includes('MEFENOXAM') ||
       nomeUpper.includes('FOLICRON') ||
       nomeUpper.includes('PRIORI') ||
       nomeUpper.includes('SPHERE') ||
@@ -307,16 +341,47 @@ export function executarMotorCanonicoFrontend(
     // Reconhecimento químico determinístico de inseticidas
     const isInseticidaMolecula =
       paUpper.includes('TIAMETOXAM') ||
+      paUpper.includes('THIAMETHOXAM') ||
       paUpper.includes('IMIDACLOPRID') ||
       paUpper.includes('CLORANTRANILIPROLE') ||
+      paUpper.includes('CHLORANTRANILIPROLE') ||
       paUpper.includes('ACEFATO') ||
+      paUpper.includes('ACEPHATE') ||
       paUpper.includes('CIPERMETRINA') ||
+      paUpper.includes('CYPERMETHRIN') ||
       paUpper.includes('BIFENTRINA') ||
+      paUpper.includes('BIFENTHRIN') ||
       paUpper.includes('FIPRONIL') ||
       paUpper.includes('LAMBDA-CIALOTRINA') ||
+      paUpper.includes('LAMBDA CIALOTRINA') ||
       paUpper.includes('LUFENURON') ||
       paUpper.includes('ESPINOSADE') ||
-      paUpper.includes('THURINGIENSIS')
+      paUpper.includes('SPINOSAD') ||
+      paUpper.includes('SPINETORAM') ||
+      paUpper.includes('THURINGIENSIS') ||
+      paUpper.includes('BACILLUS THURINGIENSIS') ||
+      paUpper.includes('CLORFENAPIR') ||
+      paUpper.includes('CHLORFENAPYR') ||
+      paUpper.includes('DELTAMETRINA') ||
+      paUpper.includes('DELTAMETHRIN') ||
+      paUpper.includes('MALATIONA') ||
+      paUpper.includes('MALATHION') ||
+      paUpper.includes('PERMETRINA') ||
+      paUpper.includes('PERMETHRIN') ||
+      paUpper.includes('ACETAMIPRIDO') ||
+      paUpper.includes('ACETAMIPRID') ||
+      paUpper.includes('DINOTEFORAN') ||
+      paUpper.includes('CLOTIANIDINA') ||
+      paUpper.includes('CLOTHIANIDIN') ||
+      paUpper.includes('INDOXACARBE') ||
+      paUpper.includes('INDOXACARB') ||
+      paUpper.includes('METOMIL') ||
+      paUpper.includes('METHOMYL') ||
+      paUpper.includes('TEFLUBENZURON') ||
+      paUpper.includes('NOVALURON') ||
+      paUpper.includes('BETA-CIFLUTRINA') ||
+      paUpper.includes('PROFOFOS') ||
+      paUpper.includes('DIAFENTIURON')
 
     // Reconhecimento químico determinístico de herbicidas
     const isHerbicidaMolecula =
@@ -325,35 +390,119 @@ export function executarMotorCanonicoFrontend(
       paUpper.includes('2,4-D') ||
       paUpper.includes('2-4 D') ||
       paUpper.includes('ATRAZINA') ||
+      paUpper.includes('ATRAZINE') ||
       paUpper.includes('DIURON') ||
       paUpper.includes('CLETODIM') ||
+      paUpper.includes('CLETHODIM') ||
       paUpper.includes('HALOXIFOPE') ||
+      paUpper.includes('HALOXYFOP') ||
       paUpper.includes('MESOTRIONA') ||
+      paUpper.includes('MESOTRIONE') ||
       paUpper.includes('NICOSULFURON') ||
       paUpper.includes('PARAQUAT') ||
       paUpper.includes('DICAMBA') ||
-      paUpper.includes('S-METOLACLORO')
+      paUpper.includes('S-METOLACLORO') ||
+      paUpper.includes('S-METOLACHLOR') ||
+      paUpper.includes('METOLACLORO') ||
+      paUpper.includes('CLOMAZONA') ||
+      paUpper.includes('CLOMAZONE') ||
+      paUpper.includes('FLUMIOXAZINA') ||
+      paUpper.includes('FLUMIOXAZIN') ||
+      paUpper.includes('SULFENTRAZONA') ||
+      paUpper.includes('SULFENTRAZONE') ||
+      paUpper.includes('DICLOSULAM') ||
+      paUpper.includes('IMAZETAPIR') ||
+      paUpper.includes('IMAZETHAPYR') ||
+      paUpper.includes('IMAZAPIC') ||
+      paUpper.includes('IMAZAPIR') ||
+      paUpper.includes('CLORIMURON') ||
+      paUpper.includes('CHLORIMURON') ||
+      paUpper.includes('METSULFURON') ||
+      paUpper.includes('AMETRINA') ||
+      paUpper.includes('AMETRYN') ||
+      paUpper.includes('HEXAZINONA') ||
+      paUpper.includes('HEXAZINONE') ||
+      paUpper.includes('METRIBUZIM') ||
+      paUpper.includes('METRIBUZIN') ||
+      paUpper.includes('GLUFOSINATO') ||
+      paUpper.includes('GLUFOSINATE') ||
+      paUpper.includes('TEMBOTRIONA') ||
+      paUpper.includes('TEMBOTRIONE') ||
+      paUpper.includes('TRICLOPIR') ||
+      paUpper.includes('TRICLOPYR') ||
+      paUpper.includes('PICLORAM') ||
+      paUpper.includes('FLUROXIPIR') ||
+      paUpper.includes('FLUROXYPYR') ||
+      paUpper.includes('SAFLUFENACIL') ||
+      paUpper.includes('QUIZALOFOPE') ||
+      paUpper.includes('QUIZALOFOP') ||
+      paUpper.includes('FOMESAFEM') ||
+      paUpper.includes('FOMESAFEN') ||
+      paUpper.includes('LACTOFEM') ||
+      paUpper.includes('LACTOFEN') ||
+      paUpper.includes('CARFENTRAZONA') ||
+      paUpper.includes('CARFENTRAZONE')
 
-    if (subL.includes('INSETICIDA') && subL.includes('ACARICIDA')) {
+    const isAcaricidaMolecula =
+      paUpper.includes('ABAMECTINA') ||
+      paUpper.includes('ABAMECTIN') ||
+      paUpper.includes('SPIROMESIFEN') ||
+      paUpper.includes('ESPIROMESIFENO') ||
+      paUpper.includes('CI-HEXATINA') ||
+      paUpper.includes('FENPIROXIMATO') ||
+      paUpper.includes('HEXITIAZOX') ||
+      paUpper.includes('HEXYTHIAZOX') ||
+      paUpper.includes('CLORFENAPIR') ||
+      paUpper.includes('PROPARGITO') ||
+      paUpper.includes('PROPARGITE')
+
+    const isNematicidaMolecula =
+      paUpper.includes('FLUOPIRAM') ||
+      paUpper.includes('FLUOPYRAM') ||
+      paUpper.includes('CANDIDATUS') ||
+      paUpper.includes('PASTEURIA') ||
+      paUpper.includes('PURPUREOCILLIUM') ||
+      paUpper.includes('CADUSAFOS') ||
+      paUpper.includes('FOSTIAZATO')
+
+    const isRaticidaMolecula =
+      paUpper.includes('BRODIFACOUM') ||
+      paUpper.includes('BROMADIOLONA') ||
+      paUpper.includes('BROMADIOLONE') ||
+      paUpper.includes('DIFENACOUM') ||
+      paUpper.includes('FLOCOUMAFEN') ||
+      paUpper.includes('COUMATETRALIL') ||
+      paUpper.includes('WARFARINA')
+
+    const isReguladorMolecula =
+      paUpper.includes('ETEFOM') ||
+      paUpper.includes('ETHEPHON') ||
+      paUpper.includes('PACLOBUTRAZOL') ||
+      paUpper.includes('GIBERELINA') ||
+      paUpper.includes('GIBBERELLIN') ||
+      paUpper.includes('TRINEXAPAC') ||
+      paUpper.includes('CLORETO DE MEPIQUAT') ||
+      paUpper.includes('MEPIQUAT')
+
+    if (subL.includes('INSETICIDA') && (subL.includes('ACARICIDA') || isAcaricidaMolecula)) {
       subGrupo = 'Inseticida / Acaricida'
     } else if (subL.includes('FUNGICIDA') || isFungicidaMolecula) {
       subGrupo = 'Fungicida'
     } else if (subL.includes('INSETICIDA') || isInseticidaMolecula) {
       subGrupo = 'Inseticida'
-    } else if (subL.includes('NEMATICIDA')) {
+    } else if (subL.includes('NEMATICIDA') || isNematicidaMolecula) {
       subGrupo = 'Nematicida'
-    } else if (
-      subL.includes('REGULADOR') ||
-      paUpper.includes('ETEFOM') ||
-      paUpper.includes('PACLOBUTRAZOL')
-    ) {
+    } else if (subL.includes('RATICIDA') || subL.includes('RODENTICIDA') || isRaticidaMolecula) {
+      subGrupo = 'Raticida / Rodenticida'
+    } else if (subL.includes('REGULADOR') || isReguladorMolecula) {
       subGrupo = 'Regulador de Crescimento'
-    } else if (subL.includes('ACARICIDA')) {
+    } else if (subL.includes('ACARICIDA') || isAcaricidaMolecula) {
       subGrupo = 'Acaricida'
     } else if (subL.includes('HERBICIDA') || isHerbicidaMolecula) {
       subGrupo = 'Herbicida'
     } else {
-      subGrupo = 'Herbicida'
+      // Quando nenhuma classe for identificada nas moléculas conhecidas, marca explicitamente como INCONCLUSIVO
+      subGrupo = 'Inconclusivo / Não Reconhecido'
     }
     categoriaTributaria = 'beneficiado'
   }
@@ -476,7 +625,19 @@ export function executarMotorCanonicoFrontend(
       }
     } else if (subGrupo.includes('Nematicida') || paUpper.includes('NEMATICIDA')) {
       ncmPadrao = '3808.99.95'
-    } else {
+    } else if (
+      subGrupo.includes('Raticida') ||
+      subGrupo.includes('Rodenticida') ||
+      paUpper.includes('RATICIDA') ||
+      paUpper.includes('RODENTICIDA')
+    ) {
+      ncmPadrao = '3808.94.90'
+    } else if (
+      subGrupo.includes('Inseticida') ||
+      subGrupo.includes('Acaricida') ||
+      paUpper.includes('INSETICIDA') ||
+      paUpper.includes('ACARICIDA')
+    ) {
       if (paUpper.includes('ACEFATO') || paUpper.includes('THURINGIENSIS')) {
         ncmPadrao = '3808.91.91'
       } else if (paUpper.includes('CIPERMETRINA') || paUpper.includes('CYPERMETHRIN')) {
@@ -484,6 +645,9 @@ export function executarMotorCanonicoFrontend(
       } else {
         ncmPadrao = '3808.91.99'
       }
+    } else {
+      // Inconclusivo / Não Reconhecido: mantém NCM neutra residual 3808.99.99 sem inventar herbicida
+      ncmPadrao = '3808.99.99'
     }
 
     ncmFaixa1 = ncmPadrao

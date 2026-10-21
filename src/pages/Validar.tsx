@@ -1108,6 +1108,9 @@ export default function Validar() {
                         } else if (item.status === 'DIVERGENTE') {
                           badgeBg = 'bg-red-600 text-white'
                           trBg = 'bg-red-50/40 hover:bg-red-50/60'
+                        } else if (item.status === 'RESSALVA') {
+                          badgeBg = 'bg-amber-100 text-amber-900 border border-amber-300'
+                          trBg = 'bg-amber-50/30 hover:bg-amber-50/50'
                         } else if (item.status === 'NÃO INFORMADO') {
                           badgeBg = 'bg-blue-50 text-blue-700'
                         } else if (item.status === 'NÃO LOCALIZADO') {
