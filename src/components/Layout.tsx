@@ -84,6 +84,7 @@ export function Layout() {
     '/regras-ncm',
     '/parametrizacao',
     '/parametrizacao-fiscal',
+    '/tributacao',
     '/travas',
     '/sincronizacao',
     '/sincronizacao-produtos',
@@ -388,7 +389,7 @@ export function Layout() {
         {/* Footer com versão e link TIPI */}
         <footer className="h-10 bg-white border-t border-[#DCE5DC] px-4 lg:px-8 flex items-center justify-between text-xs text-[#5A6D5A] flex-shrink-0">
           <div>
-            <span>Validador Agro v0.0.44 • Sistema de Auditoria de Produtos Agropecuários</span>
+            <span>Validador Agro v0.0.45 • Sistema de Auditoria de Produtos Agropecuários</span>
           </div>
           <div className="flex items-center gap-4">
             <a
