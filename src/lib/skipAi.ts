@@ -72,7 +72,10 @@ interface SseBlock {
   data: string
 }
 
-async function* readSseBlocks(response: Response, signal?: AbortSignal): AsyncGenerator<SseBlock> {
+async function* readSseBlocks(
+  response: Response,
+  signal?: AbortSignal,
+): AsyncGenerator<SseBlock> {
   if (!response.body) return
   const reader = response.body.getReader()
   // Wire abort directly into the reader. reader.cancel(reason) makes
@@ -345,13 +348,6 @@ export async function streamAgentChat(
   if (handlers.signal?.aborted) throw abortError()
   if (!sawDone) {
     throw new Error('Agent stream ended before the done event')
-  }
-
-  // Se o stream completou com 'done' mas nenhum conteúdo textual foi produzido
-  if (!content.trim()) {
-    throw new Error(
-      'O especialista tributário não retornou conteúdo. Tente novamente em instantes.',
-    )
   }
 
   return { content, conversation_id: conversationId, message_id: messageId, citations, toolCalls }
