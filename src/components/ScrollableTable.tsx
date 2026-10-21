@@ -16,6 +16,12 @@ export interface ScrollableTableProps extends React.HTMLAttributes<HTMLDivElemen
   minHeight?: string
   /** Se deve forçar ocultação da barra flutuante (ex.: quando a tela é muito pequena) */
   hideFloatingBarOnTouch?: boolean
+  /** Callback opcional acionado quando o usuário se aproxima do final do scroll vertical */
+  onNearBottom?: () => void
+  /** Distância em pixels do final para disparar o onNearBottom (padrão: 200px) */
+  bottomThreshold?: number
+  /** Ref opcional para o contêiner interno com overflow */
+  containerRef?: React.RefObject<HTMLDivElement>
 }
 
 /**
@@ -48,10 +54,14 @@ export function ScrollableTable({
   maxHeight = 'calc(100vh - 280px)',
   minHeight = '320px',
   hideFloatingBarOnTouch = false,
+  onNearBottom,
+  bottomThreshold = 200,
+  containerRef: externalContainerRef,
   style,
   ...props
 }: ScrollableTableProps) {
-  const containerRef = useRef<HTMLDivElement>(null)
+  const internalContainerRef = useRef<HTMLDivElement>(null)
+  const containerRef = externalContainerRef || internalContainerRef
   const trackRef = useRef<HTMLDivElement>(null)
 
   const [hasOverflow, setHasOverflow] = useState(false)
@@ -89,7 +99,15 @@ export function ScrollableTable({
     if (maxScroll > 0) {
       setScrollProgress(Math.min(1, Math.max(0, el.scrollLeft / maxScroll)))
     }
-  }, [])
+
+    // Detecção de aproximação do final vertical para rolagem infinita
+    if (onNearBottom) {
+      const scrollBottom = el.scrollHeight - el.scrollTop - el.clientHeight
+      if (scrollBottom <= bottomThreshold) {
+        onNearBottom()
+      }
+    }
+  }, [containerRef, onNearBottom, bottomThreshold])
 
   // Observa redimensionamento de janela e conteúdo
   useEffect(() => {
