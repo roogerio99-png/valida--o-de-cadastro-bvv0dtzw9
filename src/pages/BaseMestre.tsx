@@ -24,6 +24,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Badge } from '@/components/ui/badge'
+import { Checkbox } from '@/components/ui/checkbox'
 import {
   Select,
   SelectContent,
@@ -279,11 +280,21 @@ export default function BaseMestre() {
 
   useRealtime('base_mestre', () => carregarProdutos())
 
-  const handleSelectAll = (checked: boolean) => {
+  const pageProductIds = produtos.map((p) => p.id)
+  const isAllPageSelected =
+    pageProductIds.length > 0 && pageProductIds.every((id) => selectedIds.includes(id))
+  const isSomePageSelected =
+    pageProductIds.some((id) => selectedIds.includes(id)) && !isAllPageSelected
+
+  const handleSelectAllPage = (checked: boolean) => {
     if (checked) {
-      setSelectedIds(produtos.map((p) => p.id))
+      setSelectedIds((prev) => {
+        const next = new Set(prev)
+        pageProductIds.forEach((id) => next.add(id))
+        return Array.from(next)
+      })
     } else {
-      setSelectedIds([])
+      setSelectedIds((prev) => prev.filter((id) => !pageProductIds.includes(id)))
     }
   }
 
@@ -291,6 +302,10 @@ export default function BaseMestre() {
     setSelectedIds((prev) =>
       prev.includes(id) ? prev.filter((item) => item !== id) : [...prev, id],
     )
+  }
+
+  const handleClearSelection = () => {
+    setSelectedIds([])
   }
 
   const handleBulkDelete = async () => {
@@ -510,6 +525,24 @@ export default function BaseMestre() {
               <ChevronDown className="w-3.5 h-3.5 ml-1" />
             )}
           </Button>
+
+          {selectedIds.length > 0 && (
+            <div className="flex items-center gap-1.5 bg-emerald-50 border border-emerald-200 text-emerald-950 px-2.5 py-1 rounded-lg text-xs font-medium">
+              <span>
+                <strong className="font-bold text-[#1B5E20]">{selectedIds.length}</strong>{' '}
+                {selectedIds.length === 1 ? 'selecionado' : 'selecionados'}
+              </span>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={handleClearSelection}
+                className="h-6 px-1.5 text-[11px] text-[#5A6D5A] hover:text-red-700 hover:bg-white"
+                title="Desmarcar todos"
+              >
+                Limpar seleção
+              </Button>
+            </div>
+          )}
 
           {selectedIds.length > 0 && (
             <Button
@@ -868,13 +901,18 @@ export default function BaseMestre() {
           <table className="w-full text-xs">
             <thead>
               <tr className="bg-[#F5F7F1] border-b border-[#DCE5DC] text-left text-[#5A6D5A]">
-                <th className="py-3 px-3 w-8">
-                  <input
-                    type="checkbox"
-                    className="rounded border-[#DCE5DC] text-[#1B5E20] focus:ring-0 cursor-pointer"
-                    checked={selectedIds.length > 0 && selectedIds.length === produtos.length}
-                    onChange={(e) => handleSelectAll(e.target.checked)}
-                  />
+                <th className="py-3 px-3 w-10 text-center">
+                  <div className="flex items-center justify-center">
+                    <Checkbox
+                      checked={
+                        isAllPageSelected ? true : isSomePageSelected ? 'indeterminate' : false
+                      }
+                      onCheckedChange={(checked) => handleSelectAllPage(checked === true)}
+                      aria-label="Selecionar todos os produtos da página"
+                      disabled={produtos.length === 0}
+                      className="data-[state=checked]:bg-[#1B5E20] data-[state=checked]:border-[#1B5E20]"
+                    />
+                  </div>
                 </th>
                 <th className="py-3 px-3 font-semibold">Nome Comercial Completo</th>
                 <th className="py-3 px-3 font-semibold">Marca Padronizada</th>
@@ -921,34 +959,46 @@ export default function BaseMestre() {
                     <React.Fragment key={p.id}>
                       <tr
                         className={`hover:bg-[#F5F7F1]/50 transition-colors cursor-pointer ${
-                          isSelected ? 'bg-emerald-50/40' : ''
+                          isSelected ? 'bg-emerald-50/60' : ''
                         }`}
                         onClick={() => toggleRowExpanded(p.id)}
                       >
                         <td
-                          className="py-3 px-3"
-                          onClick={(e) => {
-                            e.stopPropagation()
-                            toggleSelectOne(p.id)
-                          }}
+                          className="py-3 px-3 text-center cursor-default"
+                          onClick={(e) => e.stopPropagation()}
                         >
-                          <input
-                            type="checkbox"
-                            className="rounded border-[#DCE5DC] text-[#1B5E20] focus:ring-0 cursor-pointer"
-                            checked={isSelected}
-                            onChange={() => toggleSelectOne(p.id)}
-                          />
+                          <div className="flex items-center justify-center">
+                            <Checkbox
+                              checked={isSelected}
+                              onCheckedChange={() => toggleSelectOne(p.id)}
+                              aria-label={`Selecionar produto ${p.marca_padronizada || p.nome_produto || p.id}`}
+                              className="data-[state=checked]:bg-[#1B5E20] data-[state=checked]:border-[#1B5E20]"
+                            />
+                          </div>
                         </td>
 
                         {/* Nome Comercial Completo */}
                         <td className="py-3 px-3 font-bold text-[#1C2B1C] max-w-[220px] truncate">
                           <div className="flex items-center gap-1.5">
-                            {isExpanded ? (
-                              <ChevronUp className="w-3.5 h-3.5 text-[#5A6D5A] flex-shrink-0" />
-                            ) : (
-                              <ChevronDown className="w-3.5 h-3.5 text-[#5A6D5A] flex-shrink-0" />
-                            )}
-                            <span title={p.nome_completo || p.nome_produto}>
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation()
+                                toggleRowExpanded(p.id)
+                              }}
+                              className="p-0.5 -ml-1 text-[#5A6D5A] hover:text-[#1B5E20] rounded hover:bg-emerald-50"
+                              title={
+                                isExpanded ? 'Recolher detalhes' : 'Expandir detalhes dos 28 campos'
+                              }
+                              aria-label={isExpanded ? 'Recolher detalhes' : 'Expandir detalhes'}
+                            >
+                              {isExpanded ? (
+                                <ChevronUp className="w-3.5 h-3.5 flex-shrink-0" />
+                              ) : (
+                                <ChevronDown className="w-3.5 h-3.5 flex-shrink-0" />
+                              )}
+                            </button>
+                            <span title={p.nome_completo || p.nome_produto} className="truncate">
                               {p.nome_completo || p.nome_produto}
                             </span>
                           </div>
