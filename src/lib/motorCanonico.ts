@@ -598,16 +598,11 @@ export function executarMotorCanonicoFrontend(
       } else if (paUpper.includes('ATRAZINA') || paUpper.includes('DIURON')) {
         ncmPadrao = '3808.93.23'
       } else if (
-        nomeUpper.includes('ROUNDUP WG') ||
-        (paUpper.includes('GLIFOSATO') &&
-          (nomeUpper.includes('WG') ||
-            paUpper.includes('WG') ||
-            paUpper.includes('720') ||
-            paUpper.includes('792')))
+        paUpper.includes('GLIFOSATO') ||
+        paUpper.includes('GLYPHOSATE') ||
+        nomeUpper.includes('ROUNDUP')
       ) {
-        // Enquadramento específico agrícola para ROUNDUP WG / Glifosato WG conforme determinação canônica e bula oficial
-        ncmPadrao = '3808.92.34'
-      } else if (paUpper.includes('GLIFOSATO') || paUpper.includes('GLYPHOSATE')) {
+        // Glifosato / ROUNDUP WG formulado agrícola: NCM 3808.93.24 conforme bula oficial do MAPA (Herbicida agrícola formulado)
         ncmPadrao = '3808.93.24'
       } else if (
         paUpper.includes('IMAZETAPIR') ||

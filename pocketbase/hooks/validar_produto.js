@@ -581,16 +581,11 @@ routerAdd('POST', '/backend/v1/validar-produto', (e) => {
           } else if (paUpper.includes('ATRAZINA') || paUpper.includes('DIURON')) {
             ncmPadrao = '3808.93.23'
           } else if (
-            nomeUpper.includes('ROUNDUP WG') ||
-            (paUpper.includes('GLIFOSATO') &&
-              (nomeUpper.includes('WG') ||
-                paUpper.includes('WG') ||
-                paUpper.includes('720') ||
-                paUpper.includes('792')))
+            paUpper.includes('GLIFOSATO') ||
+            paUpper.includes('GLYPHOSATE') ||
+            nomeUpper.includes('ROUNDUP')
           ) {
-            // Enquadramento específico agrícola para ROUNDUP WG / Glifosato WG conforme determinação canônica e bula oficial
-            ncmPadrao = '3808.92.34'
-          } else if (paUpper.includes('GLIFOSATO') || paUpper.includes('GLYPHOSATE')) {
+            // Glifosato / ROUNDUP WG formulado agrícola: NCM 3808.93.24 conforme bula oficial do MAPA (Herbicida agrícola formulado)
             ncmPadrao = '3808.93.24'
           } else if (
             paUpper.includes('IMAZETAPIR') ||
@@ -1230,16 +1225,16 @@ Consulte a base pública oficial do AGROFIT e a BULA oficial registrada no MAPA 
       }
     }
 
-    // Se o produto for ROUNDUP WG ou Glifosato formulado agrícola, garantir alinhamento canônico das faixas
+    // Se o produto for ROUNDUP WG ou Glifosato formulado agrícola, garantir alinhamento canônico das faixas em 3808.93.24
     if (
       motor.normalizarTexto(nomeComercial).includes('ROUNDUP WG') ||
-      motorCanonico.ncm_padrao.replace(/\D/g, '') === '38089234'
+      motorCanonico.ncm_padrao.replace(/\D/g, '') === '38089324'
     ) {
-      motorCanonico.ncm_padrao = '3808.92.34'
-      motorCanonico.ncm_faixa1_ate_300g = '3808.92.34'
-      motorCanonico.ncm_faixa2_300g_a_7_5kg = '3808.92.34'
-      motorCanonico.ncm_faixa3_7_5kg_a_10kg = '3808.92.34'
-      motorCanonico.ncm_faixa4_acima_10kg = '3808.92.34'
+      motorCanonico.ncm_padrao = '3808.93.24'
+      motorCanonico.ncm_faixa1_ate_300g = '3808.93.24'
+      motorCanonico.ncm_faixa2_300g_a_7_5kg = '3808.93.24'
+      motorCanonico.ncm_faixa3_7_5kg_a_10kg = '3808.93.24'
+      motorCanonico.ncm_faixa4_acima_10kg = '3808.93.24'
     }
 
     const ncmCanonicoDeterminado = motorCanonico.ncm_padrao
