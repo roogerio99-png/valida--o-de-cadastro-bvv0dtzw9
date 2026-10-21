@@ -307,16 +307,16 @@ export function Tributacao() {
     const abortController = new AbortController()
     abortControllerRef.current = abortController
 
-    // Watchdogs duplos:
-    // 1. Timeout geral absoluto de 70 segundos
-    // 2. Watchdog de inatividade (25 segundos sem receber NENHUM chunk ou evento aborta preventivamente)
+    // Watchdogs:
+    // Timeout geral de 90 segundos para permitir consultas completas da legislação
+    // Watchdog de inatividade de 45 segundos para dar tempo à geração do modelo do agente
     let globalTimeoutId: ReturnType<typeof setTimeout> | null = setTimeout(() => {
       if (abortControllerRef.current) {
         abortController.abort(
-          new Error('Tempo limite de espera excedido (70s). O assistente demorou para responder.'),
+          new Error('Tempo limite de espera excedido (90s). O assistente demorou para responder.'),
         )
       }
-    }, 70000)
+    }, 90000)
 
     let inactivityTimeoutId: ReturnType<typeof setTimeout> | null = null
     const resetInactivityWatchdog = () => {
@@ -325,11 +325,11 @@ export function Tributacao() {
         if (abortControllerRef.current) {
           abortController.abort(
             new Error(
-              'A conexão com o especialista ficou inativa sem receber dados por mais de 25s.',
+              'A conexão com o especialista ficou inativa sem receber dados por mais de 45s.',
             ),
           )
         }
-      }, 25000)
+      }, 45000)
     }
 
     // Inicia watchdog de inatividade para a espera do primeiro chunk
@@ -910,9 +910,15 @@ export function Tributacao() {
                     {streamingContent ? (
                       <MarkdownRenderer content={streamingContent} isStreaming={true} />
                     ) : (
-                      <div className="flex items-center gap-2 text-[#5A6D5A]">
-                        <Loader2 className="w-4 h-4 animate-spin text-[#1B5E20]" />
-                        <span>Consultando legislação e dados da Base Mestre...</span>
+                      <div className="space-y-2 py-1">
+                        <div className="flex items-center gap-2 text-[#1B5E20] font-medium">
+                          <Loader2 className="w-4 h-4 animate-spin text-[#1B5E20]" />
+                          <span>O Consultor Tributário está analisando sua pergunta...</span>
+                        </div>
+                        <p className="text-[11px] text-[#5A6D5A] pl-6">
+                          Consultando a legislação (Lei 10.925/04, LC 224/2025, LC 214/2025 e TIPI).
+                          A resposta será gerada em instantes.
+                        </p>
                       </div>
                     )}
                   </div>

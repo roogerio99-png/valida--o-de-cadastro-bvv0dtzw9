@@ -57,34 +57,117 @@ routerAdd(
         title: convTitle,
       })
 
-      const iter = $ai.agent(agentSlug).chat({
-        user_id: userId,
-        conversation_id: conv.id,
-        message: message,
-        stream: true,
-      })
+      // Configura os cabeçalhos SSE antes de iniciar o stream
+      e.response.header().set('Content-Type', 'text/event-stream')
+      e.response.header().set('Cache-Control', 'no-cache, no-transform')
+      e.response.header().set('Connection', 'keep-alive')
+      e.response.header().set('X-Accel-Buffering', 'no')
+      e.response.header().set('X-Conversation-Id', conv.id)
 
-      // Gerador envelopado que insere logs, watchdog de segurança e garante término limpo
+      let iter
+      try {
+        iter = $ai.agent(agentSlug).chat({
+          user_id: userId,
+          conversation_id: conv.id,
+          message: message,
+          stream: true,
+        })
+      } catch (chatCallErr) {
+        console.error(
+          `[tributacao_chat] Falha na chamada chat(stream:true): ${chatCallErr && chatCallErr.message ? chatCallErr.message : chatCallErr}. Tentando chat síncrono como fallback.`,
+        )
+        // Fallback síncrono caso chat({stream:true}) lance erro
+        try {
+          const syncResult = $ai.agent(agentSlug).chat({
+            user_id: userId,
+            conversation_id: conv.id,
+            message: message,
+          })
+
+          function* fallbackIterator() {
+            if (syncResult && syncResult.citations && syncResult.citations.length > 0) {
+              yield { type: 'citations', items: syncResult.citations }
+            }
+            if (syncResult && syncResult.content) {
+              yield { type: 'chunk', content: syncResult.content }
+            }
+            yield {
+              type: 'done',
+              conversation_id: (syncResult && syncResult.conversation_id) || conv.id,
+              message_id: (syncResult && syncResult.message_id) || 'sync-' + Date.now(),
+            }
+          }
+
+          $response.stream(e, fallbackIterator())
+          return null
+        } catch (syncErr) {
+          throw syncErr
+        }
+      }
+
+      // Gerador envelopado que insere logs detalhados de cada evento,
+      // watchdog de segurança e garante término limpo com evento 'done'.
       function* safeIterator() {
         let sawDone = false
         let chunkCount = 0
+        let toolCallCount = 0
+        let firstChunkTime = null
+        let accumulatedContent = ''
 
         try {
           for (const ev of iter) {
-            if (ev && ev.type === 'done') {
+            if (!ev) continue
+            const evType = ev.type || 'unknown'
+
+            if (evType === 'chunk') {
+              chunkCount++
+              if (firstChunkTime === null) {
+                firstChunkTime = Date.now() - startTime
+              }
+              if (ev.content) {
+                accumulatedContent += ev.content
+              }
+            } else if (evType === 'tool_call_start' || evType === 'tool_call_done') {
+              toolCallCount++
+            } else if (evType === 'done') {
               sawDone = true
             }
-            if (ev && ev.type === 'chunk') {
-              chunkCount++
-            }
+
             yield ev
           }
 
-          // Se o iterador nativo encerrou sem emitir 'done' nem lançar erro
+          const totalElapsed = Date.now() - startTime
+          console.log(
+            `[tributacao_chat] Stream concluído. conv=${conv.id} chunks=${chunkCount} toolCalls=${toolCallCount} firstChunk=${firstChunkTime !== null ? firstChunkTime : 'N/A'}ms total=${totalElapsed}ms sawDone=${sawDone} chars=${accumulatedContent.length}`,
+          )
+
+          // Se o iterador nativo encerrou sem emitir 'done'
           if (!sawDone) {
             console.warn(
-              `[tributacao_chat] Stream terminou sem evento 'done'. Emitindo done sintético. conv=${conv.id} chunks=${chunkCount} elapsed=${Date.now() - startTime}ms`,
+              `[tributacao_chat] Stream terminou sem evento 'done'. Emitindo done sintético. conv=${conv.id} chunks=${chunkCount} elapsed=${totalElapsed}ms chars=${accumulatedContent.length}`,
             )
+
+            // Se nenhum chunk foi emitido antes do término e temos como obter o resultado síncrono
+            if (chunkCount === 0 && !accumulatedContent) {
+              console.warn(
+                `[tributacao_chat] Zero chunks recebidos pelo stream! Tentando recuperar resposta síncrona para não travar o cliente...`,
+              )
+              try {
+                const recoveryResult = $ai.agent(agentSlug).chat({
+                  user_id: userId,
+                  conversation_id: conv.id,
+                  message: message,
+                })
+                if (recoveryResult && recoveryResult.content) {
+                  yield { type: 'chunk', content: recoveryResult.content }
+                }
+              } catch (recErr) {
+                console.error(
+                  `[tributacao_chat] Falha na recuperação síncrona: ${recErr && recErr.message ? recErr.message : recErr}`,
+                )
+              }
+            }
+
             yield {
               type: 'done',
               conversation_id: conv.id,
@@ -92,9 +175,32 @@ routerAdd(
             }
           }
         } catch (iterErr) {
+          const totalElapsed = Date.now() - startTime
           console.error(
-            `[tributacao_chat] Erro durante a iteração do agente: ${iterErr && iterErr.message ? iterErr.message : iterErr}. conv=${conv.id} chunks=${chunkCount} user=${resolvedUserId}`,
+            `[tributacao_chat] Erro durante a iteração do agente: ${iterErr && iterErr.message ? iterErr.message : iterErr}. conv=${conv.id} chunks=${chunkCount} elapsed=${totalElapsed}ms user=${resolvedUserId}`,
           )
+
+          // Se nenhum conteúdo foi gerado e deu erro na iteração, tenta fallback síncrono
+          if (chunkCount === 0) {
+            try {
+              console.warn(`[tributacao_chat] Tentando fallback síncrono após erro de iteração...`)
+              const syncResult = $ai.agent(agentSlug).chat({
+                user_id: userId,
+                conversation_id: conv.id,
+                message: message,
+              })
+              if (syncResult && syncResult.content) {
+                yield { type: 'chunk', content: syncResult.content }
+                yield {
+                  type: 'done',
+                  conversation_id: (syncResult && syncResult.conversation_id) || conv.id,
+                  message_id: (syncResult && syncResult.message_id) || 'rec-' + Date.now(),
+                }
+                return
+              }
+            } catch (_) {}
+          }
+
           // Emite evento de erro no SSE para o cliente receber o diagnóstico sem travar
           yield {
             type: 'error',
@@ -106,12 +212,6 @@ routerAdd(
           }
         }
       }
-
-      e.response.header().set('Content-Type', 'text/event-stream')
-      e.response.header().set('Cache-Control', 'no-cache, no-transform')
-      e.response.header().set('Connection', 'keep-alive')
-      e.response.header().set('X-Accel-Buffering', 'no')
-      e.response.header().set('X-Conversation-Id', conv.id)
 
       $response.stream(e, safeIterator())
       return null
