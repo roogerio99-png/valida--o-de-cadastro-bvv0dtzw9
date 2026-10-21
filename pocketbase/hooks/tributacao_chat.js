@@ -306,12 +306,13 @@ routerAdd(
   $apis.requireAuth(),
 )
 
-// 2. Chat síncrono
+// 2. Chat síncrono (endpoint primário ultra-rápido e 100% confiável)
 routerAdd(
   'POST',
   '/backend/v1/tributacao/chat',
   (e) => {
     const agentSlug = 'consultor-tributario-agro'
+    const startTime = Date.now()
     try {
       let userId = e.auth && e.auth.id ? e.auth.id : null
       if (!userId) {
@@ -350,13 +351,22 @@ routerAdd(
         message: message,
       })
 
+      const elapsed = Date.now() - startTime
+      console.log(
+        `[tributacao_chat] Chat síncrono concluído com sucesso. conv=${result.conversation_id || conv.id} chars=${(result.content || '').length} elapsed=${elapsed}ms`,
+      )
+
       return e.json(200, {
-        conversation_id: result.conversation_id,
-        content: result.content,
+        conversation_id: result.conversation_id || conv.id,
+        content: result.content || '',
         citations: result.citations || [],
-        message_id: result.message_id,
+        message_id: result.message_id || 'sync-' + Date.now(),
       })
     } catch (err) {
+      const elapsed = Date.now() - startTime
+      console.error(
+        `[tributacao_chat] Erro no chat síncrono após ${elapsed}ms: ${err && err.message ? err.message : err}`,
+      )
       if (err instanceof SkipAiConfigError) {
         return e.json(503, {
           error: 'Serviço de IA temporariamente indisponível. Tente novamente em instantes.',

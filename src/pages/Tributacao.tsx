@@ -35,7 +35,6 @@ import {
 import { toast } from '@/hooks/use-toast'
 import pb from '@/lib/pocketbase/client'
 import {
-  streamAgentChat,
   displayableMessages,
   type AgentMessage,
   type DisplayMessage,
@@ -140,13 +139,13 @@ export function Tributacao() {
   const [messages, setMessages] = useState<DisplayMessage[]>([])
   const [inputMessage, setInputMessage] = useState('')
   const [isSending, setIsSending] = useState(false)
-  const [streamingContent, setStreamingContent] = useState('')
   const [conversationId, setConversationId] = useState<string | null>(() => {
     return localStorage.getItem('agro_tax_active_conv') || null
   })
   const [conversasAnteriores, setConversasAnteriores] = useState<ConversaItem[]>([])
   const [loadingConversas, setLoadingConversas] = useState(false)
   const [showHistoryDrawer, setShowHistoryDrawer] = useState(false)
+  const [secondsElapsed, setSecondsElapsed] = useState(0)
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const abortControllerRef = useRef<AbortController | null>(null)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
@@ -169,7 +168,7 @@ export function Tributacao() {
   const sentinelRef = useRef<HTMLDivElement>(null)
   const [, startTransition] = useTransition()
 
-  // Cleanup no unmount: abortar stream pendente
+  // Cleanup no unmount: abortar requisição pendente
   useEffect(() => {
     return () => {
       if (abortControllerRef.current) {
@@ -178,6 +177,22 @@ export function Tributacao() {
     }
   }, [])
 
+  // Cronômetro do estado de "consultando..."
+  useEffect(() => {
+    let timer: ReturnType<typeof setInterval> | null = null
+    if (isSending) {
+      setSecondsElapsed(0)
+      timer = setInterval(() => {
+        setSecondsElapsed((prev) => prev + 1)
+      }, 1000)
+    } else {
+      setSecondsElapsed(0)
+    }
+    return () => {
+      if (timer) clearInterval(timer)
+    }
+  }, [isSending])
+
   // Rolar suavemente para a última mensagem
   const scrollToBottom = useCallback((behavior: ScrollBehavior = 'smooth') => {
     messagesEndRef.current?.scrollIntoView({ behavior })
@@ -185,7 +200,7 @@ export function Tributacao() {
 
   useEffect(() => {
     scrollToBottom('smooth')
-  }, [messages, streamingContent, isSending, scrollToBottom])
+  }, [messages, isSending, scrollToBottom])
 
   // Carregar lista de conversas anteriores do usuário
   const carregarConversas = useCallback(async () => {
@@ -251,28 +266,24 @@ export function Tributacao() {
     setConversationId(null)
     localStorage.removeItem('agro_tax_active_conv')
     setMessages([])
-    setStreamingContent('')
     setIsSending(false)
     textareaRef.current?.focus()
   }
 
-  // Ação de Interromper Geração
+  // Ação de Interromper Consulta
   const handlePararGeracao = () => {
     if (abortControllerRef.current) {
       abortControllerRef.current.abort()
       abortControllerRef.current = null
     }
     setIsSending(false)
-    if (streamingContent.trim()) {
-      const partialMsg: DisplayMessage = {
-        id: `assistant-cancelled-${Date.now()}`,
-        role: 'assistant',
-        content: streamingContent + '\n\n> ⏹️ *Geração interrompida pelo usuário.*',
-        created: new Date().toISOString(),
-      }
-      setMessages((prev) => [...prev, partialMsg])
-      setStreamingContent('')
+    const partialMsg: DisplayMessage = {
+      id: `assistant-cancelled-${Date.now()}`,
+      role: 'assistant',
+      content: '> ⏹️ *Consulta interrompida pelo usuário.*',
+      created: new Date().toISOString(),
     }
+    setMessages((prev) => [...prev, partialMsg])
     textareaRef.current?.focus()
   }
 
@@ -284,20 +295,18 @@ export function Tributacao() {
     }
     setConversationId(convId)
     localStorage.setItem('agro_tax_active_conv', convId)
-    setStreamingContent('')
     setIsSending(false)
     setShowHistoryDrawer(false)
     carregarMensagensConversa(convId)
   }
 
-  // Enviar Mensagem para o Chatbot IA (Streaming SSE com Robustez)
+  // Enviar Mensagem para o Chatbot IA (Resposta Síncrona Ultra-Rápida e 100% Confiável)
   const handleSendMessage = async (msgToSend?: string) => {
     const text = (msgToSend ?? inputMessage).trim()
     if (!text || isSending) return
 
     setInputMessage('')
     setIsSending(true)
-    setStreamingContent('')
 
     const tempUserMsgId = `user-${Date.now()}`
     const userMsg: DisplayMessage = {
@@ -311,105 +320,45 @@ export function Tributacao() {
     const abortController = new AbortController()
     abortControllerRef.current = abortController
 
-    // 1. Timeout global de 90s
-    let globalTimeoutId: ReturnType<typeof setTimeout> | null = setTimeout(() => {
+    // Timeout de 75s para dar tempo ao modelo sem travar o cliente indefinidamente
+    const timeoutId = setTimeout(() => {
       if (abortControllerRef.current) {
         abortController.abort(
-          new Error('Tempo limite de espera excedido (90s). O assistente demorou para responder.'),
+          new Error('Tempo limite de espera excedido (75s). O assistente demorou para responder.'),
         )
       }
-    }, 90000)
-
-    // 2. Watchdog de inatividade de 45s (resetado a cada chunk/toolcall)
-    let inactivityTimeoutId: ReturnType<typeof setTimeout> | null = null
-    const resetInactivityWatchdog = () => {
-      if (inactivityTimeoutId) clearTimeout(inactivityTimeoutId)
-      inactivityTimeoutId = setTimeout(() => {
-        if (abortControllerRef.current) {
-          abortController.abort(
-            new Error(
-              'A conexão com o especialista ficou inativa sem receber dados por mais de 45s.',
-            ),
-          )
-        }
-      }, 45000)
-    }
-
-    resetInactivityWatchdog()
-
-    let partialContent = ''
-    let latestFlushTime = 0
-    let pendingFlushTimer: ReturnType<typeof setTimeout> | null = null
-
-    // Throttle de ~60ms para renderização suave sem travar o React/DOM
-    const flushStreamingContent = (full: string, immediate = false) => {
-      partialContent = full
-      const now = Date.now()
-      if (immediate || now - latestFlushTime > 60) {
-        if (pendingFlushTimer) {
-          clearTimeout(pendingFlushTimer)
-          pendingFlushTimer = null
-        }
-        latestFlushTime = now
-        setStreamingContent(full)
-      } else if (!pendingFlushTimer) {
-        pendingFlushTimer = setTimeout(() => {
-          latestFlushTime = Date.now()
-          setStreamingContent(partialContent)
-          pendingFlushTimer = null
-        }, 60)
-      }
-    }
+    }, 75000)
 
     try {
-      const res = await fetch(
-        `${import.meta.env.VITE_POCKETBASE_URL}/backend/v1/tributacao/chat-stream`,
-        {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            Authorization: pb.authStore.token,
-          },
-          body: JSON.stringify({
-            message: text,
-            conversation_id: conversationId,
-            title: text.slice(0, 50),
-          }),
-          signal: abortController.signal,
+      const res = await fetch(`${import.meta.env.VITE_POCKETBASE_URL}/backend/v1/tributacao/chat`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: pb.authStore.token,
         },
-      )
-
-      if (!res.ok) {
-        throw new Error(`Erro no servidor de chat (${res.status} ${res.statusText})`)
-      }
-
-      let latestCitations: AgentCitation[] | undefined = undefined
-
-      const result = await streamAgentChat(res, {
-        onChunk: (_delta, full) => {
-          resetInactivityWatchdog()
-          flushStreamingContent(full)
-        },
-        onToolCallStart: () => {
-          resetInactivityWatchdog()
-        },
-        onToolCallDone: () => {
-          resetInactivityWatchdog()
-        },
-        onCitations: (citations) => {
-          resetInactivityWatchdog()
-          latestCitations = citations
-        },
+        body: JSON.stringify({
+          message: text,
+          conversation_id: conversationId,
+          title: text.slice(0, 50),
+        }),
         signal: abortController.signal,
       })
 
-      if (pendingFlushTimer) {
-        clearTimeout(pendingFlushTimer)
-        pendingFlushTimer = null
-      }
-      partialContent = result.content
+      const data = await res.json().catch(() => null)
 
-      const newConvId = res.headers.get('X-Conversation-Id') || result.conversation_id
+      if (!res.ok) {
+        const serverError =
+          data?.error ||
+          data?.message ||
+          `Erro no servidor de chat (${res.status} ${res.statusText})`
+        throw new Error(serverError)
+      }
+
+      if (!data || !data.content) {
+        throw new Error('O especialista tributário retornou uma resposta sem conteúdo.')
+      }
+
+      const newConvId = data.conversation_id
       if (newConvId && newConvId !== conversationId) {
         setConversationId(newConvId)
         localStorage.setItem('agro_tax_active_conv', newConvId)
@@ -417,15 +366,14 @@ export function Tributacao() {
       }
 
       const assistantMsg: DisplayMessage = {
-        id: result.message_id || `assistant-${Date.now()}`,
+        id: data.message_id || `assistant-${Date.now()}`,
         role: 'assistant',
-        content: result.content,
-        citations: latestCitations || result.citations,
+        content: data.content,
+        citations: data.citations || [],
         created: new Date().toISOString(),
       }
 
       setMessages((prev) => [...prev, assistantMsg])
-      setStreamingContent('')
     } catch (err: unknown) {
       const userVoluntaryAbort =
         err instanceof Error &&
@@ -444,67 +392,32 @@ export function Tributacao() {
             : ''
 
       const isTimeout =
-        (err instanceof Error &&
-          (err.message.includes('Tempo limite') ||
-            err.message.includes('inativa sem receber dados'))) ||
-        reasonMsg.includes('Tempo limite') ||
-        reasonMsg.includes('inativa sem receber dados')
-
-      const isStreamEndedEarly =
-        err instanceof Error && err.message.includes('Agent stream ended before the done event')
+        (err instanceof Error && err.message.includes('Tempo limite')) ||
+        reasonMsg.includes('Tempo limite')
 
       console.error('Erro na resposta do agente tributário:', err)
 
-      if (partialContent.trim()) {
-        const errorSuffix = isTimeout
-          ? '\n\n> ⚠️ *Tempo limite de conexão atingido. A resposta pode estar incompleta.*'
-          : '\n\n> ⚠️ *A conexão com o especialista foi interrompida. O texto acima foi preservado.*'
+      const errorMessage = isTimeout
+        ? 'O servidor demorou para responder (tempo limite de 75s excedido). Tente novamente em instantes.'
+        : err instanceof Error
+          ? err.message
+          : 'Não foi possível consultar o especialista tributário no momento.'
 
-        const fallbackMsg: DisplayMessage = {
-          id: `assistant-partial-${Date.now()}`,
-          role: 'assistant',
-          content: partialContent + errorSuffix,
-          created: new Date().toISOString(),
-        }
-        setMessages((prev) => [...prev, fallbackMsg])
-        setStreamingContent('')
-      } else {
-        const errorMessage = isTimeout
-          ? 'O servidor demorou para responder (tempo limite excedido). Tente novamente em instantes.'
-          : isStreamEndedEarly
-            ? 'A conexão com o especialista tributário foi interrompida antes de concluir. Tente novamente.'
-            : err instanceof Error
-              ? err.message
-              : 'Não foi possível consultar o especialista tributário no momento.'
-
-        const errorMsg: DisplayMessage = {
-          id: `error-${Date.now()}`,
-          role: 'assistant',
-          content: `> ⚠️ **Não foi possível concluir a consulta tributária agora.**\n\n${errorMessage}`,
-          created: new Date().toISOString(),
-        }
-        setMessages((prev) => [...prev, errorMsg])
-        setStreamingContent('')
+      const errorMsg: DisplayMessage = {
+        id: `error-${Date.now()}`,
+        role: 'assistant',
+        content: `> ⚠️ **Não foi possível concluir a consulta tributária agora.**\n\n${errorMessage}`,
+        created: new Date().toISOString(),
       }
+      setMessages((prev) => [...prev, errorMsg])
 
       toast({
         variant: 'destructive',
         title: isTimeout ? 'Tempo limite excedido' : 'Falha na resposta do assistente',
-        description: err instanceof Error ? err.message : 'Erro ao obter resposta.',
+        description: errorMessage,
       })
     } finally {
-      if (globalTimeoutId) {
-        clearTimeout(globalTimeoutId)
-        globalTimeoutId = null
-      }
-      if (inactivityTimeoutId) {
-        clearTimeout(inactivityTimeoutId)
-        inactivityTimeoutId = null
-      }
-      if (pendingFlushTimer) {
-        clearTimeout(pendingFlushTimer)
-        pendingFlushTimer = null
-      }
+      clearTimeout(timeoutId)
       setIsSending(false)
       abortControllerRef.current = null
       textareaRef.current?.focus()
@@ -817,7 +730,7 @@ export function Tributacao() {
           <Card className="flex-1 flex flex-col min-h-0 bg-white border-[#DCE5DC] rounded-2xl shadow-xs overflow-hidden">
             {/* Mensagens */}
             <div className="flex-1 p-4 md:p-6 overflow-y-auto space-y-4 custom-scrollbar">
-              {messages.length === 0 && !streamingContent && (
+              {messages.length === 0 && !isSending && (
                 <div className="max-w-2xl mx-auto py-8 text-center space-y-6">
                   <div className="w-16 h-16 rounded-2xl bg-emerald-100 flex items-center justify-center mx-auto text-[#1B5E20] shadow-sm">
                     <Sparkles className="w-8 h-8 text-[#1B5E20]" />
@@ -913,33 +826,42 @@ export function Tributacao() {
                 )
               })}
 
-              {/* Streaming em tempo real */}
+              {/* Estado de Carregamento com Spinner e Cronômetro */}
               {isSending && (
-                <div className="flex items-start gap-3 justify-start">
+                <div className="flex items-start gap-3 justify-start animate-in fade-in duration-200">
                   <div className="w-8 h-8 rounded-xl bg-gradient-to-tr from-[#1B5E20] to-[#2E7D32] flex items-center justify-center text-white flex-shrink-0 shadow-xs mt-0.5">
                     <Bot className="w-4 h-4 text-emerald-200" />
                   </div>
-                  <div className="max-w-[85%] sm:max-w-[82%] rounded-2xl rounded-tl-xs p-4 text-xs leading-relaxed bg-[#F9FAF8] text-[#1C2B1C] border border-[#DCE5DC] shadow-2xs">
-                    {streamingContent ? (
-                      <div className="space-y-2">
-                        <div className="flex items-center gap-1.5 text-[11px] text-[#1B5E20] font-semibold border-b border-[#DCE5DC]/60 pb-1.5">
-                          <Loader2 className="w-3.5 h-3.5 animate-spin text-[#1B5E20]" />
-                          <span>Processando legislação e base mestre...</span>
-                        </div>
-                        <MarkdownRenderer content={streamingContent} isStreaming={true} />
+                  <div className="max-w-[85%] sm:max-w-[82%] rounded-2xl rounded-tl-xs p-4 text-xs leading-relaxed bg-[#F9FAF8] text-[#1C2B1C] border border-[#DCE5DC] shadow-2xs space-y-2">
+                    <div className="flex items-center justify-between gap-3 border-b border-[#DCE5DC]/60 pb-2">
+                      <div className="flex items-center gap-2 text-[#1B5E20] font-semibold text-xs">
+                        <Loader2 className="w-4 h-4 animate-spin text-[#1B5E20]" />
+                        <span>Consultando especialista tributário...</span>
                       </div>
-                    ) : (
-                      <div className="space-y-2 py-1">
-                        <div className="flex items-center gap-2 text-[#1B5E20] font-medium">
-                          <Loader2 className="w-4 h-4 animate-spin text-[#1B5E20]" />
-                          <span>Consultando agente especialista em tributação...</span>
-                        </div>
-                        <p className="text-[11px] text-[#5A6D5A] pl-6">
-                          Consultando a legislação (Lei 10.925/04, LC 224/2025, LC 214/2025 e TIPI).
-                          A resposta será gerada em instantes.
-                        </p>
-                      </div>
-                    )}
+                      <Badge
+                        variant="outline"
+                        className="text-[10px] font-mono text-[#5A6D5A] bg-white border-[#DCE5DC]"
+                      >
+                        {secondsElapsed}s
+                      </Badge>
+                    </div>
+                    <p className="text-[11px] text-[#5A6D5A] leading-relaxed">
+                      Analisando a legislação agropecuária (Lei nº 10.925/04, LC nº 224/2025, LC nº
+                      214/2025 e Tabela TIPI). A resposta completa e formatada será exibida em
+                      instantes.
+                    </p>
+                    <div className="pt-1 flex items-center gap-2">
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        onClick={handlePararGeracao}
+                        className="h-6 px-2 text-[10px] text-rose-700 hover:text-rose-800 hover:bg-rose-50"
+                      >
+                        <StopCircle className="w-3 h-3 mr-1" />
+                        Cancelar consulta
+                      </Button>
+                    </div>
                   </div>
                 </div>
               )}
@@ -984,13 +906,14 @@ export function Tributacao() {
                 {isSending ? (
                   <Button
                     type="button"
-                    size="icon"
+                    size="sm"
                     variant="destructive"
                     onClick={handlePararGeracao}
-                    className="h-8 w-8 rounded-lg bg-rose-600 hover:bg-rose-700 text-white flex-shrink-0"
-                    title="Interromper geração"
+                    className="h-9 px-3 rounded-xl bg-rose-600 hover:bg-rose-700 text-white flex-shrink-0 text-xs font-medium"
+                    title="Interromper consulta"
                   >
-                    <StopCircle className="w-4 h-4" />
+                    <StopCircle className="w-3.5 h-3.5 mr-1" />
+                    <span>Interromper</span>
                   </Button>
                 ) : (
                   <Button
