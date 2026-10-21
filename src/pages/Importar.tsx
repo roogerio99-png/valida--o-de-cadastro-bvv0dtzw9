@@ -1369,7 +1369,7 @@ export function Importar() {
                     </div>
 
                     <div className="border border-red-200 rounded-xl overflow-hidden text-[11px]">
-                      <ScrollableTable maxHeight="260px" minHeight="160px">
+                      <ScrollableTable autoFitHeight={false} maxHeight="260px" minHeight="160px">
                         <table className="w-full text-left">
                           <thead className="sticky top-0 z-20 bg-red-50 border-b border-red-200 text-red-900 shadow-[0_1px_0_0_#fecaca]">
                             <tr>
@@ -1468,7 +1468,7 @@ export function Importar() {
                 </span>
               </h5>
               <div className="border border-[#DCE5DC] rounded-xl overflow-hidden">
-                <ScrollableTable maxHeight="300px" minHeight="200px">
+                <ScrollableTable autoFitHeight={false} maxHeight="300px" minHeight="200px">
                   <table className="w-full text-[11px]">
                     <thead className="sticky top-0 z-20 bg-[#F5F7F1] shadow-[0_1px_0_0_#DCE5DC]">
                       <tr className="bg-[#F5F7F1] border-b border-[#DCE5DC] text-left text-[#5A6D5A]">

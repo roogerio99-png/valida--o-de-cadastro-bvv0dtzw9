@@ -287,4 +287,15 @@
   .animate-spotlight {
     animation: spotlight 2s ease forwards;
   }
+
+  /* Ocultação limpa da barra de rolagem vertical preservando funcionalidade de scroll nativa */
+  .no-scrollbar-vertical {
+    -ms-overflow-style: none; /* IE e Edge */
+    scrollbar-width: none; /* Firefox */
+  }
+  .no-scrollbar-vertical::-webkit-scrollbar {
+    display: none; /* Chrome, Safari, Opera */
+    width: 0;
+    height: 0;
+  }
 }

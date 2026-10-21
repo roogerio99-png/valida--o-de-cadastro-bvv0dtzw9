@@ -416,7 +416,7 @@ export function Dashboard() {
               produto.
             </div>
           ) : (
-            <ScrollableTable maxHeight="420px">
+            <ScrollableTable autoFitHeight={true} bottomOffset={76} minHeight="240px">
               <table className="w-full text-xs">
                 <thead className="sticky top-0 z-20 bg-white shadow-[0_1px_0_0_#DCE5DC]">
                   <tr className="border-b border-[#DCE5DC] text-left text-[#5A6D5A]">

@@ -1002,9 +1002,10 @@ export function BaseMestre() {
       </Card>
 
       {/* Tabela da Base Mestre com Colunas Canônicas Visíveis e Expansão para os 28 Campos */}
-      <Card className="rounded-2xl border-[#DCE5DC] bg-white shadow-sm overflow-hidden">
+      <Card className="rounded-2xl border-[#DCE5DC] bg-white shadow-sm overflow-hidden flex flex-col">
         <ScrollableTable
-          maxHeight="calc(100vh - 310px)"
+          autoFitHeight={true}
+          bottomOffset={76}
           containerRef={tableContainerRef}
           onNearBottom={carregarMaisProdutos}
           bottomThreshold={250}

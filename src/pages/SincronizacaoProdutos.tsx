@@ -741,7 +741,7 @@ export function SincronizacaoProdutos() {
               </p>
             </div>
           ) : (
-            <ScrollableTable maxHeight="calc(100vh - 310px)">
+            <ScrollableTable autoFitHeight={true} bottomOffset={76}>
               <Table>
                 <TableHeader className="sticky top-0 z-20 bg-[#FAFBF9] shadow-[0_1px_0_0_#DCE5DC]">
                   <TableRow className="bg-[#FAFBF9]">

@@ -1117,7 +1117,7 @@ export function Validar() {
                     </span>
                   </CardTitle>
                 </CardHeader>
-                <ScrollableTable maxHeight="380px">
+                <ScrollableTable autoFitHeight={false} maxHeight="380px">
                   <table className="w-full text-xs">
                     <thead className="sticky top-0 z-20 bg-[#F5F7F1] shadow-[0_1px_0_0_#DCE5DC]">
                       <tr className="border-b border-[#DCE5DC] bg-[#F5F7F1] text-[#5A6D5A] font-semibold text-left">
@@ -1211,7 +1211,7 @@ export function Validar() {
                     faixa.
                   </CardDescription>
                 </CardHeader>
-                <ScrollableTable maxHeight="320px">
+                <ScrollableTable autoFitHeight={false} maxHeight="320px">
                   <table className="w-full text-xs">
                     <thead className="sticky top-0 z-20 bg-[#F5F7F1] shadow-[0_1px_0_0_#DCE5DC]">
                       <tr className="border-b border-[#DCE5DC] bg-[#F5F7F1] text-[#5A6D5A] font-semibold text-left">

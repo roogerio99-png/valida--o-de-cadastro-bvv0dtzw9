@@ -219,7 +219,7 @@ export function Travas() {
       {/* ------------------------------------------------------------------ */}
       {/* HISTÓRICO COMPLETO DE LOG_VALIDAÇÕES */}
       {/* ------------------------------------------------------------------ */}
-      <Card className="rounded-2xl border-[#DCE5DC] bg-white shadow-sm overflow-hidden">
+      <Card className="rounded-2xl border-[#DCE5DC] bg-white shadow-sm overflow-hidden flex flex-col">
         <CardHeader>
           <CardTitle className="text-base font-bold text-[#1C2B1C]">
             Trilha de Auditoria e Histórico de Eventos
@@ -228,7 +228,7 @@ export function Travas() {
             Registro imutável das análises realizadas para fins de compliance fiscal e agrônomo
           </CardDescription>
         </CardHeader>
-        <ScrollableTable maxHeight="calc(100vh - 310px)">
+        <ScrollableTable autoFitHeight={true} bottomOffset={76}>
           <table className="w-full text-xs">
             <thead className="sticky top-0 z-20 bg-[#F5F7F1] shadow-[0_1px_0_0_#DCE5DC]">
               <tr className="bg-[#F5F7F1] border-b border-[#DCE5DC] text-left text-[#5A6D5A]">

@@ -7,15 +7,21 @@ export interface ScrollableTableProps extends React.HTMLAttributes<HTMLDivElemen
   scrollClassName?: string
   /**
    * Altura máxima do viewport da tabela para criar container com scroll vertical próprio.
-   * Por padrão usa 'calc(100vh - 270px)', adaptando-se perfeitamente à tela e mantendo
-   * thead no topo e barra horizontal sempre visível no rodapé do container.
-   * Se definido como 'none', não aplica restrição de altura.
+   * Pode ser um valor CSS (ex: 'calc(100vh - 310px)', '400px'), ou 'auto' / 'none' / 'flex'.
+   * Quando 'auto' (ou se autoFitHeight estiver ativo), a altura se readequará dinamicamente
+   * ao espaço visível da página mantendo cabeçalho no topo e rodapé na base.
    */
   maxHeight?: string
-  /** Altura mínima para o container de dados da tabela (padrão: 320px) */
+  /** Altura mínima para o container de dados da tabela (padrão: 220px) */
   minHeight?: string
   /** Se deve forçar ocultação da barra flutuante (ex.: quando a tela é muito pequena) */
   hideFloatingBarOnTouch?: boolean
+  /** Se deve esconder a barra de rolagem vertical visível (padrão: true, conforme pedido do usuário) */
+  hideVerticalScrollbar?: boolean
+  /** Se deve calcular a altura restante até o rodapé da página dinamicamente via medição do viewport */
+  autoFitHeight?: boolean
+  /** Margem inferior de segurança em pixels para o autoFitHeight (padrão: 72px para footer + padding) */
+  bottomOffset?: number
   /** Callback opcional acionado quando o usuário se aproxima do final do scroll vertical */
   onNearBottom?: () => void
   /** Distância em pixels do final para disparar o onNearBottom (padrão: 200px) */
@@ -51,15 +57,19 @@ export function ScrollableTable({
   children,
   className,
   scrollClassName,
-  maxHeight = 'calc(100vh - 280px)',
-  minHeight = '320px',
+  maxHeight,
+  minHeight = '220px',
   hideFloatingBarOnTouch = false,
+  hideVerticalScrollbar = true,
+  autoFitHeight = true,
+  bottomOffset = 64,
   onNearBottom,
   bottomThreshold = 200,
   containerRef: externalContainerRef,
   style,
   ...props
 }: ScrollableTableProps) {
+  const rootWrapperRef = useRef<HTMLDivElement>(null)
   const internalContainerRef = useRef<HTMLDivElement>(null)
   const containerRef = externalContainerRef || internalContainerRef
   const trackRef = useRef<HTMLDivElement>(null)
@@ -69,6 +79,7 @@ export function ScrollableTable({
   const [thumbWidthRatio, setThumbWidthRatio] = useState(0.2) // tamanho relativo do thumb (0 a 1)
   const [isDragging, setIsDragging] = useState(false)
   const [isHovered, setIsHovered] = useState(false)
+  const [computedMaxHeight, setComputedMaxHeight] = useState<string | undefined>(undefined)
 
   // Medição de overflow e dimensões do container
   const updateDimensions = useCallback(() => {
@@ -109,29 +120,60 @@ export function ScrollableTable({
     }
   }, [containerRef, onNearBottom, bottomThreshold])
 
+  // Medição dinâmica da altura restante até o rodapé visível da página
+  const updateAvailableHeight = useCallback(() => {
+    if (!autoFitHeight) return
+
+    const wrapper = rootWrapperRef.current
+    if (!wrapper) return
+
+    const rect = wrapper.getBoundingClientRect()
+    // Espaço da base do wrapper/início da tabela até o rodapé da viewport
+    const viewportHeight = window.innerHeight
+    // Considerar barra horizontal se visível (~44px) + margem do rodapé da tela
+    const reservedBottom = bottomOffset + (hasOverflow ? 44 : 12)
+    const available = viewportHeight - rect.top - reservedBottom
+
+    // Manter um limite mínimo utilizável (ex.: 220px)
+    const targetHeight = Math.max(220, Math.floor(available))
+    setComputedMaxHeight(`${targetHeight}px`)
+  }, [autoFitHeight, bottomOffset, hasOverflow])
+
   // Observa redimensionamento de janela e conteúdo
   useEffect(() => {
     const el = containerRef.current
     if (!el) return
 
     updateDimensions()
+    updateAvailableHeight()
 
     const resizeObserver = new ResizeObserver(() => {
       updateDimensions()
+      updateAvailableHeight()
     })
 
     resizeObserver.observe(el)
     if (el.firstElementChild) {
       resizeObserver.observe(el.firstElementChild)
     }
+    if (rootWrapperRef.current) {
+      resizeObserver.observe(rootWrapperRef.current)
+    }
 
-    window.addEventListener('resize', updateDimensions)
+    const handleWindowResize = () => {
+      updateDimensions()
+      updateAvailableHeight()
+    }
+
+    window.addEventListener('resize', handleWindowResize)
+    window.addEventListener('scroll', updateAvailableHeight, { passive: true })
 
     return () => {
       resizeObserver.disconnect()
-      window.removeEventListener('resize', updateDimensions)
+      window.removeEventListener('resize', handleWindowResize)
+      window.removeEventListener('scroll', updateAvailableHeight)
     }
-  }, [updateDimensions])
+  }, [updateDimensions, updateAvailableHeight])
 
   // Lógica de arrasto (drag) do thumb da barra flutuante
   const dragStartRef = useRef<{
@@ -240,13 +282,27 @@ export function ScrollableTable({
   const thumbLeftPercent = scrollProgress * (1 - thumbWidthRatio) * 100
   const thumbWidthPercent = thumbWidthRatio * 100
 
+  // Determina a restrição de altura a ser aplicada:
+  // Se maxHeight for explicitamente passado e não for 'auto', respeita o maxHeight fornecido.
+  // Se autoFitHeight estiver ativo e tiver altura calculada, usa a altura calculada dinamicamente.
+  // Fallback padrão: 'calc(100vh - 280px)'
+  const effectiveMaxHeight =
+    maxHeight && maxHeight !== 'auto' && maxHeight !== 'none'
+      ? maxHeight
+      : autoFitHeight && computedMaxHeight
+        ? computedMaxHeight
+        : maxHeight === 'none'
+          ? undefined
+          : 'calc(100vh - 280px)'
+
   const containerHeightStyle: React.CSSProperties = {
-    ...(maxHeight && maxHeight !== 'none' ? { maxHeight } : {}),
+    ...(effectiveMaxHeight ? { maxHeight: effectiveMaxHeight } : {}),
     ...(minHeight ? { minHeight } : {}),
   }
 
   return (
     <div
+      ref={rootWrapperRef}
       className={cn('relative w-full flex flex-col group/scrollable', className)}
       onMouseEnter={() => setIsHovered(true)}
       onMouseLeave={() => setIsHovered(false)}
@@ -258,6 +314,8 @@ export function ScrollableTable({
         Ao ter altura calculada + overflow-y: auto + overflow-x: auto:
         1. thead com sticky top-0 trava perfeitamente no topo durante o scroll vertical das linhas.
         2. Toda a barra flutuante horizontal fica docking no fundo do contêiner e nunca desce além do viewport visível.
+        3. A barra vertical de rolagem é ocultada visualmente (scrollbar-width: none e ::-webkit-scrollbar display: none),
+           mantendo 100% da capacidade de rolagem por trackpad/mousewheel/touch e os eventos onScroll / onNearBottom.
       */}
       <div
         ref={containerRef}
@@ -268,8 +326,12 @@ export function ScrollableTable({
           // Regra CSS utilitária para fixar thead das tabelas filhas automaticamente
           '[&_thead]:sticky [&_thead]:top-0 [&_thead]:z-20 [&_thead]:bg-[#F5F7F1] [&_thead_th]:bg-[#F5F7F1]',
           '[&_thead_th]:shadow-[0_1px_0_0_#DCE5DC]',
-          // Scrollbars customizadas suaves
-          'scrollbar-thin scrollbar-thumb-zinc-300 dark:scrollbar-thumb-zinc-700',
+          // Esconde a barra de rolagem vertical conforme solicitação do usuário
+          hideVerticalScrollbar &&
+            'no-scrollbar-vertical [scrollbar-width:none] [&::-webkit-scrollbar]:hidden',
+          // Scrollbar horizontal suave nativa como fallback caso não haja a flutuante
+          !hideVerticalScrollbar &&
+            'scrollbar-thin scrollbar-thumb-zinc-300 dark:scrollbar-thumb-zinc-700',
           scrollClassName,
         )}
       >

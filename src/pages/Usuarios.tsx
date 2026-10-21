@@ -398,8 +398,8 @@ export function Usuarios() {
 
         {/* Tabela de Usuários */}
         <TabsContent value="usuarios" className="space-y-4 pt-2">
-          <div className="rounded-md border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-sm overflow-hidden">
-            <ScrollableTable maxHeight="calc(100vh - 330px)">
+          <div className="rounded-md border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-sm overflow-hidden flex flex-col">
+            <ScrollableTable autoFitHeight={true} bottomOffset={76}>
               <table className="w-full text-sm text-left">
                 <thead className="sticky top-0 z-20 bg-slate-50 dark:bg-slate-900 text-slate-700 dark:text-slate-300 border-b border-slate-200 dark:border-slate-800 font-medium shadow-[0_1px_0_0_#e2e8f0]">
                   <tr>
@@ -555,8 +555,8 @@ export function Usuarios() {
 
         {/* Tabela de Convites Pendentes */}
         <TabsContent value="convites" className="space-y-4 pt-2">
-          <div className="rounded-md border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-sm overflow-hidden">
-            <ScrollableTable maxHeight="calc(100vh - 330px)">
+          <div className="rounded-md border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-sm overflow-hidden flex flex-col">
+            <ScrollableTable autoFitHeight={true} bottomOffset={76}>
               <table className="w-full text-sm text-left">
                 <thead className="sticky top-0 z-20 bg-slate-50 dark:bg-slate-900 text-slate-700 dark:text-slate-300 border-b border-slate-200 dark:border-slate-800 font-medium shadow-[0_1px_0_0_#e2e8f0]">
                   <tr>
