@@ -478,9 +478,9 @@ export function PainelRelatorioIntegracao({
 
           {/* TABELA PAGINADA DE ITENS */}
           <div className="border border-[#DCE5DC] rounded-xl overflow-hidden bg-white shadow-sm">
-            <ScrollableTable>
+            <ScrollableTable maxHeight="calc(100vh - 330px)">
               <Table>
-                <TableHeader>
+                <TableHeader className="sticky top-0 z-20 bg-[#FAFBF9] shadow-[0_1px_0_0_#DCE5DC]">
                   <TableRow className="bg-[#FAFBF9]">
                     <TableHead className="w-[120px]">Registro MAPA</TableHead>
                     <TableHead className="min-w-[180px]">Marca / Produto</TableHead>

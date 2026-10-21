@@ -1117,10 +1117,10 @@ export function Validar() {
                     </span>
                   </CardTitle>
                 </CardHeader>
-                <ScrollableTable>
+                <ScrollableTable maxHeight="380px">
                   <table className="w-full text-xs">
-                    <thead>
-                      <tr className="border-b border-[#DCE5DC] bg-[#F5F7F1]/50 text-[#5A6D5A] font-semibold text-left">
+                    <thead className="sticky top-0 z-20 bg-[#F5F7F1] shadow-[0_1px_0_0_#DCE5DC]">
+                      <tr className="border-b border-[#DCE5DC] bg-[#F5F7F1] text-[#5A6D5A] font-semibold text-left">
                         <th className="py-2.5 px-3">Campo</th>
                         <th className="py-2.5 px-3">Informado</th>
                         <th className="py-2.5 px-3">Encontrado na Bula / Base</th>
@@ -1211,10 +1211,10 @@ export function Validar() {
                     faixa.
                   </CardDescription>
                 </CardHeader>
-                <ScrollableTable>
+                <ScrollableTable maxHeight="320px">
                   <table className="w-full text-xs">
-                    <thead>
-                      <tr className="border-b border-[#DCE5DC] bg-[#F5F7F1]/50 text-[#5A6D5A] font-semibold text-left">
+                    <thead className="sticky top-0 z-20 bg-[#F5F7F1] shadow-[0_1px_0_0_#DCE5DC]">
+                      <tr className="border-b border-[#DCE5DC] bg-[#F5F7F1] text-[#5A6D5A] font-semibold text-left">
                         <th className="py-2 px-3">Faixa de Embalagem</th>
                         <th className="py-2 px-3">Exemplos / Quantidade</th>
                         <th className="py-2 px-3">NCM Correta da Faixa</th>

@@ -228,9 +228,9 @@ export function Travas() {
             Registro imutável das análises realizadas para fins de compliance fiscal e agrônomo
           </CardDescription>
         </CardHeader>
-        <ScrollableTable>
+        <ScrollableTable maxHeight="calc(100vh - 310px)">
           <table className="w-full text-xs">
-            <thead>
+            <thead className="sticky top-0 z-20 bg-[#F5F7F1] shadow-[0_1px_0_0_#DCE5DC]">
               <tr className="bg-[#F5F7F1] border-b border-[#DCE5DC] text-left text-[#5A6D5A]">
                 <th className="py-3 px-4 font-semibold">Data / Hora</th>
                 <th className="py-3 px-4 font-semibold">Produto Auditado</th>

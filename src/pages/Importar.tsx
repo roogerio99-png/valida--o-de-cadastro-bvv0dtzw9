@@ -1368,10 +1368,10 @@ export function Importar() {
                       </span>
                     </div>
 
-                    <div className="border border-red-200 rounded-xl overflow-hidden max-h-64 overflow-y-auto text-[11px]">
-                      <ScrollableTable>
+                    <div className="border border-red-200 rounded-xl overflow-hidden text-[11px]">
+                      <ScrollableTable maxHeight="260px" minHeight="160px">
                         <table className="w-full text-left">
-                          <thead className="bg-red-50/70 border-b border-red-200 text-red-900">
+                          <thead className="sticky top-0 z-20 bg-red-50 border-b border-red-200 text-red-900 shadow-[0_1px_0_0_#fecaca]">
                             <tr>
                               <th className="py-2 px-3 font-semibold w-16">Linha</th>
                               <th className="py-2 px-3 font-semibold">Categoria</th>
@@ -1467,10 +1467,10 @@ export function Importar() {
                   Total de colunas: {parsedData.headers.length}
                 </span>
               </h5>
-              <div className="border border-[#DCE5DC] rounded-xl max-h-64 overflow-y-auto">
-                <ScrollableTable>
+              <div className="border border-[#DCE5DC] rounded-xl overflow-hidden">
+                <ScrollableTable maxHeight="300px" minHeight="200px">
                   <table className="w-full text-[11px]">
-                    <thead>
+                    <thead className="sticky top-0 z-20 bg-[#F5F7F1] shadow-[0_1px_0_0_#DCE5DC]">
                       <tr className="bg-[#F5F7F1] border-b border-[#DCE5DC] text-left text-[#5A6D5A]">
                         <th className="py-2 px-3 font-semibold text-center w-12">#</th>
                         {parsedData.headers.map((h, i) => (

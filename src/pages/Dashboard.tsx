@@ -416,9 +416,9 @@ export function Dashboard() {
               produto.
             </div>
           ) : (
-            <ScrollableTable>
+            <ScrollableTable maxHeight="420px">
               <table className="w-full text-xs">
-                <thead>
+                <thead className="sticky top-0 z-20 bg-white shadow-[0_1px_0_0_#DCE5DC]">
                   <tr className="border-b border-[#DCE5DC] text-left text-[#5A6D5A]">
                     <th className="pb-2 font-semibold">Horário</th>
                     <th className="pb-2 font-semibold">Produto</th>

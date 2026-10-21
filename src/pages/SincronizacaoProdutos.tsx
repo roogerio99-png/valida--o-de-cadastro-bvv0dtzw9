@@ -741,9 +741,9 @@ export function SincronizacaoProdutos() {
               </p>
             </div>
           ) : (
-            <ScrollableTable>
+            <ScrollableTable maxHeight="calc(100vh - 310px)">
               <Table>
-                <TableHeader>
+                <TableHeader className="sticky top-0 z-20 bg-[#FAFBF9] shadow-[0_1px_0_0_#DCE5DC]">
                   <TableRow className="bg-[#FAFBF9]">
                     <TableHead className="w-10"></TableHead>
                     <TableHead>Data e Horário</TableHead>

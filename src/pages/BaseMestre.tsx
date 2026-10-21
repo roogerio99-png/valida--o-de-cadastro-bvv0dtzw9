@@ -937,9 +937,9 @@ export function BaseMestre() {
 
       {/* Tabela da Base Mestre com Colunas Canônicas Visíveis e Expansão para os 28 Campos */}
       <Card className="rounded-2xl border-[#DCE5DC] bg-white shadow-sm overflow-hidden">
-        <ScrollableTable>
+        <ScrollableTable maxHeight="calc(100vh - 310px)">
           <table className="w-full text-xs">
-            <thead>
+            <thead className="sticky top-0 z-20 bg-[#F5F7F1] shadow-[0_1px_0_0_#DCE5DC]">
               <tr className="bg-[#F5F7F1] border-b border-[#DCE5DC] text-left text-[#5A6D5A]">
                 <th className="py-3 px-3 w-10 text-center">
                   <div className="flex items-center justify-center">

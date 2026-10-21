@@ -5,6 +5,15 @@ export interface ScrollableTableProps extends React.HTMLAttributes<HTMLDivElemen
   children: React.ReactNode
   /** Classe adicional para o container de rolagem real */
   scrollClassName?: string
+  /**
+   * Altura máxima do viewport da tabela para criar container com scroll vertical próprio.
+   * Por padrão usa 'calc(100vh - 270px)', adaptando-se perfeitamente à tela e mantendo
+   * thead no topo e barra horizontal sempre visível no rodapé do container.
+   * Se definido como 'none', não aplica restrição de altura.
+   */
+  maxHeight?: string
+  /** Altura mínima para o container de dados da tabela (padrão: 320px) */
+  minHeight?: string
   /** Se deve forçar ocultação da barra flutuante (ex.: quando a tela é muito pequena) */
   hideFloatingBarOnTouch?: boolean
 }
@@ -12,26 +21,34 @@ export interface ScrollableTableProps extends React.HTMLAttributes<HTMLDivElemen
 /**
  * ScrollableTable
  *
- * Componente wrapper para tabelas com rolagem horizontal que implementa
- * uma barra de rolagem horizontal flutuante (docked / sticky no viewport visível).
+ * Componente contêiner para tabelas largas e longas.
  *
- * Resolve o problema de tabelas longas e largas onde o usuário precisava
- * rolar até o fim vertical da página para conseguir rolar horizontalmente.
+ * Resolve definitivamente o problema relatado pelo usuário:
+ * "para eu ver os detalhes do produto roundup preciso ir até o final na barra
+ * de rolagem vertical para poder arrastar para o lado na horizontal, precisa
+ * deixar a barra de rolagem horizontal sempre a vista de forma fixa na tela,
+ * assim como o cabeçalho na parte superior, deve sempre ficar fixo e somente
+ * as informações rolar pra cima e para baixo"
  *
- * Recursos:
- * 1. Barra visível apenas quando há transbordamento horizontal real (`scrollWidth > clientWidth`).
- * 2. Posicionamento sticky no rodapé visível do container ou viewport do scroll da aplicação (`main`).
- * 3. Trilha e thumb estilizados, com arrasto suave (mouse drag, wheel e touch).
- * 4. Botões de deslocamento rápido (< e >) e porcentagem/indicador visual.
- * 5. Sincronização bidirecional em tempo real com o scroll nativo do container.
- * 6. Suporte nativo ao trackpad / Shift + roda do mouse e touch swipe.
- * 7. Não quebra sticky headers, seleções por checkbox ou linhas expansíveis.
+ * Arquitetura:
+ * 1. O contêiner interno (`containerRef`) possui overflow-x: auto E overflow-y: auto,
+ *    com altura calculada dinamicamente (`maxHeight` responsivo).
+ * 2. O thead da tabela fica sticky no top-0 deste contêiner (com z-20 e fundo opaco),
+ *    permitindo que as linhas rolem por baixo dele.
+ * 3. A barra de rolagem horizontal fica fixa/sticky no bottom-0 DO MESMO contêiner,
+ *    estando SEMPRE VISÍVEL desde o primeiro pixel, sem precisar descer até o fim da página.
+ * 4. Arrasto fluido por pointer drag no thumb, clique na trilha, botões de passo ‹ e ›,
+ *    e sincronização bidirecional em tempo real com wheel, trackpad e touch.
+ * 5. Preserva checkboxes, estado indeterminado, linhas expansíveis e ações.
  */
 export function ScrollableTable({
   children,
   className,
   scrollClassName,
-  hideFloatingBarOnTouch = true,
+  maxHeight = 'calc(100vh - 280px)',
+  minHeight = '320px',
+  hideFloatingBarOnTouch = false,
+  style,
   ...props
 }: ScrollableTableProps) {
   const containerRef = useRef<HTMLDivElement>(null)
@@ -43,7 +60,7 @@ export function ScrollableTable({
   const [isDragging, setIsDragging] = useState(false)
   const [isHovered, setIsHovered] = useState(false)
 
-  // Medições e atualização de dimensões
+  // Medição de overflow e dimensões do container
   const updateDimensions = useCallback(() => {
     const el = containerRef.current
     if (!el) return
@@ -64,7 +81,7 @@ export function ScrollableTable({
     }
   }, [])
 
-  // Sincronização quando o usuário rola o container nativo (wheel, trackpad, touch swipe, teclado)
+  // Sincronização quando o usuário rola o container nativo
   const handleNativeScroll = useCallback(() => {
     const el = containerRef.current
     if (!el) return
@@ -129,7 +146,11 @@ export function ScrollableTable({
     }
 
     setIsDragging(true)
-    ;(e.target as HTMLElement).setPointerCapture(e.pointerId)
+    try {
+      ;(e.target as HTMLElement).setPointerCapture(e.pointerId)
+    } catch {
+      // Ignora erro caso pointer capture falhe
+    }
   }
 
   const handleThumbPointerMove = (e: React.PointerEvent<HTMLDivElement>) => {
@@ -157,13 +178,12 @@ export function ScrollableTable({
     try {
       ;(e.target as HTMLElement).releasePointerCapture(e.pointerId)
     } catch {
-      // Ignora erro de release caso o ponteiro já tenha sido liberado
+      // Ignora erro caso o ponteiro já tenha sido liberado
     }
   }
 
   // Clique direto na trilha (pula para aquela posição proporcional)
   const handleTrackClick = (e: React.MouseEvent<HTMLDivElement>) => {
-    // Se o clique foi no thumb, não faz nada (já tratado pelo pointer down)
     if ((e.target as HTMLElement).dataset?.role === 'thumb') return
 
     const track = trackRef.current
@@ -175,7 +195,6 @@ export function ScrollableTable({
     const trackWidth = rect.width
     const thumbWidth = Math.max(40, trackWidth * thumbWidthRatio)
 
-    // Centraliza o thumb na posição do clique
     const targetThumbLeft = clickX - thumbWidth / 2
     const availableTrack = trackWidth - thumbWidth
     if (availableTrack <= 0) return
@@ -200,25 +219,38 @@ export function ScrollableTable({
     })
   }
 
-  // Cálculo da posição do thumb em pixels ou %
   const thumbLeftPercent = scrollProgress * (1 - thumbWidthRatio) * 100
   const thumbWidthPercent = thumbWidthRatio * 100
 
+  const containerHeightStyle: React.CSSProperties = {
+    ...(maxHeight && maxHeight !== 'none' ? { maxHeight } : {}),
+    ...(minHeight ? { minHeight } : {}),
+  }
+
   return (
     <div
-      className={cn('relative w-full group/scrollable', className)}
+      className={cn('relative w-full flex flex-col group/scrollable', className)}
       onMouseEnter={() => setIsHovered(true)}
       onMouseLeave={() => setIsHovered(false)}
+      style={style}
       {...props}
     >
-      {/* Container de Rolagem Real da Tabela */}
+      {/*
+        Container de rolagem vertical E horizontal da tabela.
+        Ao ter altura calculada + overflow-y: auto + overflow-x: auto:
+        1. thead com sticky top-0 trava perfeitamente no topo durante o scroll vertical das linhas.
+        2. Toda a barra flutuante horizontal fica docking no fundo do contêiner e nunca desce além do viewport visível.
+      */}
       <div
         ref={containerRef}
         onScroll={handleNativeScroll}
+        style={containerHeightStyle}
         className={cn(
-          'w-full overflow-x-auto overflow-y-visible',
-          // Oculta levemente a barra nativa no desktop para dar destaque à barra flutuante suave,
-          // mantendo a funcionalidade em trackpad e touch
+          'w-full overflow-x-auto overflow-y-auto relative',
+          // Regra CSS utilitária para fixar thead das tabelas filhas automaticamente
+          '[&_thead]:sticky [&_thead]:top-0 [&_thead]:z-20 [&_thead]:bg-[#F5F7F1] [&_thead_th]:bg-[#F5F7F1]',
+          '[&_thead_th]:shadow-[0_1px_0_0_#DCE5DC]',
+          // Scrollbars customizadas suaves
           'scrollbar-thin scrollbar-thumb-zinc-300 dark:scrollbar-thumb-zinc-700',
           scrollClassName,
         )}
@@ -226,22 +258,25 @@ export function ScrollableTable({
         {children}
       </div>
 
-      {/* Barra de Rolagem Horizontal Flutuante (Sticky) */}
+      {/*
+        Barra de Rolagem Horizontal Fixa na Base da Tabela.
+        Fica no rodapé do ScrollableTable. Como o container acima tem maxHeight,
+        esta barra fica SEMPRE VISÍVEL na tela, logo abaixo do conteúdo visível,
+        mesmo com milhares de linhas. O usuário nunca precisa rolar verticalmente
+        até o final para arrastar horizontalmente!
+      */}
       {hasOverflow && (
         <div
           className={cn(
-            'sticky bottom-0 left-0 right-0 z-30 pt-1.5 pb-2 px-3',
+            'w-full pt-1.5 pb-2 px-3 z-30 flex-shrink-0',
             'transition-all duration-200 ease-out select-none',
-            // Efeito flutuante com fundo translúcido e borda suave
             'bg-white/95 dark:bg-zinc-950/95 backdrop-blur-md border-t border-[#DCE5DC] dark:border-zinc-800 shadow-[0_-4px_12px_rgba(0,0,0,0.06)]',
-            // Visível sempre ou realçada ao hover/drag
             isDragging || isHovered
               ? 'opacity-100 shadow-[0_-6px_16px_rgba(0,0,0,0.09)]'
-              : 'opacity-90',
-            // Em dispositivos exclusivamente touch com largura reduzida, pode ocultar se solicitado
+              : 'opacity-95',
             hideFloatingBarOnTouch ? 'hidden sm:block' : 'block',
           )}
-          aria-label="Controle de rolagem horizontal flutuante da tabela"
+          aria-label="Controle de rolagem horizontal fixo da tabela"
         >
           <div className="flex items-center gap-2 max-w-full">
             {/* Botão de deslizar à esquerda */}
@@ -281,7 +316,7 @@ export function ScrollableTable({
                 style={{
                   left: `${thumbLeftPercent}%`,
                   width: `${thumbWidthPercent}%`,
-                  minWidth: '40px',
+                  minWidth: '44px',
                 }}
                 className={cn(
                   'absolute top-0 bottom-0 rounded-full cursor-grab active:cursor-grabbing transition-transform',
@@ -290,7 +325,7 @@ export function ScrollableTable({
                   isDragging && 'ring-2 ring-emerald-400 ring-offset-1',
                 )}
               >
-                {/* Indicador visual com 3 pontinhos para conforto de drag */}
+                {/* 3 pontinhos para conforto de drag */}
                 <div className="flex items-center gap-0.5 pointer-events-none opacity-80">
                   <span className="w-1 h-1 rounded-full bg-white/90" />
                   <span className="w-1 h-1 rounded-full bg-white/90" />
@@ -316,7 +351,7 @@ export function ScrollableTable({
               </svg>
             </button>
 
-            {/* Indicador sutil de orientação */}
+            {/* Indicador visual de orientação */}
             <span className="hidden md:inline-flex items-center text-[10px] text-[#5A6D5A] font-medium shrink-0 ml-1">
               Deslize para ver colunas
             </span>
