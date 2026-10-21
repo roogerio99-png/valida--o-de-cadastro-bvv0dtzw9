@@ -102,4 +102,22 @@ describe('Testes de Conformidade do Motor Canônico (Especificação v2.4.0)', (
     expect(res.sub_grupo).toBe('Inconclusivo / Não Reconhecido')
     expect(res.ncm_padrao).toBe('3808.99.99')
   })
+
+  it('T5: Classifica ROUNDUP WG canonicamente na NCM 3808.92.34 como Herbicida Formulado Comercial', () => {
+    const res = executarMotorCanonicoFrontend({
+      nome_completo: 'ROUNDUP WG',
+      ncm: '3808.93.24',
+      principio_ativo: 'Glifosato',
+      embalagem: 'Saco 20 kg',
+      registro_mapa: 'Nº 002094',
+    })
+
+    expect(res.tipo_produto).toBe('Produto Formulado Comercial')
+    expect(res.sub_grupo).toBe('Herbicida')
+    expect(res.ncm_padrao).toBe('3808.92.34')
+    expect(res.ncm_faixa1_ate_300g).toBe('3808.92.34')
+    expect(res.ncm_faixa2_300g_a_7_5kg).toBe('3808.92.34')
+    expect(res.ncm_faixa3_7_5kg_a_10kg).toBe('3808.92.34')
+    expect(res.ncm_faixa4_acima_10kg).toBe('3808.92.34')
+  })
 })

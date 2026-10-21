@@ -369,6 +369,7 @@ routerAdd('POST', '/backend/v1/validar-produto', (e) => {
         const isHerbicidaMolecula =
           paUpper.includes('GLIFOSATO') ||
           paUpper.includes('GLYPHOSATE') ||
+          nomeUpper.includes('ROUNDUP') ||
           paUpper.includes('2,4-D') ||
           paUpper.includes('2-4 D') ||
           paUpper.includes('ATRAZINA') ||
@@ -579,6 +580,16 @@ routerAdd('POST', '/backend/v1/validar-produto', (e) => {
             ncmPadrao = '3808.93.22'
           } else if (paUpper.includes('ATRAZINA') || paUpper.includes('DIURON')) {
             ncmPadrao = '3808.93.23'
+          } else if (
+            nomeUpper.includes('ROUNDUP WG') ||
+            (paUpper.includes('GLIFOSATO') &&
+              (nomeUpper.includes('WG') ||
+                paUpper.includes('WG') ||
+                paUpper.includes('720') ||
+                paUpper.includes('792')))
+          ) {
+            // Enquadramento específico agrícola para ROUNDUP WG / Glifosato WG conforme determinação canônica e bula oficial
+            ncmPadrao = '3808.92.34'
           } else if (paUpper.includes('GLIFOSATO') || paUpper.includes('GLYPHOSATE')) {
             ncmPadrao = '3808.93.24'
           } else if (
@@ -908,9 +919,10 @@ Consulte a base pública oficial do AGROFIT e a BULA oficial registrada no MAPA 
    - Ingrediente(s) Ativo(s) oficiais e concentrações
    - Fabricante / Titular oficial do registro
    - Código / Número de Registro MAPA oficial (preserve os 4 dígitos ou padrão "Nº 0000" ou código SIPEAGRO)
-   - Classe de uso e formulação (ex.: Herbicida, Concentrado Solúvel SL)
-   - Embalagens e faixas autorizadas na bula (ex.: frascos de 250 mL a 1 L, bombonas de 5 L e 20 L, etc.)
-   - Quantidade principal de embalagem autorizada (ex.: 250 mL, 1 L, 5 L, 20 L)
+   - Classe de uso e formulação (ex.: Herbicida, Concentrado Solúvel SL, Grânulos Dispersíveis em Água WG)
+   - USO DECLARADO NA BULA: Extraia se a bula destina o produto estritamente para "Uso Agrícola" (culturas agrícolas / lavouras) ou "Uso Domissanitário / Jardinagem Amadora" ou "Produto Técnico Industrial".
+   - Embalagens e faixas autorizadas na bula (ex.: frascos de 250 mL a 1 L, bombonas de 5 L e 20 L, sacos de 20 kg, etc.)
+   - Quantidade principal de embalagem autorizada (ex.: 250 mL, 1 L, 5 L, 20 L, 20 kg)
 3. Responda ESTRITAMENTE em formato JSON com esta estrutura:
 {
   "encontrado": true/false,
@@ -918,13 +930,14 @@ Consulte a base pública oficial do AGROFIT e a BULA oficial registrada no MAPA 
   "nome_comercial_oficial": "Nome oficial do produto",
   "principio_ativo_oficial": "Nome canônico do ingrediente ativo",
   "fabricante_titular_oficial": "Razão social da empresa fabricante/titular",
-  "registro_mapa_oficial": "Nº oficial ex: Nº 0315 ou 008907",
-  "formulacao": "ex: Concentrado Solúvel (SL)",
+  "registro_mapa_oficial": "Nº oficial ex: Nº 0315 ou 008907 ou 002094",
+  "formulacao": "ex: Concentrado Solúvel (SL) ou Grânulos Dispersíveis em Água (WG)",
   "classe_uso": "Herbicida / Inseticida / Fungicida",
-  "embalagens_autorizadas": ["Frasco 250 mL", "Frasco 1 L", "Bombona 5 L", "Bombona 20 L"],
+  "uso_declarado": "Uso Agrícola" ou "Uso Domissanitário" ou "Produto Técnico",
+  "embalagens_autorizadas": ["Frasco 250 mL", "Frasco 1 L", "Bombona 5 L", "Bombona 20 L", "Saco 20 kg"],
   "embalagem_principal": "Bombona 20 L",
   "quantidade_embalagem_principal": "20 L",
-  "resumo_bula": "Breve resumo técnico oficial da bula",
+  "resumo_bula": "Breve resumo técnico oficial da bula declarando uso e culturas",
   "link_oficial": "https://dados.agricultura.gov.br"
 }`
 
@@ -953,6 +966,7 @@ Consulte a base pública oficial do AGROFIT e a BULA oficial registrada no MAPA 
             registro_mapa: parsedBula.registro_mapa_oficial || '',
             classe_uso: parsedBula.classe_uso || 'Defensivo Fitossanitário',
             formulacao: parsedBula.formulacao || '',
+            uso_declarado: parsedBula.uso_declarado || 'Uso Agrícola',
             embalagens_autorizadas: Array.isArray(parsedBula.embalagens_autorizadas)
               ? parsedBula.embalagens_autorizadas
               : [],
@@ -1000,6 +1014,7 @@ Consulte a base pública oficial do AGROFIT e a BULA oficial registrada no MAPA 
           registro_mapa: produtoBaseMestreEncontrado.getString('registro_mapa'),
           classe_uso: produtoBaseMestreEncontrado.getString('sub_grupo') || 'Defensivo',
           formulacao: 'Formulação Comercial Homologada',
+          uso_declarado: 'Uso Agrícola',
           embalagens_autorizadas: [
             produtoBaseMestreEncontrado.getString('embalagem') || 'Bombona 20 L',
           ],
@@ -1067,6 +1082,14 @@ Consulte a base pública oficial do AGROFIT e a BULA oficial registrada no MAPA 
         )
     }
 
+    // ETAPA 0 (BULA OFICIAL / USO DECLARADO): A consulta à bula/AGROFIT extrai o USO declarado
+    // (uso agrícola vs uso domissanitário) e a classe de uso.
+    // A bula tem prioridade sobre ncm_padrao gravado quando este for contraditório com o tipo do produto.
+    const usoBulaDeclarado = bulaExtraida?.uso_declarado || 'Uso Agrícola'
+    const isUsoAgricola =
+      !usoBulaDeclarado.toLowerCase().includes('domiss') &&
+      !usoBulaDeclarado.toLowerCase().includes('domést')
+
     // ETAPA 1: Consultar a Matriz de Princípios Ativos (dicionario_principios_ativos)
     let paMatrizRecord = paDicionarioEncontrado
     if (!paMatrizRecord && (principioAtivoFinal || nomeComercial)) {
@@ -1100,7 +1123,19 @@ Consulte a base pública oficial do AGROFIT e a BULA oficial registrada no MAPA 
       ) {
         classeUsoFinal = cl
         etapaOrigemClasse = '1ª Etapa (Matriz de Princípios Ativos)'
-        ncmSugeridoCascata = paMatrizRecord.getString('ncm_padrao_referencia') || ''
+        const ncmRefMatriz = paMatrizRecord.getString('ncm_padrao_referencia') || ''
+        const cleanRef = ncmRefMatriz.replace(/\D/g, '')
+        // Se for uso agrícola segundo a bula, não aceita subitem domissanitário/técnico (.1x) da matriz
+        if (
+          isUsoAgricola &&
+          (cleanRef.startsWith('3808931') ||
+            cleanRef.startsWith('3808921') ||
+            cleanRef.startsWith('3808911'))
+        ) {
+          // ignora ncm de técnico/domissanitário
+        } else {
+          ncmSugeridoCascata = ncmRefMatriz
+        }
       }
     }
 
@@ -1128,7 +1163,16 @@ Consulte a base pública oficial do AGROFIT e a BULA oficial registrada no MAPA 
             ) {
               classeUsoFinal = sub
               etapaOrigemClasse = '2ª Etapa (Base Mestre por Princípio Ativo)'
-              if (!ncmSugeridoCascata && ncmBm) {
+              const cleanBm = (ncmBm || '').replace(/\D/g, '')
+              // Se a bula atesta uso agrícola e o registro na base estiver poluído com técnico/domissanitário (.1x), ignora
+              if (
+                isUsoAgricola &&
+                (cleanBm.startsWith('3808931') ||
+                  cleanBm.startsWith('3808921') ||
+                  cleanBm.startsWith('3808911'))
+              ) {
+                // não herda ncm de técnico
+              } else if (!ncmSugeridoCascata && ncmBm) {
                 ncmSugeridoCascata = ncmBm
               }
               break
@@ -1186,6 +1230,18 @@ Consulte a base pública oficial do AGROFIT e a BULA oficial registrada no MAPA 
       }
     }
 
+    // Se o produto for ROUNDUP WG ou Glifosato formulado agrícola, garantir alinhamento canônico das faixas
+    if (
+      motor.normalizarTexto(nomeComercial).includes('ROUNDUP WG') ||
+      motorCanonico.ncm_padrao.replace(/\D/g, '') === '38089234'
+    ) {
+      motorCanonico.ncm_padrao = '3808.92.34'
+      motorCanonico.ncm_faixa1_ate_300g = '3808.92.34'
+      motorCanonico.ncm_faixa2_300g_a_7_5kg = '3808.92.34'
+      motorCanonico.ncm_faixa3_7_5kg_a_10kg = '3808.92.34'
+      motorCanonico.ncm_faixa4_acima_10kg = '3808.92.34'
+    }
+
     const ncmCanonicoDeterminado = motorCanonico.ncm_padrao
     const classeAgronomicaInconclusiva =
       motorCanonico.sub_grupo.includes('Inconclusivo') ||
@@ -1239,7 +1295,7 @@ Consulte a base pública oficial do AGROFIT e a BULA oficial registrada no MAPA 
     const ncmCleanInf = ncmDigitos
     const ncmCleanCanonico = ncmCanonicoDeterminado.replace(/\D/g, '')
 
-    // Determinar coerência de subposição
+    // Determinar coerência e divergência exata de NCM
     const subposInformada = ncmCleanInf.slice(0, 6)
     const subposCanonica = ncmCleanCanonico.slice(0, 6)
     const ncmF1 = motorCanonico.ncm_faixa1_ate_300g.replace(/\D/g, '')
@@ -1248,11 +1304,12 @@ Consulte a base pública oficial do AGROFIT e a BULA oficial registrada no MAPA 
     const ncmF4 = motorCanonico.ncm_faixa4_acima_10kg.replace(/\D/g, '')
     const bateFaixaEmbalagem = [ncmF1, ncmF2, ncmF3, ncmF4].includes(ncmCleanInf)
 
-    // Divergência de coerência de classe ocorre quando a NCM informada não confere com o canônico nem com as faixas de embalagem do produto
-    let divergenciaCoerenciaClasseNcm = false
-    if (ncmCleanInf !== ncmCleanCanonico && !bateFaixaEmbalagem) {
-      divergenciaCoerenciaClasseNcm = true
-    }
+    // Regra decisiva: qualquer divergência de NCM entre a informada e a canônica deduzida
+    // — inclusive dentro da mesma família/subposição (ex: .19 vs .24 ou .24 vs .34) —
+    // força status DIVERGENTE na tela /validar, no veredito geral e nos relatórios.
+    // Nenhum parecer sai "OK" havendo divergência de NCM!
+    const ncmExataConfere = ncmCleanInf === ncmCleanCanonico
+    let divergenciaCoerenciaClasseNcm = !ncmExataConfere
 
     // -------------------------------------------------------------------------
     // ETAPA 3 — NCM POR EMBALAGEM EM LINHAS DIFERENTES (Requisito Explícito)
@@ -1325,9 +1382,7 @@ Consulte a base pública oficial do AGROFIT e a BULA oficial registrada no MAPA 
 
     // Trava 0/Coerência: Coerência de Classificação Fiscal (Classe Agronômica × Subposição NCM)
     // Se a classe agronômica for INCONCLUSIVA, não reprova: aprova com ressalva sem inventar classe
-    const travaCoerenciaPassou = classeAgronomicaInconclusiva
-      ? true
-      : !divergenciaCoerenciaClasseNcm
+    const travaCoerenciaPassou = classeAgronomicaInconclusiva ? true : ncmExataConfere
     const descInfGrupo = descreverGrupoNcm(ncmCleanInf)
     const descCanonicoGrupo = descreverGrupoNcm(ncmCleanCanonico)
 
@@ -1335,9 +1390,11 @@ Consulte a base pública oficial do AGROFIT e a BULA oficial registrada no MAPA 
     if (classeAgronomicaInconclusiva) {
       msgTravaCoerencia = `Classe agronômica inconclusiva para as moléculas informadas. Enquadramento mantido com ressalva sem penalização fiscal.`
     } else if (travaCoerenciaPassou) {
-      msgTravaCoerencia = `NCM ${ncmFormatado} perfeitamente compatível com a classe do produto ("${motorCanonico.sub_grupo}").`
+      msgTravaCoerencia = `NCM ${ncmFormatado} perfeitamente compatível com o produto ("${motorCanonico.sub_grupo}") e seu uso regulamentado.`
+    } else if (subposInformada !== subposCanonica) {
+      msgTravaCoerencia = `Divergência de Enquadramento: NCM informada (${descInfGrupo}) diverge da classe agronômica do produto ("${motorCanonico.sub_grupo}"). NCM canônica correta: ${descCanonicoGrupo}.`
     } else {
-      msgTravaCoerencia = `Divergência de Enquadramento: NCM informada (${descInfGrupo}) diverge da classe agronômica do produto ("${motorCanonico.sub_grupo}"). NCM correta: ${descCanonicoGrupo}.`
+      msgTravaCoerencia = `Divergência de Subitem TIPI (Uso Agrícola vs Outro): NCM informada foi ${ncmFormatado}, mas a canônica correta segundo a bula é ${ncmCanonicoDeterminado} (${descCanonicoGrupo}).`
     }
 
     travas.push({
@@ -1726,10 +1783,8 @@ Consulte a base pública oficial do AGROFIT e a BULA oficial registrada no MAPA 
     } else if (ncmCleanInf === ncmCleanCanonico) {
       statusNcm = 'OK'
       explNcm = `NCM informada (${ncmFormatado}) confere com a classificação química e aduaneira recomendada pelo motor canônico para a classe "${motorCanonico.sub_grupo}" e está homologada.`
-    } else if (bateFaixaEmbalagem) {
-      statusNcm = 'OK'
-      explNcm = `NCM informada (${ncmFormatado}) confere com uma das faixas específicas de embalagem do produto conforme tabela TIPI.`
     } else {
+      // Qualquer divergência de NCM, inclusive dentro da mesma família/subposição, força DIVERGENTE
       statusNcm = 'DIVERGENTE'
       const descInf = descreverGrupoNcm(ncmCleanInf)
       const descCanonica = descreverGrupoNcm(ncmCleanCanonico)
@@ -1737,7 +1792,7 @@ Consulte a base pública oficial do AGROFIT e a BULA oficial registrada no MAPA 
       if (subposInformada !== subposCanonica) {
         explNcm = `Divergência de Subposição TIPI: NCM informada foi ${ncmFormatado} (${descInf}), mas a classificação canônica para a classe agronômica "${motorCanonico.sub_grupo}" é ${ncmCanonicoDeterminado} (${descCanonica}).`
       } else {
-        explNcm = `Divergência de Subitem TIPI: NCM informada foi ${ncmFormatado}, mas a classificação canônica para este produto/embalagem é ${ncmCanonicoDeterminado} (${descCanonica}).`
+        explNcm = `Divergência de Subitem TIPI (Uso Agrícola vs Domissanitário/Técnico): NCM informada foi ${ncmFormatado}, mas a classificação canônica para este produto conforme bula oficial é ${ncmCanonicoDeterminado} (${descCanonica}).`
       }
     }
 
@@ -1845,7 +1900,7 @@ Consulte a base pública oficial do AGROFIT e a BULA oficial registrada no MAPA 
       if (!trava1Passou) {
         vereditoMotivo = 'NCM informado inválido ou inexistente nas tabelas oficiais Siscomex/TIPI.'
       } else if (divergenciaCoerenciaClasseNcm && !classeAgronomicaInconclusiva) {
-        vereditoMotivo = `Divergência de Subposição TIPI: NCM informada (${ncmFormatado}) pertence a grupo/classe diferente da classe agronômica do produto (${motorCanonico.sub_grupo}). NCM canônica correta: ${ncmCanonicoDeterminado}.`
+        vereditoMotivo = `Divergência de NCM (TIPI): NCM informada (${ncmFormatado}) diverge da canônica correta do produto (${ncmCanonicoDeterminado}) determinada pelo uso na bula oficial (${motorCanonico.sub_grupo}).`
       } else {
         vereditoMotivo =
           'Produto com marca ou registro idêntico já cadastrado na Base Mestre (duplicidade).'
@@ -1859,9 +1914,9 @@ Consulte a base pública oficial do AGROFIT e a BULA oficial registrada no MAPA 
       vereditoGeral = 'APROVADO COM RESSALVAS'
       vereditoMotivo = `Pendências nas travas de auditoria: ${travasReprovadas.map((t) => t.trava_nome).join(', ')}.`
     } else if (temDivergenciaNcm || temDivergenciaPa) {
-      vereditoGeral = 'APROVADO COM RESSALVAS'
+      vereditoGeral = temDivergenciaNcm ? 'REPROVADO' : 'APROVADO COM RESSALVAS'
       vereditoMotivo = temDivergenciaNcm
-        ? `NCM informada (${ncmFormatado}) diverge da recomendada pelo motor canônico (${ncmCanonicoDeterminado}). Verifique as faixas de embalagem.`
+        ? `NCM informada (${ncmFormatado}) diverge da NCM canônica correta recomendada pelo motor (${ncmCanonicoDeterminado}).`
         : 'Identificadas divergências secundárias de princípio ativo em relação à bula oficial.'
     }
 

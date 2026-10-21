@@ -387,6 +387,7 @@ export function executarMotorCanonicoFrontend(
     const isHerbicidaMolecula =
       paUpper.includes('GLIFOSATO') ||
       paUpper.includes('GLYPHOSATE') ||
+      nomeUpper.includes('ROUNDUP') ||
       paUpper.includes('2,4-D') ||
       paUpper.includes('2-4 D') ||
       paUpper.includes('ATRAZINA') ||
@@ -596,6 +597,16 @@ export function executarMotorCanonicoFrontend(
         ncmPadrao = '3808.93.22'
       } else if (paUpper.includes('ATRAZINA') || paUpper.includes('DIURON')) {
         ncmPadrao = '3808.93.23'
+      } else if (
+        nomeUpper.includes('ROUNDUP WG') ||
+        (paUpper.includes('GLIFOSATO') &&
+          (nomeUpper.includes('WG') ||
+            paUpper.includes('WG') ||
+            paUpper.includes('720') ||
+            paUpper.includes('792')))
+      ) {
+        // Enquadramento específico agrícola para ROUNDUP WG / Glifosato WG conforme determinação canônica e bula oficial
+        ncmPadrao = '3808.92.34'
       } else if (paUpper.includes('GLIFOSATO') || paUpper.includes('GLYPHOSATE')) {
         ncmPadrao = '3808.93.24'
       } else if (
