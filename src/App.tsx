@@ -7,6 +7,7 @@ import { RedefinirSenha } from './pages/RedefinirSenha'
 import { Dashboard } from './pages/Dashboard'
 import { Validar } from './pages/Validar'
 import { BaseMestre } from './pages/BaseMestre'
+import { CadastroBula } from './pages/CadastroBula'
 import { PrincipiosAtivos } from './pages/PrincipiosAtivos'
 import { Regras } from './pages/Regras'
 import { Parametrizacao } from './pages/Parametrizacao'
@@ -44,6 +45,8 @@ export function App() {
               <Route path="/dashboard" element={<Dashboard />} />
               <Route path="/validar" element={<Validar />} />
               <Route path="/base-mestre" element={<BaseMestre />} />
+              <Route path="/bula" element={<CadastroBula />} />
+              <Route path="/cadastro-bula" element={<Navigate to="/bula" replace />} />
               <Route path="/principios-ativos" element={<PrincipiosAtivos />} />
               <Route path="/regras" element={<Regras />} />
               <Route path="/parametrizacao" element={<Parametrizacao />} />

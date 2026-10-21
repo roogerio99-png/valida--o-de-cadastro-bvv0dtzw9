@@ -77,6 +77,13 @@ routerAdd('POST', '/backend/v1/importar-lote', (e) => {
       'dicionario_principios_ativos',
       'base_mestre',
       'regras_ncm_embalagem',
+      'bula_produtos',
+      'bula_composicao',
+      'bula_empresas',
+      'bula_embalagens',
+      'bula_culturas',
+      'bula_alvos',
+      'bula_aplicacao',
     ]
 
     if (!colecoesSuportadas.includes(collectionName)) {
@@ -938,6 +945,619 @@ routerAdd('POST', '/backend/v1/importar-lote', (e) => {
               `Falha ao salvar regra de NCM: ${detalhe.motivo}`,
               detalhe.campo || 'ncm',
               digits,
+              data,
+            )
+          }
+        }
+      }
+
+      // =======================================================================
+      // CASO 4: bula_produtos (Sheet 1: Cadastro_Mestre_1a1)
+      // =======================================================================
+      else if (collectionName === 'bula_produtos') {
+        for (let i = 0; i < records.length; i++) {
+          const itemWrapper = records[i]
+          const data = itemWrapper.data || itemWrapper
+          const rowNum = Number(itemWrapper.originalLine) || i + 1
+
+          const regMapaRaw = String(data.registro_mapa || '').trim()
+          const nomeComercial = String(data.nome_comercial || data.nome_produto || '').trim()
+
+          if (!regMapaRaw) {
+            registrarErro(
+              rowNum,
+              i + 1,
+              'Campo Obrigatório Ausente',
+              'O Registro MAPA é obrigatório para o cadastro da bula.',
+              'registro_mapa',
+              '',
+              data,
+            )
+            continue
+          }
+
+          if (!nomeComercial) {
+            registrarErro(
+              rowNum,
+              i + 1,
+              'Campo Obrigatório Ausente',
+              'O Nome Comercial do produto é obrigatório para o cadastro da bula.',
+              'nome_comercial',
+              '',
+              data,
+            )
+            continue
+          }
+
+          const regMapa = sanitizarMapa(regMapaRaw)
+          const escMapa = regMapa.replace(/'/g, "\\'")
+
+          // Upsert idempotente por registro_mapa
+          const existentes =
+            txApp.findRecordsByFilter(
+              'bula_produtos',
+              `registro_mapa = '${escMapa}'`,
+              '-created',
+              1,
+              0,
+            ) || []
+
+          let rec = null
+          let isUpdate = false
+          if (existentes.length > 0) {
+            rec = existentes[0]
+            isUpdate = true
+          } else {
+            rec = new Record(colTarget)
+          }
+
+          rec.set('registro_mapa', regMapa)
+          rec.set('nome_comercial', nomeComercial)
+          rec.set(
+            'marca_padronizada',
+            String(data.marca_padronizada || sanitizarMarca(nomeComercial)).trim(),
+          )
+          rec.set('titular_registro', String(data.titular_registro || data.fabricante || '').trim())
+          rec.set('fabricante_formulador', String(data.fabricante_formulador || '').trim())
+          rec.set('principio_ativo', String(data.principio_ativo || '').trim())
+          rec.set('classe_agronomica', String(data.classe_agronomica || '').trim())
+          rec.set('grupo_quimico', String(data.grupo_quimico || '').trim())
+          rec.set(
+            'classificacao_toxicologica',
+            String(data.classificacao_toxicologica || '').trim(),
+          )
+          rec.set('classificacao_ambiental', String(data.classificacao_ambiental || '').trim())
+          rec.set('tipo_formulacao', String(data.tipo_formulacao || '').trim())
+          rec.set('modo_acao', String(data.modo_acao || '').trim())
+          rec.set('ncm_padrao', fmtNcmMascara(data.ncm_padrao || data.ncm))
+          rec.set('tipo_produto', String(data.tipo_produto || 'Produto Formulado Comercial').trim())
+          rec.set('status_registro', String(data.status_registro || 'Ativo').trim())
+          if (data.dados_extras) {
+            rec.set('dados_extras', JSON.stringify(data.dados_extras))
+          }
+
+          try {
+            txApp.save(rec)
+            if (isUpdate) {
+              atualizados++
+              ignorados++
+            } else {
+              inseridos++
+            }
+          } catch (err) {
+            const detalhe = extrairDetalhesErroDb(err)
+            registrarErro(
+              rowNum,
+              i + 1,
+              'Erro no Banco de Dados',
+              `Falha ao salvar produto de bula: ${detalhe.motivo}`,
+              detalhe.campo || 'registro_mapa',
+              regMapa,
+              data,
+            )
+          }
+        }
+      }
+
+      // =======================================================================
+      // CASO 5: bula_composicao (Sheet 2: Composicao_Em_Linhas)
+      // =======================================================================
+      else if (collectionName === 'bula_composicao') {
+        for (let i = 0; i < records.length; i++) {
+          const itemWrapper = records[i]
+          const data = itemWrapper.data || itemWrapper
+          const rowNum = Number(itemWrapper.originalLine) || i + 1
+
+          const regMapaRaw = String(data.registro_mapa || '').trim()
+          const ingrediente = String(data.ingrediente_ativo || data.principio_ativo || '').trim()
+
+          if (!regMapaRaw || !ingrediente) {
+            registrarErro(
+              rowNum,
+              i + 1,
+              'Campo Obrigatório Ausente',
+              'Registro MAPA e Ingrediente Ativo são obrigatórios na composição da bula.',
+              !regMapaRaw ? 'registro_mapa' : 'ingrediente_ativo',
+              !regMapaRaw ? regMapaRaw : ingrediente,
+              data,
+            )
+            continue
+          }
+
+          const regMapa = sanitizarMapa(regMapaRaw)
+          const escMapa = regMapa.replace(/'/g, "\\'")
+          const escIa = ingrediente.replace(/'/g, "\\'")
+
+          // Upsert idempotente por chave natural (registro_mapa + ingrediente_ativo)
+          const existentes =
+            txApp.findRecordsByFilter(
+              'bula_composicao',
+              `registro_mapa = '${escMapa}' && ingrediente_ativo = '${escIa}'`,
+              '-created',
+              1,
+              0,
+            ) || []
+
+          let rec = null
+          let isUpdate = false
+          if (existentes.length > 0) {
+            rec = existentes[0]
+            isUpdate = true
+          } else {
+            rec = new Record(colTarget)
+          }
+
+          rec.set('registro_mapa', regMapa)
+          rec.set('nome_produto', String(data.nome_produto || '').trim())
+          rec.set('ingrediente_ativo', ingrediente)
+          rec.set('nome_quimico', String(data.nome_quimico || '').trim())
+          rec.set('numero_cas', String(data.numero_cas || '').trim())
+          rec.set('concentracao', String(data.concentracao || '').trim())
+          rec.set('unidade_medida', String(data.unidade_medida || 'g/L').trim())
+          rec.set('funcao_ingrediente', String(data.funcao_ingrediente || '').trim())
+          rec.set('grupo_quimico', String(data.grupo_quimico || '').trim())
+          if (data.dados_extras) rec.set('dados_extras', JSON.stringify(data.dados_extras))
+
+          try {
+            txApp.save(rec)
+            if (isUpdate) {
+              atualizados++
+              ignorados++
+            } else {
+              inseridos++
+            }
+          } catch (err) {
+            const detalhe = extrairDetalhesErroDb(err)
+            registrarErro(
+              rowNum,
+              i + 1,
+              'Erro no Banco de Dados',
+              `Falha ao salvar composição da bula: ${detalhe.motivo}`,
+              detalhe.campo || 'ingrediente_ativo',
+              ingrediente,
+              data,
+            )
+          }
+        }
+      }
+
+      // =======================================================================
+      // CASO 6: bula_empresas (Sheet 3: Cadeia_Empresas_Linhas)
+      // =======================================================================
+      else if (collectionName === 'bula_empresas') {
+        for (let i = 0; i < records.length; i++) {
+          const itemWrapper = records[i]
+          const data = itemWrapper.data || itemWrapper
+          const rowNum = Number(itemWrapper.originalLine) || i + 1
+
+          const regMapaRaw = String(data.registro_mapa || '').trim()
+          const razao = String(data.razao_social || data.empresa || '').trim()
+          const tipoRelacao = String(data.tipo_relacao || 'Formulador').trim()
+
+          if (!regMapaRaw || !razao) {
+            registrarErro(
+              rowNum,
+              i + 1,
+              'Campo Obrigatório Ausente',
+              'Registro MAPA e Razão Social são obrigatórios na cadeia de empresas.',
+              !regMapaRaw ? 'registro_mapa' : 'razao_social',
+              !regMapaRaw ? regMapaRaw : razao,
+              data,
+            )
+            continue
+          }
+
+          const regMapa = sanitizarMapa(regMapaRaw)
+          const escMapa = regMapa.replace(/'/g, "\\'")
+          const escRazao = razao.replace(/'/g, "\\'")
+          const escTipo = tipoRelacao.replace(/'/g, "\\'")
+
+          // Upsert idempotente por registro_mapa + razao_social + tipo_relacao
+          const existentes =
+            txApp.findRecordsByFilter(
+              'bula_empresas',
+              `registro_mapa = '${escMapa}' && razao_social = '${escRazao}' && tipo_relacao = '${escTipo}'`,
+              '-created',
+              1,
+              0,
+            ) || []
+
+          let rec = null
+          let isUpdate = false
+          if (existentes.length > 0) {
+            rec = existentes[0]
+            isUpdate = true
+          } else {
+            rec = new Record(colTarget)
+          }
+
+          rec.set('registro_mapa', regMapa)
+          rec.set('nome_produto', String(data.nome_produto || '').trim())
+          rec.set('tipo_relacao', tipoRelacao)
+          rec.set('razao_social', razao)
+          rec.set('nome_fantasia', String(data.nome_fantasia || '').trim())
+          rec.set('cnpj', String(data.cnpj || '').trim())
+          rec.set('endereco', String(data.endereco || '').trim())
+          rec.set('municipio', String(data.municipio || '').trim())
+          rec.set('uf', String(data.uf || '').trim())
+          rec.set('pais', String(data.pais || 'Brasil').trim())
+          if (data.dados_extras) rec.set('dados_extras', JSON.stringify(data.dados_extras))
+
+          try {
+            txApp.save(rec)
+            if (isUpdate) {
+              atualizados++
+              ignorados++
+            } else {
+              inseridos++
+            }
+          } catch (err) {
+            const detalhe = extrairDetalhesErroDb(err)
+            registrarErro(
+              rowNum,
+              i + 1,
+              'Erro no Banco de Dados',
+              `Falha ao salvar empresa da bula: ${detalhe.motivo}`,
+              detalhe.campo || 'razao_social',
+              razao,
+              data,
+            )
+          }
+        }
+      }
+
+      // =======================================================================
+      // CASO 7: bula_embalagens (Sheet 4: Embalagens_NCM_Linhas)
+      // =======================================================================
+      else if (collectionName === 'bula_embalagens') {
+        for (let i = 0; i < records.length; i++) {
+          const itemWrapper = records[i]
+          const data = itemWrapper.data || itemWrapper
+          const rowNum = Number(itemWrapper.originalLine) || i + 1
+
+          const regMapaRaw = String(data.registro_mapa || '').trim()
+          const tipoEmb = String(data.tipo_embalagem || data.embalagem || '').trim()
+          const cap = String(data.capacidade || '').trim()
+
+          if (!regMapaRaw) {
+            registrarErro(
+              rowNum,
+              i + 1,
+              'Campo Obrigatório Ausente',
+              'Registro MAPA é obrigatório nas embalagens da bula.',
+              'registro_mapa',
+              '',
+              data,
+            )
+            continue
+          }
+
+          const regMapa = sanitizarMapa(regMapaRaw)
+          const escMapa = regMapa.replace(/'/g, "\\'")
+          const escTipo = (tipoEmb || 'Padrão').replace(/'/g, "\\'")
+          const escCap = cap.replace(/'/g, "\\'")
+
+          // Upsert idempotente por registro_mapa + tipo_embalagem + capacidade
+          const existentes =
+            txApp.findRecordsByFilter(
+              'bula_embalagens',
+              `registro_mapa = '${escMapa}' && tipo_embalagem = '${escTipo}' && capacidade = '${escCap}'`,
+              '-created',
+              1,
+              0,
+            ) || []
+
+          let rec = null
+          let isUpdate = false
+          if (existentes.length > 0) {
+            rec = existentes[0]
+            isUpdate = true
+          } else {
+            rec = new Record(colTarget)
+          }
+
+          rec.set('registro_mapa', regMapa)
+          rec.set('nome_produto', String(data.nome_produto || '').trim())
+          rec.set('tipo_embalagem', tipoEmb || 'Padrão')
+          rec.set('material', String(data.material || '').trim())
+          rec.set('capacidade', cap)
+          rec.set('unidade_medida', String(data.unidade_medida || 'L').trim())
+          rec.set('ncm', fmtNcmMascara(data.ncm))
+          rec.set('destinacao_final', String(data.destinacao_final || '').trim())
+          if (data.dados_extras) rec.set('dados_extras', JSON.stringify(data.dados_extras))
+
+          try {
+            txApp.save(rec)
+            if (isUpdate) {
+              atualizados++
+              ignorados++
+            } else {
+              inseridos++
+            }
+          } catch (err) {
+            const detalhe = extrairDetalhesErroDb(err)
+            registrarErro(
+              rowNum,
+              i + 1,
+              'Erro no Banco de Dados',
+              `Falha ao salvar embalagem da bula: ${detalhe.motivo}`,
+              detalhe.campo || 'tipo_embalagem',
+              tipoEmb,
+              data,
+            )
+          }
+        }
+      }
+
+      // =======================================================================
+      // CASO 8: bula_culturas (Sheet 5: Culturas_Carencia_Linhas)
+      // =======================================================================
+      else if (collectionName === 'bula_culturas') {
+        for (let i = 0; i < records.length; i++) {
+          const itemWrapper = records[i]
+          const data = itemWrapper.data || itemWrapper
+          const rowNum = Number(itemWrapper.originalLine) || i + 1
+
+          const regMapaRaw = String(data.registro_mapa || '').trim()
+          const cultura = String(data.cultura || '').trim()
+
+          if (!regMapaRaw || !cultura) {
+            registrarErro(
+              rowNum,
+              i + 1,
+              'Campo Obrigatório Ausente',
+              'Registro MAPA e Cultura são obrigatórios nas culturas e carência.',
+              !regMapaRaw ? 'registro_mapa' : 'cultura',
+              !regMapaRaw ? regMapaRaw : cultura,
+              data,
+            )
+            continue
+          }
+
+          const regMapa = sanitizarMapa(regMapaRaw)
+          const escMapa = regMapa.replace(/'/g, "\\'")
+          const escCult = cultura.replace(/'/g, "\\'")
+
+          // Upsert idempotente por registro_mapa + cultura
+          const existentes =
+            txApp.findRecordsByFilter(
+              'bula_culturas',
+              `registro_mapa = '${escMapa}' && cultura = '${escCult}'`,
+              '-created',
+              1,
+              0,
+            ) || []
+
+          let rec = null
+          let isUpdate = false
+          if (existentes.length > 0) {
+            rec = existentes[0]
+            isUpdate = true
+          } else {
+            rec = new Record(colTarget)
+          }
+
+          rec.set('registro_mapa', regMapa)
+          rec.set('nome_produto', String(data.nome_produto || '').trim())
+          rec.set('cultura', cultura)
+          rec.set('intervalo_seguranca_dias', String(data.intervalo_seguranca_dias || '').trim())
+          rec.set('intervalo_reentrada_horas', String(data.intervalo_reentrada_horas || '').trim())
+          rec.set('modalidade_emprego', String(data.modalidade_emprego || '').trim())
+          rec.set(
+            'limite_maximo_residuos_lmr',
+            String(data.limite_maximo_residuos_lmr || '').trim(),
+          )
+          rec.set('observacoes', String(data.observacoes || '').trim())
+          if (data.dados_extras) rec.set('dados_extras', JSON.stringify(data.dados_extras))
+
+          try {
+            txApp.save(rec)
+            if (isUpdate) {
+              atualizados++
+              ignorados++
+            } else {
+              inseridos++
+            }
+          } catch (err) {
+            const detalhe = extrairDetalhesErroDb(err)
+            registrarErro(
+              rowNum,
+              i + 1,
+              'Erro no Banco de Dados',
+              `Falha ao salvar cultura da bula: ${detalhe.motivo}`,
+              detalhe.campo || 'cultura',
+              cultura,
+              data,
+            )
+          }
+        }
+      }
+
+      // =======================================================================
+      // CASO 9: bula_alvos (Sheet 6: Alvos_e_Doses_Linhas)
+      // =======================================================================
+      else if (collectionName === 'bula_alvos') {
+        for (let i = 0; i < records.length; i++) {
+          const itemWrapper = records[i]
+          const data = itemWrapper.data || itemWrapper
+          const rowNum = Number(itemWrapper.originalLine) || i + 1
+
+          const regMapaRaw = String(data.registro_mapa || '').trim()
+          const alvo = String(data.alvo_biologico || data.alvo || data.praga || '').trim()
+          const cultura = String(data.cultura || '').trim()
+
+          if (!regMapaRaw || !alvo) {
+            registrarErro(
+              rowNum,
+              i + 1,
+              'Campo Obrigatório Ausente',
+              'Registro MAPA e Alvo Biológico são obrigatórios nos alvos e doses.',
+              !regMapaRaw ? 'registro_mapa' : 'alvo_biologico',
+              !regMapaRaw ? regMapaRaw : alvo,
+              data,
+            )
+            continue
+          }
+
+          const regMapa = sanitizarMapa(regMapaRaw)
+          const escMapa = regMapa.replace(/'/g, "\\'")
+          const escAlvo = alvo.replace(/'/g, "\\'")
+          const escCult = cultura.replace(/'/g, "\\'")
+
+          // Upsert idempotente por registro_mapa + alvo_biologico + cultura
+          const existentes =
+            txApp.findRecordsByFilter(
+              'bula_alvos',
+              `registro_mapa = '${escMapa}' && alvo_biologico = '${escAlvo}' && cultura = '${escCult}'`,
+              '-created',
+              1,
+              0,
+            ) || []
+
+          let rec = null
+          let isUpdate = false
+          if (existentes.length > 0) {
+            rec = existentes[0]
+            isUpdate = true
+          } else {
+            rec = new Record(colTarget)
+          }
+
+          rec.set('registro_mapa', regMapa)
+          rec.set('nome_produto', String(data.nome_produto || '').trim())
+          rec.set('cultura', cultura)
+          rec.set('alvo_biologico', alvo)
+          rec.set('nome_cientifico', String(data.nome_cientifico || '').trim())
+          rec.set('dose_minima', String(data.dose_minima || '').trim())
+          rec.set('dose_maxima', String(data.dose_maxima || '').trim())
+          rec.set('unidade_dose', String(data.unidade_dose || '').trim())
+          rec.set('volume_calda', String(data.volume_calda || '').trim())
+          rec.set('numero_maximo_aplicacoes', String(data.numero_maximo_aplicacoes || '').trim())
+          rec.set('epoca_aplicacao', String(data.epoca_aplicacao || '').trim())
+          if (data.dados_extras) rec.set('dados_extras', JSON.stringify(data.dados_extras))
+
+          try {
+            txApp.save(rec)
+            if (isUpdate) {
+              atualizados++
+              ignorados++
+            } else {
+              inseridos++
+            }
+          } catch (err) {
+            const detalhe = extrairDetalhesErroDb(err)
+            registrarErro(
+              rowNum,
+              i + 1,
+              'Erro no Banco de Dados',
+              `Falha ao salvar alvo da bula: ${detalhe.motivo}`,
+              detalhe.campo || 'alvo_biologico',
+              alvo,
+              data,
+            )
+          }
+        }
+      }
+
+      // =======================================================================
+      // CASO 10: bula_aplicacao (Sheet 7: Aplicacao_e_EPI_Linhas)
+      // =======================================================================
+      else if (collectionName === 'bula_aplicacao') {
+        for (let i = 0; i < records.length; i++) {
+          const itemWrapper = records[i]
+          const data = itemWrapper.data || itemWrapper
+          const rowNum = Number(itemWrapper.originalLine) || i + 1
+
+          const regMapaRaw = String(data.registro_mapa || '').trim()
+          const tipoApl = String(data.tipo_aplicacao || 'Geral').trim()
+
+          if (!regMapaRaw) {
+            registrarErro(
+              rowNum,
+              i + 1,
+              'Campo Obrigatório Ausente',
+              'Registro MAPA é obrigatório nas informações de Aplicação e EPI.',
+              'registro_mapa',
+              '',
+              data,
+            )
+            continue
+          }
+
+          const regMapa = sanitizarMapa(regMapaRaw)
+          const escMapa = regMapa.replace(/'/g, "\\'")
+          const escTipo = tipoApl.replace(/'/g, "\\'")
+
+          // Upsert idempotente por registro_mapa + tipo_aplicacao
+          const existentes =
+            txApp.findRecordsByFilter(
+              'bula_aplicacao',
+              `registro_mapa = '${escMapa}' && tipo_aplicacao = '${escTipo}'`,
+              '-created',
+              1,
+              0,
+            ) || []
+
+          let rec = null
+          let isUpdate = false
+          if (existentes.length > 0) {
+            rec = existentes[0]
+            isUpdate = true
+          } else {
+            rec = new Record(colTarget)
+          }
+
+          rec.set('registro_mapa', regMapa)
+          rec.set('nome_produto', String(data.nome_produto || '').trim())
+          rec.set('tipo_aplicacao', tipoApl)
+          rec.set('equipamento_recomendado', String(data.equipamento_recomendado || '').trim())
+          rec.set('condicoes_meteorologicas', String(data.condicoes_meteorologicas || '').trim())
+          rec.set('epi_preparo_calda', String(data.epi_preparo_calda || '').trim())
+          rec.set('epi_aplicacao', String(data.epi_aplicacao || '').trim())
+          rec.set(
+            'medidas_primeiros_socorros',
+            String(data.medidas_primeiros_socorros || '').trim(),
+          )
+          rec.set('descarte_embalagens', String(data.descarte_embalagens || '').trim())
+          if (data.dados_extras) rec.set('dados_extras', JSON.stringify(data.dados_extras))
+
+          try {
+            txApp.save(rec)
+            if (isUpdate) {
+              atualizados++
+              ignorados++
+            } else {
+              inseridos++
+            }
+          } catch (err) {
+            const detalhe = extrairDetalhesErroDb(err)
+            registrarErro(
+              rowNum,
+              i + 1,
+              'Erro no Banco de Dados',
+              `Falha ao salvar aplicação/EPI da bula: ${detalhe.motivo}`,
+              detalhe.campo || 'tipo_aplicacao',
+              tipoApl,
               data,
             )
           }

@@ -11,6 +11,13 @@ import type {
   RespostaValidacaoCadastro,
   RespostaSincronizacao,
   HistoricoSincronizacaoRecord,
+  BulaProdutoItem,
+  BulaComposicaoItem,
+  BulaEmpresaItem,
+  BulaEmbalagemItem,
+  BulaCulturaItem,
+  BulaAlvoItem,
+  BulaAplicacaoItem,
 } from '@/types/agro'
 
 // -----------------------------------------------------------------------------
@@ -563,4 +570,88 @@ export async function importarEmLote<T extends Record<string, unknown>>(
   }
 
   return { inseridos, ignorados, erros, resumoCategorias }
+}
+
+// -----------------------------------------------------------------------------
+// Serviços do Cadastro de Bula (Mestre + 6 Blocos Acessórios)
+// -----------------------------------------------------------------------------
+
+export async function listarBulasProdutos(params?: {
+  page?: number
+  perPage?: number
+  filter?: string
+  sort?: string
+}) {
+  const page = params?.page || 1
+  const perPage = params?.perPage || 30
+  const sort = params?.sort || 'nome_comercial'
+  return pb.collection('bula_produtos').getList<BulaProdutoItem>(page, perPage, {
+    filter: params?.filter,
+    sort,
+  })
+}
+
+export async function obterBulaProdutoPorId(id: string) {
+  return pb.collection('bula_produtos').getOne<BulaProdutoItem>(id)
+}
+
+export async function criarBulaProduto(data: Partial<BulaProdutoItem>) {
+  return pb.collection('bula_produtos').create<BulaProdutoItem>(data)
+}
+
+export async function atualizarBulaProduto(id: string, data: Partial<BulaProdutoItem>) {
+  return pb.collection('bula_produtos').update<BulaProdutoItem>(id, data)
+}
+
+export async function excluirBulaProduto(id: string) {
+  return pb.collection('bula_produtos').delete(id)
+}
+
+// Blocos Acessórios filtrados pelo registro_mapa do produto
+export async function listarBulaComposicao(registroMapa: string) {
+  const cleanMapa = registroMapa.replace(/'/g, "\\'")
+  return pb.collection('bula_composicao').getFullList<BulaComposicaoItem>({
+    filter: `registro_mapa = '${cleanMapa}'`,
+    sort: 'ingrediente_ativo',
+  })
+}
+
+export async function listarBulaEmpresas(registroMapa: string) {
+  const cleanMapa = registroMapa.replace(/'/g, "\\'")
+  return pb.collection('bula_empresas').getFullList<BulaEmpresaItem>({
+    filter: `registro_mapa = '${cleanMapa}'`,
+    sort: 'tipo_relacao,razao_social',
+  })
+}
+
+export async function listarBulaEmbalagens(registroMapa: string) {
+  const cleanMapa = registroMapa.replace(/'/g, "\\'")
+  return pb.collection('bula_embalagens').getFullList<BulaEmbalagemItem>({
+    filter: `registro_mapa = '${cleanMapa}'`,
+    sort: 'tipo_embalagem,capacidade',
+  })
+}
+
+export async function listarBulaCulturas(registroMapa: string) {
+  const cleanMapa = registroMapa.replace(/'/g, "\\'")
+  return pb.collection('bula_culturas').getFullList<BulaCulturaItem>({
+    filter: `registro_mapa = '${cleanMapa}'`,
+    sort: 'cultura',
+  })
+}
+
+export async function listarBulaAlvos(registroMapa: string) {
+  const cleanMapa = registroMapa.replace(/'/g, "\\'")
+  return pb.collection('bula_alvos').getFullList<BulaAlvoItem>({
+    filter: `registro_mapa = '${cleanMapa}'`,
+    sort: 'cultura,alvo_biologico',
+  })
+}
+
+export async function listarBulaAplicacao(registroMapa: string) {
+  const cleanMapa = registroMapa.replace(/'/g, "\\'")
+  return pb.collection('bula_aplicacao').getFullList<BulaAplicacaoItem>({
+    filter: `registro_mapa = '${cleanMapa}'`,
+    sort: 'tipo_aplicacao',
+  })
 }

@@ -9,6 +9,132 @@ export interface RegraNcmEmbalagem extends RecordModel {
   updated: string
 }
 
+// -----------------------------------------------------------------------------
+// Tipos para Cadastro de Bula (Estrutura Mestre + Blocos Acessórios)
+// -----------------------------------------------------------------------------
+
+export interface BulaProdutoItem extends RecordModel {
+  registro_mapa: string
+  nome_comercial: string
+  marca_padronizada?: string
+  titular_registro?: string
+  fabricante_formulador?: string
+  principio_ativo?: string
+  classe_agronomica?: string
+  grupo_quimico?: string
+  classificacao_toxicologica?: string
+  classificacao_ambiental?: string
+  tipo_formulacao?: string
+  modo_acao?: string
+  ncm_padrao?: string
+  tipo_produto?: string
+  status_registro?: string
+  dados_extras?: Record<string, unknown>
+  created: string
+  updated: string
+}
+
+export interface BulaComposicaoItem extends RecordModel {
+  registro_mapa: string
+  nome_produto?: string
+  ingrediente_ativo: string
+  nome_quimico?: string
+  numero_cas?: string
+  concentracao?: string
+  unidade_medida?: string
+  funcao_ingrediente?: string
+  grupo_quimico?: string
+  dados_extras?: Record<string, unknown>
+  created: string
+  updated: string
+}
+
+export interface BulaEmpresaItem extends RecordModel {
+  registro_mapa: string
+  nome_produto?: string
+  tipo_relacao?: string
+  razao_social: string
+  nome_fantasia?: string
+  cnpj?: string
+  endereco?: string
+  municipio?: string
+  uf?: string
+  pais?: string
+  dados_extras?: Record<string, unknown>
+  created: string
+  updated: string
+}
+
+export interface BulaEmbalagemItem extends RecordModel {
+  registro_mapa: string
+  nome_produto?: string
+  tipo_embalagem?: string
+  material?: string
+  capacidade?: string
+  unidade_medida?: string
+  ncm?: string
+  destinacao_final?: string
+  dados_extras?: Record<string, unknown>
+  created: string
+  updated: string
+}
+
+export interface BulaCulturaItem extends RecordModel {
+  registro_mapa: string
+  nome_produto?: string
+  cultura: string
+  intervalo_seguranca_dias?: string
+  intervalo_reentrada_horas?: string
+  modalidade_emprego?: string
+  limite_maximo_residuos_lmr?: string
+  observacoes?: string
+  dados_extras?: Record<string, unknown>
+  created: string
+  updated: string
+}
+
+export interface BulaAlvoItem extends RecordModel {
+  registro_mapa: string
+  nome_produto?: string
+  cultura?: string
+  alvo_biologico: string
+  nome_cientifico?: string
+  dose_minima?: string
+  dose_maxima?: string
+  unidade_dose?: string
+  volume_calda?: string
+  numero_maximo_aplicacoes?: string
+  epoca_aplicacao?: string
+  dados_extras?: Record<string, unknown>
+  created: string
+  updated: string
+}
+
+export interface BulaAplicacaoItem extends RecordModel {
+  registro_mapa: string
+  nome_produto?: string
+  tipo_aplicacao?: string
+  equipamento_recomendado?: string
+  condicoes_meteorologicas?: string
+  epi_preparo_calda?: string
+  epi_aplicacao?: string
+  medidas_primeiros_socorros?: string
+  descarte_embalagens?: string
+  dados_extras?: Record<string, unknown>
+  created: string
+  updated: string
+}
+
+export interface BulaCompletaResponse {
+  produto: BulaProdutoItem
+  composicao: BulaComposicaoItem[]
+  empresas: BulaEmpresaItem[]
+  embalagens: BulaEmbalagemItem[]
+  culturas: BulaCulturaItem[]
+  alvos: BulaAlvoItem[]
+  aplicacao: BulaAplicacaoItem[]
+}
+
 export interface DicionarioPrincipioAtivo extends RecordModel {
   // Contrato Canônico de 13 Campos Químico-Fiscais (v2.5.0)
   principio_ativo_chave: string

@@ -42,57 +42,176 @@ interface ZoneConfig {
 }
 
 const DROP_ZONES: ZoneConfig[] = [
+  // --- ZONAS DE CADASTRO DE BULA OFICIAL (7 ABAS CONSOLIDADAS) ---
   {
-    id: 'validador',
+    id: 'bula_mestre',
     sheetIndex: 0,
-    sheetKeywords: ['validador', 'automatico', 'cenario'],
-    title: '1. Validador Automático',
-    subtitle: 'Planilha de produtos e parâmetros operacionais para inserção na Base Mestre.',
-    targetCollection: 'base_mestre',
+    sheetKeywords: [
+      'cadastro_mestre_1a1',
+      'cadastro_mestre',
+      'mestre_1a1',
+      'bula_produtos',
+      'sheet 1',
+    ],
+    title: 'Bula 1: Cadastro Mestre (1:1)',
+    subtitle:
+      'Cadastro principal 1:1 do produto formulado, registro MAPA, toxicologia e formulação.',
+    targetCollection: 'bula_produtos',
     expectedHeaders: [
-      'NOME PRODUTO',
-      'NCM',
-      'EMBALAGEM',
-      'PRINCIPIO ATIVO',
-      'FABRICANTE',
       'REGISTRO MAPA',
-      'CONCENTRACAO',
-    ],
-    sampleDescription: 'Importa itens diretamente para homologação na base_mestre',
-  },
-  {
-    id: 'regras',
-    sheetIndex: 1,
-    sheetKeywords: ['regras', 'ncm', 'tipi'],
-    title: '2. Regras NCM × Embalagem',
-    subtitle: 'Matriz regulamentar de NCMs, descrições TIPI e embalagens permitidas.',
-    targetCollection: 'regras_ncm_embalagem',
-    expectedHeaders: ['NCM', 'DESCRICAO', 'EMBALAGENS PERMITIDAS'],
-    sampleDescription: 'Popula as travas 1 e 2 de conformidade por classificação fiscal',
-  },
-  {
-    id: 'principios',
-    sheetIndex: 2,
-    sheetKeywords: ['dicionario', 'principios', 'ativos', 'moleculas'],
-    title: '3. Dicionário Princípios Ativos',
-    subtitle: 'Base de ingredientes ativos, toxicologia, classe e faixas de concentração.',
-    targetCollection: 'dicionario_principios_ativos',
-    expectedHeaders: [
+      'NOME COMERCIAL',
+      'MARCA PADRONIZADA',
+      'TITULAR REGISTRO',
       'PRINCIPIO ATIVO',
-      'CLASSE',
-      'GRUPO QUIMICO',
-      'CONCENTRACAO MIN',
-      'CONCENTRACAO MAX',
-      'UNIDADE',
+      'CLASSE AGRONOMICA',
+      'NCM',
     ],
-    sampleDescription: 'Popula as travas 3 e 5 de ingredientes ativos autorizados',
+    sampleDescription: 'Importa o produto principal para a coleção bula_produtos',
   },
+  {
+    id: 'bula_composicao',
+    sheetIndex: 1,
+    sheetKeywords: ['composicao_em_linhas', 'composicao', 'bula_composicao', 'sheet 2'],
+    title: 'Bula 2: Composição em Linhas',
+    subtitle: 'Ingredientes ativos, garantias, CAS e concentração em linhas.',
+    targetCollection: 'bula_composicao',
+    expectedHeaders: [
+      'REGISTRO MAPA',
+      'NOME PRODUTO',
+      'INGREDIENTE ATIVO',
+      'NOME QUIMICO',
+      'NUMERO CAS',
+      'CONCENTRACAO',
+      'UNIDADE MEDIDA',
+    ],
+    sampleDescription: 'Bloco acessório de composição química vinculado por registro_mapa',
+  },
+  {
+    id: 'bula_empresas',
+    sheetIndex: 2,
+    sheetKeywords: [
+      'cadeia_empresas_linhas',
+      'cadeia_empresas',
+      'empresas',
+      'bula_empresas',
+      'sheet 3',
+    ],
+    title: 'Bula 3: Cadeia de Empresas',
+    subtitle: 'Cadeia de empresas (titular, formulador, manipulador, importador).',
+    targetCollection: 'bula_empresas',
+    expectedHeaders: [
+      'REGISTRO MAPA',
+      'NOME PRODUTO',
+      'TIPO RELACAO',
+      'RAZAO SOCIAL',
+      'CNPJ',
+      'ENDERECO',
+      'UF',
+    ],
+    sampleDescription: 'Bloco acessório da cadeia produtiva e corporativa da bula',
+  },
+  {
+    id: 'bula_embalagens',
+    sheetIndex: 3,
+    sheetKeywords: [
+      'embalagens_ncm_linhas',
+      'embalagens_ncm',
+      'embalagens',
+      'bula_embalagens',
+      'sheet 4',
+    ],
+    title: 'Bula 4: Embalagens × NCM',
+    subtitle: 'Especificação técnica de recipientes, capacidades, materiais e NCM.',
+    targetCollection: 'bula_embalagens',
+    expectedHeaders: [
+      'REGISTRO MAPA',
+      'NOME PRODUTO',
+      'TIPO EMBALAGEM',
+      'MATERIAL',
+      'CAPACIDADE',
+      'NCM',
+    ],
+    sampleDescription: 'Bloco acessório de embalagens autorizadas e enquadramento fiscal',
+  },
+  {
+    id: 'bula_culturas',
+    sheetIndex: 4,
+    sheetKeywords: [
+      'culturas_carencia_linhas',
+      'culturas_carencia',
+      'culturas',
+      'bula_culturas',
+      'sheet 5',
+    ],
+    title: 'Bula 5: Culturas e Carência',
+    subtitle: 'Culturas autorizadas, período de carência (intervalo de segurança) e reentrada.',
+    targetCollection: 'bula_culturas',
+    expectedHeaders: [
+      'REGISTRO MAPA',
+      'NOME PRODUTO',
+      'CULTURA',
+      'INTERVALO SEGURANCA DIAS',
+      'MODALIDADE EMPREGO',
+    ],
+    sampleDescription: 'Bloco acessório agronômico de culturas e prazos de carência',
+  },
+  {
+    id: 'bula_alvos',
+    sheetIndex: 5,
+    sheetKeywords: [
+      'alvos_e_doses_linhas',
+      'alvos_e_doses',
+      'alvos',
+      'doses',
+      'bula_alvos',
+      'sheet 6',
+    ],
+    title: 'Bula 6: Alvos e Doses',
+    subtitle:
+      'Alvos biológicos (pragas, doenças, plantas daninhas), doses recomendadas e volume de calda.',
+    targetCollection: 'bula_alvos',
+    expectedHeaders: [
+      'REGISTRO MAPA',
+      'CULTURA',
+      'ALVO BIOLOGICO',
+      'DOSE MINIMA',
+      'DOSE MAXIMA',
+      'UNIDADE DOSE',
+    ],
+    sampleDescription: 'Bloco acessório de eficácia agronômica, pragas e dosagens',
+  },
+  {
+    id: 'bula_aplicacao',
+    sheetIndex: 6,
+    sheetKeywords: [
+      'aplicacao_e_epi_linhas',
+      'aplicacao_e_epi',
+      'aplicacao',
+      'epi',
+      'bula_aplicacao',
+      'sheet 7',
+    ],
+    title: 'Bula 7: Aplicação e EPI',
+    subtitle:
+      'Instruções de tecnologia de aplicação, condições meteorológicas, EPI e primeiros socorros.',
+    targetCollection: 'bula_aplicacao',
+    expectedHeaders: [
+      'REGISTRO MAPA',
+      'NOME PRODUTO',
+      'TIPO APLICACAO',
+      'EQUIPAMENTO RECOMENDADO',
+      'EPI APLICACAO',
+    ],
+    sampleDescription: 'Bloco acessório de segurança operacional, receituário e EPI',
+  },
+
+  // --- BASES HISTÓRICAS E FISCAIS (BASE MESTRE, TIPI, PRINCÍPIOS ATIVOS) ---
   {
     id: 'base_mestre',
     sheetIndex: 3,
     sheetKeywords: ['base mestre', '845', 'catalogo', 'mestre'],
-    title: '4. Base Mestre de Produtos',
-    subtitle: 'Catálogo mestre consolidado da empresa com histórico de produtos.',
+    title: 'Base Mestre de Produtos',
+    subtitle: 'Catálogo mestre consolidado de produtos e compliance fiscal.',
     targetCollection: 'base_mestre',
     expectedHeaders: [
       'CÓDIGO',
@@ -102,9 +221,35 @@ const DROP_ZONES: ZoneConfig[] = [
       'PA OFICIAL CORRETO',
       'MAPA OFICIAL LIMPO',
       'FABRICANTE',
-      'PESO/VOL UNIT',
     ],
-    sampleDescription: 'Popula a trava 4 para prevenção contra duplicidade cadastral',
+    sampleDescription: 'Popula o catálogo geral de 28 campos da base_mestre',
+  },
+  {
+    id: 'principios',
+    sheetIndex: 2,
+    sheetKeywords: ['dicionario', 'principios', 'ativos', 'moleculas'],
+    title: 'Dicionário Princípios Ativos',
+    subtitle: 'Matriz canônica de 13 campos de ingredientes ativos e regras TIPI.',
+    targetCollection: 'dicionario_principios_ativos',
+    expectedHeaders: [
+      'PRINCIPIO ATIVO',
+      'CLASSE',
+      'GRUPO QUIMICO',
+      'CONCENTRACAO MIN',
+      'CONCENTRACAO MAX',
+      'UNIDADE',
+    ],
+    sampleDescription: 'Popula as regras determinísticas de moléculas da matriz',
+  },
+  {
+    id: 'regras',
+    sheetIndex: 1,
+    sheetKeywords: ['regras', 'ncm', 'tipi'],
+    title: 'Regras NCM × Embalagem',
+    subtitle: 'Matriz regulamentar de NCMs, descrições TIPI e embalagens permitidas.',
+    targetCollection: 'regras_ncm_embalagem',
+    expectedHeaders: ['NCM', 'DESCRICAO', 'EMBALAGENS PERMITIDAS'],
+    sampleDescription: 'Popula as travas 1 e 2 de conformidade por classificação fiscal',
   },
 ]
 
@@ -189,7 +334,7 @@ export function cleanNumber(raw: string): number {
 
 export function Importar() {
   const { isAdmin } = useAuth()
-  const [activeZone, setActiveZone] = useState<ZoneConfig>(DROP_ZONES[3]) // Aba 4 selecionada por padrão para agilizar o fluxo do usuário
+  const [activeZone, setActiveZone] = useState<ZoneConfig>(DROP_ZONES[0]) // Aba Bula 1: Cadastro Mestre selecionada por padrão
   const [selectedFile, setSelectedFile] = useState<File | null>(null)
   const [availableSheets, setAvailableSheets] = useState<string[]>([])
   const [selectedSheet, setSelectedSheet] = useState<string>('')
@@ -231,7 +376,18 @@ export function Importar() {
 
       if (table.sheetNames && table.sheetNames.length > 0) {
         setAvailableSheets(table.sheetNames)
-        setSelectedSheet(table.sheetName || table.sheetNames[0])
+        const sheetEfetiva = table.sheetName || table.sheetNames[0]
+        setSelectedSheet(sheetEfetiva)
+
+        // Se o usuário estiver subindo um arquivo e a aba encontrada corresponder a outra DropZone,
+        // sincroniza a DropZone ativa automaticamente para maior comodidade
+        const matchingZone = DROP_ZONES.find((z) => {
+          const normS = normalize(sheetEfetiva)
+          return z.sheetKeywords.some((k) => normS.includes(normalize(k)))
+        })
+        if (matchingZone && matchingZone.id !== activeZone.id) {
+          setActiveZone(matchingZone)
+        }
       }
 
       if (table.headers.length === 0 || table.rows.length === 0) {
@@ -907,6 +1063,466 @@ export function Importar() {
             concentracao_max: 0,
             unidade: unidadeVal || '%',
             status: statusVal || 'Ativo',
+          },
+        })
+      }
+
+      // ------------------------------------------------------------------
+      // BULA 1: bula_produtos (Cadastro Mestre 1:1 da Bula)
+      // ------------------------------------------------------------------
+      else if (targetCol === 'bula_produtos') {
+        const mapa = getFieldValue(row, [
+          'registro_mapa',
+          'mapa',
+          'numero_mapa',
+          'codigo_mapa',
+          'registro',
+          'nr_registro',
+        ])
+        const nome = getFieldValue(row, [
+          'nome_comercial',
+          'marca_comercial',
+          'nome_produto',
+          'produto',
+          'descricao',
+          'nome',
+        ])
+        const titular = getFieldValue(row, [
+          'titular_registro',
+          'titular',
+          'empresa',
+          'fabricante',
+          'razao_social',
+        ])
+        const fab = getFieldValue(row, ['fabricante_formulador', 'formulador', 'fabricante'])
+        const pa = getFieldValue(row, [
+          'principio_ativo',
+          'ingrediente_ativo',
+          'pa',
+          'ativo',
+          'molecula',
+        ])
+        const classe = getFieldValue(row, ['classe_agronomica', 'classe', 'sub_grupo', 'funcao'])
+        const grupoQ = getFieldValue(row, ['grupo_quimico', 'grupo'])
+        const tox = getFieldValue(row, [
+          'classificacao_toxicologica',
+          'toxicologia',
+          'classe_tox',
+          'toxicidade',
+        ])
+        const amb = getFieldValue(row, [
+          'classificacao_ambiental',
+          'ambiental',
+          'periculosidade_ambiental',
+        ])
+        const form = getFieldValue(row, ['tipo_formulacao', 'formulacao'])
+        const modo = getFieldValue(row, ['modo_acao', 'acao'])
+        const ncmRaw = getFieldValue(row, ['ncm_padrao', 'ncm', 'classificacao_fiscal'])
+        const tipoProd = getFieldValue(row, ['tipo_produto', 'categoria'])
+        const statusReg = getFieldValue(row, ['status_registro', 'status', 'situacao'])
+
+        if (!mapa) {
+          rejeitados.push({
+            linhaOriginal: originalLineNum,
+            linhaLote: idx + 1,
+            motivo: 'Registro MAPA obrigatório ausente para o cadastro da bula.',
+            categoria: 'Registro MAPA Ausente',
+            campo: 'registro_mapa',
+            valor: 'vazio',
+            dados: row,
+          })
+          return
+        }
+
+        if (!nome) {
+          rejeitados.push({
+            linhaOriginal: originalLineNum,
+            linhaLote: idx + 1,
+            motivo: 'Nome Comercial do produto obrigatório ausente.',
+            categoria: 'Nome Comercial Ausente',
+            campo: 'nome_comercial',
+            valor: 'vazio',
+            dados: row,
+          })
+          return
+        }
+
+        validos.push({
+          originalLine: originalLineNum,
+          data: {
+            registro_mapa: mapa,
+            nome_comercial: nome,
+            marca_padronizada: nome,
+            titular_registro: titular,
+            fabricante_formulador: fab,
+            principio_ativo: pa,
+            classe_agronomica: classe,
+            grupo_quimico: grupoQ,
+            classificacao_toxicologica: tox,
+            classificacao_ambiental: amb,
+            tipo_formulacao: form,
+            modo_acao: modo,
+            ncm_padrao: cleanNcm(ncmRaw) ? formatarNcmMascara(cleanNcm(ncmRaw)) : ncmRaw,
+            tipo_produto: tipoProd || 'Produto Formulado Comercial',
+            status_registro: statusReg || 'Ativo',
+            dados_extras: row,
+          },
+        })
+      }
+
+      // ------------------------------------------------------------------
+      // BULA 2: bula_composicao (Composição em Linhas)
+      // ------------------------------------------------------------------
+      else if (targetCol === 'bula_composicao') {
+        const mapa = getFieldValue(row, [
+          'registro_mapa',
+          'mapa',
+          'numero_mapa',
+          'codigo_mapa',
+          'registro',
+        ])
+        const nomeProd = getFieldValue(row, ['nome_produto', 'nome_comercial', 'produto'])
+        const ia = getFieldValue(row, [
+          'ingrediente_ativo',
+          'principio_ativo',
+          'pa',
+          'ativo',
+          'molecula',
+          'quimico',
+        ])
+        const nomeQuim = getFieldValue(row, ['nome_quimico', 'quimico'])
+        const cas = getFieldValue(row, ['numero_cas', 'cas'])
+        const conc = getFieldValue(row, ['concentracao', 'teor', 'garantia'])
+        const und = getFieldValue(row, ['unidade_medida', 'unidade', 'uom'])
+        const func = getFieldValue(row, ['funcao_ingrediente', 'funcao', 'tipo'])
+        const grupoQ = getFieldValue(row, ['grupo_quimico', 'grupo'])
+
+        if (!mapa || !ia) {
+          rejeitados.push({
+            linhaOriginal: originalLineNum,
+            linhaLote: idx + 1,
+            motivo: !mapa
+              ? 'Registro MAPA obrigatório ausente.'
+              : 'Ingrediente Ativo obrigatório ausente.',
+            categoria: 'Campo Obrigatório Ausente',
+            campo: !mapa ? 'registro_mapa' : 'ingrediente_ativo',
+            valor: !mapa ? mapa || 'vazio' : ia || 'vazio',
+            dados: row,
+          })
+          return
+        }
+
+        validos.push({
+          originalLine: originalLineNum,
+          data: {
+            registro_mapa: mapa,
+            nome_produto: nomeProd,
+            ingrediente_ativo: ia,
+            nome_quimico: nomeQuim,
+            numero_cas: cas,
+            concentracao: conc,
+            unidade_medida: und || 'g/L',
+            funcao_ingrediente: func,
+            grupo_quimico: grupoQ,
+            dados_extras: row,
+          },
+        })
+      }
+
+      // ------------------------------------------------------------------
+      // BULA 3: bula_empresas (Cadeia de Empresas em Linhas)
+      // ------------------------------------------------------------------
+      else if (targetCol === 'bula_empresas') {
+        const mapa = getFieldValue(row, [
+          'registro_mapa',
+          'mapa',
+          'numero_mapa',
+          'codigo_mapa',
+          'registro',
+        ])
+        const nomeProd = getFieldValue(row, ['nome_produto', 'nome_comercial', 'produto'])
+        const tipoRel = getFieldValue(row, [
+          'tipo_relacao',
+          'tipo_empresa',
+          'relacao',
+          'funcao_empresa',
+          'papel',
+        ])
+        const razao = getFieldValue(row, [
+          'razao_social',
+          'empresa',
+          'nome_empresa',
+          'fabricante',
+          'titular',
+        ])
+        const fant = getFieldValue(row, ['nome_fantasia', 'fantasia'])
+        const cnpj = getFieldValue(row, ['cnpj', 'documento'])
+        const end = getFieldValue(row, ['endereco', 'logradouro'])
+        const mun = getFieldValue(row, ['municipio', 'cidade'])
+        const uf = getFieldValue(row, ['uf', 'estado'])
+        const pais = getFieldValue(row, ['pais'])
+
+        if (!mapa || !razao) {
+          rejeitados.push({
+            linhaOriginal: originalLineNum,
+            linhaLote: idx + 1,
+            motivo: !mapa
+              ? 'Registro MAPA obrigatório ausente.'
+              : 'Razão Social obrigatória ausente.',
+            categoria: 'Campo Obrigatório Ausente',
+            campo: !mapa ? 'registro_mapa' : 'razao_social',
+            valor: !mapa ? mapa || 'vazio' : razao || 'vazio',
+            dados: row,
+          })
+          return
+        }
+
+        validos.push({
+          originalLine: originalLineNum,
+          data: {
+            registro_mapa: mapa,
+            nome_produto: nomeProd,
+            tipo_relacao: tipoRel || 'Formulador',
+            razao_social: razao,
+            nome_fantasia: fant,
+            cnpj,
+            endereco: end,
+            municipio: mun,
+            uf,
+            pais: pais || 'Brasil',
+            dados_extras: row,
+          },
+        })
+      }
+
+      // ------------------------------------------------------------------
+      // BULA 4: bula_embalagens (Embalagens × NCM em Linhas)
+      // ------------------------------------------------------------------
+      else if (targetCol === 'bula_embalagens') {
+        const mapa = getFieldValue(row, [
+          'registro_mapa',
+          'mapa',
+          'numero_mapa',
+          'codigo_mapa',
+          'registro',
+        ])
+        const nomeProd = getFieldValue(row, ['nome_produto', 'nome_comercial', 'produto'])
+        const tipoEmb = getFieldValue(row, ['tipo_embalagem', 'embalagem', 'tipo', 'recipiente'])
+        const mat = getFieldValue(row, ['material', 'tipo_material'])
+        const cap = getFieldValue(row, ['capacidade', 'volume', 'peso', 'tamanho'])
+        const und = getFieldValue(row, ['unidade_medida', 'unidade'])
+        const ncmRaw = getFieldValue(row, ['ncm', 'classificacao_fiscal'])
+        const dest = getFieldValue(row, ['destinacao_final', 'destinacao', 'descarte'])
+
+        if (!mapa) {
+          rejeitados.push({
+            linhaOriginal: originalLineNum,
+            linhaLote: idx + 1,
+            motivo: 'Registro MAPA obrigatório ausente.',
+            categoria: 'Campo Obrigatório Ausente',
+            campo: 'registro_mapa',
+            valor: 'vazio',
+            dados: row,
+          })
+          return
+        }
+
+        validos.push({
+          originalLine: originalLineNum,
+          data: {
+            registro_mapa: mapa,
+            nome_produto: nomeProd,
+            tipo_embalagem: tipoEmb || 'Padrão',
+            material: mat,
+            capacidade: cap,
+            unidade_medida: und || 'L',
+            ncm: cleanNcm(ncmRaw) ? formatarNcmMascara(cleanNcm(ncmRaw)) : ncmRaw,
+            destinacao_final: dest,
+            dados_extras: row,
+          },
+        })
+      }
+
+      // ------------------------------------------------------------------
+      // BULA 5: bula_culturas (Culturas e Carência em Linhas)
+      // ------------------------------------------------------------------
+      else if (targetCol === 'bula_culturas') {
+        const mapa = getFieldValue(row, [
+          'registro_mapa',
+          'mapa',
+          'numero_mapa',
+          'codigo_mapa',
+          'registro',
+        ])
+        const nomeProd = getFieldValue(row, ['nome_produto', 'nome_comercial', 'produto'])
+        const cult = getFieldValue(row, ['cultura', 'culturas', 'cultivo', 'planta'])
+        const car = getFieldValue(row, [
+          'intervalo_seguranca_dias',
+          'intervalo_seguranca',
+          'carencia',
+          'dias_carencia',
+        ])
+        const reen = getFieldValue(row, [
+          'intervalo_reentrada_horas',
+          'intervalo_reentrada',
+          'reentrada',
+        ])
+        const mod = getFieldValue(row, ['modalidade_emprego', 'modalidade', 'aplicacao'])
+        const lmr = getFieldValue(row, ['limite_maximo_residuos_lmr', 'lmr'])
+        const obs = getFieldValue(row, ['observacoes', 'observacao', 'obs'])
+
+        if (!mapa || !cult) {
+          rejeitados.push({
+            linhaOriginal: originalLineNum,
+            linhaLote: idx + 1,
+            motivo: !mapa
+              ? 'Registro MAPA obrigatório ausente.'
+              : 'Cultura autorizada obrigatória ausente.',
+            categoria: 'Campo Obrigatório Ausente',
+            campo: !mapa ? 'registro_mapa' : 'cultura',
+            valor: !mapa ? mapa || 'vazio' : cult || 'vazio',
+            dados: row,
+          })
+          return
+        }
+
+        validos.push({
+          originalLine: originalLineNum,
+          data: {
+            registro_mapa: mapa,
+            nome_produto: nomeProd,
+            cultura: cult,
+            intervalo_seguranca_dias: car,
+            intervalo_reentrada_horas: reen,
+            modalidade_emprego: mod,
+            limite_maximo_residuos_lmr: lmr,
+            observacoes: obs,
+            dados_extras: row,
+          },
+        })
+      }
+
+      // ------------------------------------------------------------------
+      // BULA 6: bula_alvos (Alvos e Doses em Linhas)
+      // ------------------------------------------------------------------
+      else if (targetCol === 'bula_alvos') {
+        const mapa = getFieldValue(row, [
+          'registro_mapa',
+          'mapa',
+          'numero_mapa',
+          'codigo_mapa',
+          'registro',
+        ])
+        const nomeProd = getFieldValue(row, ['nome_produto', 'nome_comercial', 'produto'])
+        const cult = getFieldValue(row, ['cultura', 'cultivo'])
+        const alvo = getFieldValue(row, [
+          'alvo_biologico',
+          'alvo',
+          'praga',
+          'doenca',
+          'planta_daninha',
+        ])
+        const nomeCient = getFieldValue(row, ['nome_cientifico', 'cientifico'])
+        const doseMin = getFieldValue(row, ['dose_minima', 'dose_min', 'dose'])
+        const doseMax = getFieldValue(row, ['dose_maxima', 'dose_max'])
+        const undDose = getFieldValue(row, ['unidade_dose', 'unidade'])
+        const vol = getFieldValue(row, ['volume_calda', 'volume', 'calda'])
+        const numAp = getFieldValue(row, [
+          'numero_maximo_aplicacoes',
+          'num_aplicacoes',
+          'aplicacoes',
+        ])
+        const epoca = getFieldValue(row, ['epoca_aplicacao', 'epoca', 'momento_aplicacao'])
+
+        if (!mapa || !alvo) {
+          rejeitados.push({
+            linhaOriginal: originalLineNum,
+            linhaLote: idx + 1,
+            motivo: !mapa
+              ? 'Registro MAPA obrigatório ausente.'
+              : 'Alvo Biológico obrigatório ausente.',
+            categoria: 'Campo Obrigatório Ausente',
+            campo: !mapa ? 'registro_mapa' : 'alvo_biologico',
+            valor: !mapa ? mapa || 'vazio' : alvo || 'vazio',
+            dados: row,
+          })
+          return
+        }
+
+        validos.push({
+          originalLine: originalLineNum,
+          data: {
+            registro_mapa: mapa,
+            nome_produto: nomeProd,
+            cultura: cult,
+            alvo_biologico: alvo,
+            nome_cientifico: nomeCient,
+            dose_minima: doseMin,
+            dose_maxima: doseMax,
+            unidade_dose: undDose || 'L/ha',
+            volume_calda: vol,
+            numero_maximo_aplicacoes: numAp,
+            epoca_aplicacao: epoca,
+            dados_extras: row,
+          },
+        })
+      }
+
+      // ------------------------------------------------------------------
+      // BULA 7: bula_aplicacao (Aplicação e EPI em Linhas)
+      // ------------------------------------------------------------------
+      else if (targetCol === 'bula_aplicacao') {
+        const mapa = getFieldValue(row, [
+          'registro_mapa',
+          'mapa',
+          'numero_mapa',
+          'codigo_mapa',
+          'registro',
+        ])
+        const nomeProd = getFieldValue(row, ['nome_produto', 'nome_comercial', 'produto'])
+        const tipoApl = getFieldValue(row, ['tipo_aplicacao', 'modo_aplicacao', 'aplicacao'])
+        const equip = getFieldValue(row, ['equipamento_recomendado', 'equipamento'])
+        const clima = getFieldValue(row, [
+          'condicoes_meteorologicas',
+          'meteorologia',
+          'clima',
+          'vento',
+        ])
+        const epiCalda = getFieldValue(row, ['epi_preparo_calda', 'epi_preparo', 'epi_calda'])
+        const epiApl = getFieldValue(row, ['epi_aplicacao', 'epi'])
+        const socorro = getFieldValue(row, [
+          'medidas_primeiros_socorros',
+          'primeiros_socorros',
+          'socorro',
+        ])
+        const descarte = getFieldValue(row, ['descarte_embalagens', 'descarte', 'triplice_lavagem'])
+
+        if (!mapa) {
+          rejeitados.push({
+            linhaOriginal: originalLineNum,
+            linhaLote: idx + 1,
+            motivo: 'Registro MAPA obrigatório ausente.',
+            categoria: 'Campo Obrigatório Ausente',
+            campo: 'registro_mapa',
+            valor: 'vazio',
+            dados: row,
+          })
+          return
+        }
+
+        validos.push({
+          originalLine: originalLineNum,
+          data: {
+            registro_mapa: mapa,
+            nome_produto: nomeProd,
+            tipo_aplicacao: tipoApl || 'Terrestre',
+            equipamento_recomendado: equip,
+            condicoes_meteorologicas: clima,
+            epi_preparo_calda: epiCalda,
+            epi_aplicacao: epiApl,
+            medidas_primeiros_socorros: socorro,
+            descarte_embalagens: descarte,
+            dados_extras: row,
           },
         })
       }

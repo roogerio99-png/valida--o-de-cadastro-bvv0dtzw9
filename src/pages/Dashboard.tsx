@@ -5,6 +5,7 @@ import {
   FileCheck2,
   FlaskConical,
   ShieldAlert,
+  FileText,
   ArrowRight,
   TrendingUp,
   Clock,
@@ -41,6 +42,7 @@ const PIE_COLORS = ['#2E7D32', '#C62828', '#F57F17']
 export function Dashboard() {
   const navigate = useNavigate()
   const [totalProdutos, setTotalProdutos] = useState<number>(0)
+  const [totalBulas, setTotalBulas] = useState<number>(0)
   const [totalRegras, setTotalRegras] = useState<number>(0)
   const [totalPrincipios, setTotalPrincipios] = useState<number>(0)
   const [totalTravasDisparadas, setTotalTravasDisparadas] = useState<number>(0)
@@ -61,11 +63,16 @@ export function Dashboard() {
       const resBase = await pb.collection('base_mestre').getList(1, 1)
       const resRegras = await pb.collection('regras_ncm_embalagem').getList(1, 1)
       const resPrincipios = await pb.collection('dicionario_principios_ativos').getList(1, 1)
+      const resBulas = await pb
+        .collection('bula_produtos')
+        .getList(1, 1)
+        .catch(() => ({ totalItems: 0 }))
       const resTravasFalhas = await pb.collection('log_validacoes').getList(1, 1, {
         filter: 'aprovado = false',
       })
 
       setTotalProdutos(resBase.totalItems)
+      setTotalBulas(resBulas.totalItems)
       setTotalRegras(resRegras.totalItems)
       setTotalPrincipios(resPrincipios.totalItems)
       setTotalTravasDisparadas(resTravasFalhas.totalItems)
@@ -141,6 +148,7 @@ export function Dashboard() {
   // Atualização em tempo real quando houver novas validações ou cadastros
   useRealtime('log_validacoes', () => carregarDados())
   useRealtime('base_mestre', () => carregarDados())
+  useRealtime('bula_produtos', () => carregarDados())
   useRealtime('regras_ncm_embalagem', () => carregarDados())
 
   return (
@@ -178,9 +186,9 @@ export function Dashboard() {
       </div>
 
       {/* ------------------------------------------------------------------ */}
-      {/* 5 CARDS DE KPIS (INCLUINDO DUPLICIDADES) */}
+      {/* CARDS DE KPIS (INCLUINDO CADASTRO DE BULA) */}
       {/* ------------------------------------------------------------------ */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-6 gap-3">
         <Card className="rounded-2xl border-[#DCE5DC] bg-white shadow-sm hover:shadow-md transition-all duration-200">
           <CardHeader className="flex flex-row items-center justify-between pb-2 space-y-0">
             <CardTitle className="text-xs font-semibold uppercase tracking-wider text-[#5A6D5A]">
@@ -199,6 +207,30 @@ export function Dashboard() {
                 <TrendingUp className="w-3 h-3 mr-0.5" /> Base Mestre
               </span>
               <span>sincronizada</span>
+            </p>
+          </CardContent>
+        </Card>
+
+        {/* NOVO CARD: CADASTRO DE BULA */}
+        <Card
+          onClick={() => navigate('/bula')}
+          className="rounded-2xl border border-emerald-300 bg-emerald-50/20 shadow-sm hover:shadow-md hover:border-emerald-500 transition-all duration-200 cursor-pointer"
+        >
+          <CardHeader className="flex flex-row items-center justify-between pb-2 space-y-0">
+            <CardTitle className="text-xs font-semibold uppercase tracking-wider text-[#1B5E20]">
+              Cadastro de Bula
+            </CardTitle>
+            <div className="w-9 h-9 rounded-xl bg-[#1B5E20] text-white flex items-center justify-center">
+              <FileText className="w-5 h-5" />
+            </div>
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold text-[#1B5E20]">
+              {loading ? '...' : totalBulas.toLocaleString('pt-BR')}
+            </div>
+            <p className="text-xs text-[#5A6D5A] mt-1 flex items-center justify-between">
+              <span>7 abas consolidadas</span>
+              <span className="text-[10px] text-[#1B5E20] font-semibold underline">Acessar</span>
             </p>
           </CardContent>
         </Card>

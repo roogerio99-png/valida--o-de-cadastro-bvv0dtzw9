@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-10-21T20:15:45.013Z",
+  "generatedAt": "2026-10-21T21:22:34.174Z",
   "collections": [
     {
       "name": "users",
@@ -869,6 +869,689 @@
         "CREATE INDEX idx_convites_email ON convites_usuarios (email)",
         "CREATE INDEX idx_convites_token ON convites_usuarios (token_convite)",
         "CREATE INDEX idx_convites_status ON convites_usuarios (status)"
+      ]
+    },
+    {
+      "name": "bula_produtos",
+      "type": "base",
+      "apiRules": {
+        "list": "@request.auth.id != ''",
+        "view": "@request.auth.id != ''",
+        "create": "@request.auth.id != '' && @request.auth.role = 'admin'",
+        "update": "@request.auth.id != '' && @request.auth.role = 'admin'",
+        "delete": "@request.auth.id != '' && @request.auth.role = 'admin'"
+      },
+      "fields": [
+        {
+          "name": "registro_mapa",
+          "type": "text",
+          "required": true,
+          "system": false
+        },
+        {
+          "name": "nome_comercial",
+          "type": "text",
+          "required": true,
+          "system": false
+        },
+        {
+          "name": "marca_padronizada",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "titular_registro",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "fabricante_formulador",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "principio_ativo",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "classe_agronomica",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "grupo_quimico",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "classificacao_toxicologica",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "classificacao_ambiental",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "tipo_formulacao",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "modo_acao",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "ncm_padrao",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "tipo_produto",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "status_registro",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "dados_extras",
+          "type": "json",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "created",
+          "type": "autodate",
+          "required": false,
+          "system": false,
+          "autodateTriggers": ["onCreate"]
+        },
+        {
+          "name": "updated",
+          "type": "autodate",
+          "required": false,
+          "system": false,
+          "autodateTriggers": ["onCreate", "onUpdate"]
+        }
+      ],
+      "indexes": [
+        "CREATE UNIQUE INDEX idx_bula_regmapa ON bula_produtos (registro_mapa)",
+        "CREATE INDEX idx_bula_nomecomercial ON bula_produtos (nome_comercial)",
+        "CREATE INDEX idx_bula_classe ON bula_produtos (classe_agronomica)",
+        "CREATE INDEX idx_bula_pa ON bula_produtos (principio_ativo)"
+      ]
+    },
+    {
+      "name": "bula_composicao",
+      "type": "base",
+      "apiRules": {
+        "list": "@request.auth.id != ''",
+        "view": "@request.auth.id != ''",
+        "create": "@request.auth.id != '' && @request.auth.role = 'admin'",
+        "update": "@request.auth.id != '' && @request.auth.role = 'admin'",
+        "delete": "@request.auth.id != '' && @request.auth.role = 'admin'"
+      },
+      "fields": [
+        {
+          "name": "registro_mapa",
+          "type": "text",
+          "required": true,
+          "system": false
+        },
+        {
+          "name": "nome_produto",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "ingrediente_ativo",
+          "type": "text",
+          "required": true,
+          "system": false
+        },
+        {
+          "name": "nome_quimico",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "numero_cas",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "concentracao",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "unidade_medida",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "funcao_ingrediente",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "grupo_quimico",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "dados_extras",
+          "type": "json",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "created",
+          "type": "autodate",
+          "required": false,
+          "system": false,
+          "autodateTriggers": ["onCreate"]
+        },
+        {
+          "name": "updated",
+          "type": "autodate",
+          "required": false,
+          "system": false,
+          "autodateTriggers": ["onCreate", "onUpdate"]
+        }
+      ],
+      "indexes": [
+        "CREATE INDEX idx_bula_comp_mapa ON bula_composicao (registro_mapa)",
+        "CREATE INDEX idx_bula_comp_ia ON bula_composicao (ingrediente_ativo)"
+      ]
+    },
+    {
+      "name": "bula_empresas",
+      "type": "base",
+      "apiRules": {
+        "list": "@request.auth.id != ''",
+        "view": "@request.auth.id != ''",
+        "create": "@request.auth.id != '' && @request.auth.role = 'admin'",
+        "update": "@request.auth.id != '' && @request.auth.role = 'admin'",
+        "delete": "@request.auth.id != '' && @request.auth.role = 'admin'"
+      },
+      "fields": [
+        {
+          "name": "registro_mapa",
+          "type": "text",
+          "required": true,
+          "system": false
+        },
+        {
+          "name": "nome_produto",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "tipo_relacao",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "razao_social",
+          "type": "text",
+          "required": true,
+          "system": false
+        },
+        {
+          "name": "nome_fantasia",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "cnpj",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "endereco",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "municipio",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "uf",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "pais",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "dados_extras",
+          "type": "json",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "created",
+          "type": "autodate",
+          "required": false,
+          "system": false,
+          "autodateTriggers": ["onCreate"]
+        },
+        {
+          "name": "updated",
+          "type": "autodate",
+          "required": false,
+          "system": false,
+          "autodateTriggers": ["onCreate", "onUpdate"]
+        }
+      ],
+      "indexes": [
+        "CREATE INDEX idx_bula_emp_mapa ON bula_empresas (registro_mapa)",
+        "CREATE INDEX idx_bula_emp_razao ON bula_empresas (razao_social)",
+        "CREATE INDEX idx_bula_emp_tipo ON bula_empresas (tipo_relacao)"
+      ]
+    },
+    {
+      "name": "bula_embalagens",
+      "type": "base",
+      "apiRules": {
+        "list": "@request.auth.id != ''",
+        "view": "@request.auth.id != ''",
+        "create": "@request.auth.id != '' && @request.auth.role = 'admin'",
+        "update": "@request.auth.id != '' && @request.auth.role = 'admin'",
+        "delete": "@request.auth.id != '' && @request.auth.role = 'admin'"
+      },
+      "fields": [
+        {
+          "name": "registro_mapa",
+          "type": "text",
+          "required": true,
+          "system": false
+        },
+        {
+          "name": "nome_produto",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "tipo_embalagem",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "material",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "capacidade",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "unidade_medida",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "ncm",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "destinacao_final",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "dados_extras",
+          "type": "json",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "created",
+          "type": "autodate",
+          "required": false,
+          "system": false,
+          "autodateTriggers": ["onCreate"]
+        },
+        {
+          "name": "updated",
+          "type": "autodate",
+          "required": false,
+          "system": false,
+          "autodateTriggers": ["onCreate", "onUpdate"]
+        }
+      ],
+      "indexes": [
+        "CREATE INDEX idx_bula_emb_mapa ON bula_embalagens (registro_mapa)",
+        "CREATE INDEX idx_bula_emb_ncm ON bula_embalagens (ncm)"
+      ]
+    },
+    {
+      "name": "bula_culturas",
+      "type": "base",
+      "apiRules": {
+        "list": "@request.auth.id != ''",
+        "view": "@request.auth.id != ''",
+        "create": "@request.auth.id != '' && @request.auth.role = 'admin'",
+        "update": "@request.auth.id != '' && @request.auth.role = 'admin'",
+        "delete": "@request.auth.id != '' && @request.auth.role = 'admin'"
+      },
+      "fields": [
+        {
+          "name": "registro_mapa",
+          "type": "text",
+          "required": true,
+          "system": false
+        },
+        {
+          "name": "nome_produto",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "cultura",
+          "type": "text",
+          "required": true,
+          "system": false
+        },
+        {
+          "name": "intervalo_seguranca_dias",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "intervalo_reentrada_horas",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "modalidade_emprego",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "limite_maximo_residuos_lmr",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "observacoes",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "dados_extras",
+          "type": "json",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "created",
+          "type": "autodate",
+          "required": false,
+          "system": false,
+          "autodateTriggers": ["onCreate"]
+        },
+        {
+          "name": "updated",
+          "type": "autodate",
+          "required": false,
+          "system": false,
+          "autodateTriggers": ["onCreate", "onUpdate"]
+        }
+      ],
+      "indexes": [
+        "CREATE INDEX idx_bula_cult_mapa ON bula_culturas (registro_mapa)",
+        "CREATE INDEX idx_bula_cult_cultura ON bula_culturas (cultura)"
+      ]
+    },
+    {
+      "name": "bula_alvos",
+      "type": "base",
+      "apiRules": {
+        "list": "@request.auth.id != ''",
+        "view": "@request.auth.id != ''",
+        "create": "@request.auth.id != '' && @request.auth.role = 'admin'",
+        "update": "@request.auth.id != '' && @request.auth.role = 'admin'",
+        "delete": "@request.auth.id != '' && @request.auth.role = 'admin'"
+      },
+      "fields": [
+        {
+          "name": "registro_mapa",
+          "type": "text",
+          "required": true,
+          "system": false
+        },
+        {
+          "name": "nome_produto",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "cultura",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "alvo_biologico",
+          "type": "text",
+          "required": true,
+          "system": false
+        },
+        {
+          "name": "nome_cientifico",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "dose_minima",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "dose_maxima",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "unidade_dose",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "volume_calda",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "numero_maximo_aplicacoes",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "epoca_aplicacao",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "dados_extras",
+          "type": "json",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "created",
+          "type": "autodate",
+          "required": false,
+          "system": false,
+          "autodateTriggers": ["onCreate"]
+        },
+        {
+          "name": "updated",
+          "type": "autodate",
+          "required": false,
+          "system": false,
+          "autodateTriggers": ["onCreate", "onUpdate"]
+        }
+      ],
+      "indexes": [
+        "CREATE INDEX idx_bula_alv_mapa ON bula_alvos (registro_mapa)",
+        "CREATE INDEX idx_bula_alv_alvo ON bula_alvos (alvo_biologico)",
+        "CREATE INDEX idx_bula_alv_cultura ON bula_alvos (cultura)"
+      ]
+    },
+    {
+      "name": "bula_aplicacao",
+      "type": "base",
+      "apiRules": {
+        "list": "@request.auth.id != ''",
+        "view": "@request.auth.id != ''",
+        "create": "@request.auth.id != '' && @request.auth.role = 'admin'",
+        "update": "@request.auth.id != '' && @request.auth.role = 'admin'",
+        "delete": "@request.auth.id != '' && @request.auth.role = 'admin'"
+      },
+      "fields": [
+        {
+          "name": "registro_mapa",
+          "type": "text",
+          "required": true,
+          "system": false
+        },
+        {
+          "name": "nome_produto",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "tipo_aplicacao",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "equipamento_recomendado",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "condicoes_meteorologicas",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "epi_preparo_calda",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "epi_aplicacao",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "medidas_primeiros_socorros",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "descarte_embalagens",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "dados_extras",
+          "type": "json",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "created",
+          "type": "autodate",
+          "required": false,
+          "system": false,
+          "autodateTriggers": ["onCreate"]
+        },
+        {
+          "name": "updated",
+          "type": "autodate",
+          "required": false,
+          "system": false,
+          "autodateTriggers": ["onCreate", "onUpdate"]
+        }
+      ],
+      "indexes": [
+        "CREATE INDEX idx_bula_apl_mapa ON bula_aplicacao (registro_mapa)",
+        "CREATE INDEX idx_bula_apl_tipo ON bula_aplicacao (tipo_aplicacao)"
       ]
     }
   ]

@@ -22,6 +22,7 @@ import {
   Users,
   Shield,
   Eye,
+  FileText,
 } from 'lucide-react'
 import { useAuth } from '@/contexts/AuthContext'
 import { Button } from '@/components/ui/button'
@@ -45,6 +46,7 @@ const navItems = [
   { path: '/regras', label: 'Regras NCM × Embalagem', icon: FileSpreadsheet },
   { path: '/principios-ativos', label: 'Princípios Ativos', icon: FlaskConical },
   { path: '/base-mestre', label: 'Base Mestre', icon: Database },
+  { path: '/bula', label: 'Cadastro de Bula', icon: FileText },
   { path: '/travas', label: 'Travas de Auditoria', icon: ShieldAlert },
   { path: '/parametrizacao', label: 'Parametrização Fiscal', icon: Percent },
   { path: '/tributacao', label: 'Tributação Agro', icon: Scale },
@@ -79,6 +81,8 @@ export function Layout() {
   // Determina se a rota atual é de tabela que ocupa a tela sem scroll na página
   const isTablePage = [
     '/base-mestre',
+    '/bula',
+    '/cadastro-bula',
     '/principios-ativos',
     '/regras',
     '/regras-ncm',
