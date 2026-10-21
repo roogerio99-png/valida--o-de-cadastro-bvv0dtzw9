@@ -291,19 +291,20 @@ export function Usuarios() {
   })
 
   return (
-    <div className="space-y-6">
+    <div className="flex-1 flex flex-col space-y-4 min-h-0 animate-in fade-in-up duration-300">
       {/* Cabeçalho */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-slate-200 dark:border-slate-800">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-2 border-b border-slate-200 dark:border-slate-800">
         <div>
           <div className="flex items-center gap-2">
-            <Users className="w-7 h-7 text-emerald-600 dark:text-emerald-400" />
-            <h1 className="text-2xl font-bold tracking-tight text-slate-900 dark:text-slate-100">
+            <Users className="w-6 h-6 text-emerald-600 dark:text-emerald-400" />
+            <h1 className="text-xl font-bold tracking-tight text-slate-900 dark:text-slate-100">
               Administração de Usuários
             </h1>
           </div>
-          <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">
+          <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
             Controle multiusuário com entrada restrita por convite e 2 níveis de acesso
-            (Administrador e Analista).
+            (Administrador e Analista). Total de {usuarios.length} usuários ativos e{' '}
+            {convites.length} convites.
           </p>
         </div>
 
@@ -397,10 +398,10 @@ export function Usuarios() {
         </TabsList>
 
         {/* Tabela de Usuários */}
-        <TabsContent value="usuarios" className="space-y-4 pt-2">
-          <div className="rounded-md border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-sm overflow-hidden flex flex-col">
-            <ScrollableTable autoFitHeight={true} bottomOffset={76}>
-              <table className="w-full text-sm text-left">
+        <TabsContent value="usuarios" className="space-y-4 pt-2 flex-1 flex flex-col min-h-0">
+          <div className="rounded-2xl border border-[#DCE5DC] bg-white shadow-sm overflow-hidden flex-1 flex flex-col min-h-0">
+            <ScrollableTable autoFitHeight={true} bottomOffset={52} className="flex-1 min-h-0">
+              <table className="w-full text-xs text-left">
                 <thead className="sticky top-0 z-20 bg-slate-50 dark:bg-slate-900 text-slate-700 dark:text-slate-300 border-b border-slate-200 dark:border-slate-800 font-medium shadow-[0_1px_0_0_#e2e8f0]">
                   <tr>
                     <th className="py-3 px-4">Usuário</th>
@@ -550,14 +551,22 @@ export function Usuarios() {
                 </tbody>
               </table>
             </ScrollableTable>
+
+            <div className="flex items-center justify-between p-3.5 border-t border-[#DCE5DC] bg-[#FAFBF9] text-xs text-[#5A6D5A]">
+              <span className="font-semibold text-[#1C2B1C]">
+                {usuariosFiltrados.length}{' '}
+                {usuariosFiltrados.length === 1 ? 'usuário cadastrado' : 'usuários cadastrados'}
+              </span>
+              <span className="text-[11px] text-[#8A9A86]">Ordem alfabética por e-mail / nome</span>
+            </div>
           </div>
         </TabsContent>
 
         {/* Tabela de Convites Pendentes */}
-        <TabsContent value="convites" className="space-y-4 pt-2">
-          <div className="rounded-md border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-sm overflow-hidden flex flex-col">
-            <ScrollableTable autoFitHeight={true} bottomOffset={76}>
-              <table className="w-full text-sm text-left">
+        <TabsContent value="convites" className="space-y-4 pt-2 flex-1 flex flex-col min-h-0">
+          <div className="rounded-2xl border border-[#DCE5DC] bg-white shadow-sm overflow-hidden flex-1 flex flex-col min-h-0">
+            <ScrollableTable autoFitHeight={true} bottomOffset={52} className="flex-1 min-h-0">
+              <table className="w-full text-xs text-left">
                 <thead className="sticky top-0 z-20 bg-slate-50 dark:bg-slate-900 text-slate-700 dark:text-slate-300 border-b border-slate-200 dark:border-slate-800 font-medium shadow-[0_1px_0_0_#e2e8f0]">
                   <tr>
                     <th className="py-3 px-4">Convidado</th>
@@ -657,6 +666,16 @@ export function Usuarios() {
                 </tbody>
               </table>
             </ScrollableTable>
+
+            <div className="flex items-center justify-between p-3.5 border-t border-[#DCE5DC] bg-[#FAFBF9] text-xs text-[#5A6D5A]">
+              <span className="font-semibold text-[#1C2B1C]">
+                {convitesFiltrados.length}{' '}
+                {convitesFiltrados.length === 1 ? 'convite pendente' : 'convites pendentes'}
+              </span>
+              <span className="text-[11px] text-[#8A9A86]">
+                Convites emitidos aguardando definição de senha
+              </span>
+            </div>
           </div>
         </TabsContent>
       </Tabs>

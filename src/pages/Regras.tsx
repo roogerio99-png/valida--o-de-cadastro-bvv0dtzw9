@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useTransition } from 'react'
+import React, { useEffect, useState, useTransition, useRef, useCallback } from 'react'
 import {
   FileSpreadsheet,
   Plus,
@@ -98,33 +98,95 @@ export function Regras() {
   const [formRegraEspecial, setFormRegraEspecial] = useState('')
   const [saving, setSaving] = useState(false)
 
-  // Paginação simples
-  const [page, setPage] = useState(1)
-  const [totalPages, setTotalPages] = useState(1)
+  // Rolagem infinita contínua
+  const [totalCount, setTotalCount] = useState(0)
+  const [hasMore, setHasMore] = useState(true)
+  const [loadingMore, setLoadingMore] = useState(false)
+  const pageRef = useRef(1)
+  const hasMoreRef = useRef(true)
+  const loadingMoreRef = useRef(false)
+  const tableContainerRef = useRef<HTMLDivElement | null>(null)
+  const sentinelRef = useRef<HTMLDivElement | null>(null)
 
-  const carregarRegras = async () => {
+  const buildFilter = useCallback(() => {
+    if (!search.trim()) return undefined
+    const clean = search.trim().replace(/'/g, "\\'")
+    return `ncm ~ '${clean}' || descricao ~ '${clean}'`
+  }, [search])
+
+  const carregarRegras = useCallback(async () => {
     setLoading(true)
+    pageRef.current = 1
+    hasMoreRef.current = true
     try {
-      let filter = ''
-      if (search.trim()) {
-        const clean = search.trim().replace(/'/g, "\\'")
-        filter = `ncm ~ '${clean}' || descricao ~ '${clean}'`
-      }
-      const res = await listarRegrasNcm({ page, perPage: 20, filter })
+      const filter = buildFilter()
+      const res = await listarRegrasNcm({ page: 1, perPage: 50, filter, sort: 'ncm' })
       setRegras(res.items)
-      setTotalPages(res.totalPages || 1)
+      setTotalCount(res.totalItems)
+      const more = res.totalPages > 1
+      setHasMore(more)
+      hasMoreRef.current = more
     } catch (err) {
       console.error(err)
     } finally {
       setLoading(false)
     }
-  }
+  }, [buildFilter])
+
+  const carregarMaisRegras = useCallback(async () => {
+    if (loadingMoreRef.current || !hasMoreRef.current) return
+    loadingMoreRef.current = true
+    setLoadingMore(true)
+    const nextPage = pageRef.current + 1
+
+    try {
+      const filter = buildFilter()
+      const res = await listarRegrasNcm({ page: nextPage, perPage: 50, filter, sort: 'ncm' })
+      pageRef.current = nextPage
+      setRegras((prev) => {
+        const ids = new Set(prev.map((r) => r.id))
+        const novos = res.items.filter((item) => !ids.has(item.id))
+        return [...prev, ...novos]
+      })
+      setTotalCount(res.totalItems)
+      const more = nextPage < (res.totalPages || 1)
+      setHasMore(more)
+      hasMoreRef.current = more
+    } catch (err) {
+      console.error('Erro ao carregar mais regras NCM:', err)
+    } finally {
+      loadingMoreRef.current = false
+      setLoadingMore(false)
+    }
+  }, [buildFilter])
 
   useEffect(() => {
     carregarRegras()
-  }, [page, search])
+  }, [carregarRegras])
 
   useRealtime('regras_ncm_embalagem', () => carregarRegras())
+
+  // Sentinel de rolagem infinita
+  useEffect(() => {
+    const sentinel = sentinelRef.current
+    if (!sentinel) return
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries[0]?.isIntersecting) {
+          carregarMaisRegras()
+        }
+      },
+      {
+        root: tableContainerRef.current,
+        rootMargin: '250px',
+        threshold: 0,
+      },
+    )
+
+    observer.observe(sentinel)
+    return () => observer.disconnect()
+  }, [carregarMaisRegras, regras.length])
 
   const handleOpenCreate = () => {
     setEditingId(null)
@@ -239,7 +301,7 @@ export function Regras() {
   }
 
   return (
-    <div className="space-y-6 animate-in fade-in-up duration-300">
+    <div className="flex-1 flex flex-col space-y-4 min-h-0 animate-in fade-in-up duration-300">
       {/* Top Header */}
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
         <div>
@@ -249,7 +311,7 @@ export function Regras() {
           </h2>
           <p className="text-xs text-[#5A6D5A] mt-0.5">
             Definição das embalagens autorizadas e restrições de embargo por classificação fiscal
-            TIPI.
+            TIPI ({totalCount} regras cadastradas).
           </p>
         </div>
         <div className="flex items-center gap-2.5">
@@ -285,7 +347,6 @@ export function Regras() {
               const val = e.target.value
               startTransition(() => {
                 setSearch(val)
-                setPage(1)
               })
             }}
             placeholder="Filtrar por código NCM ou descrição técnica..."
@@ -295,8 +356,15 @@ export function Regras() {
       </Card>
 
       {/* Tabela de Regras */}
-      <Card className="rounded-2xl border-[#DCE5DC] bg-white shadow-sm overflow-hidden flex flex-col">
-        <ScrollableTable autoFitHeight={true} bottomOffset={76}>
+      <Card className="rounded-2xl border-[#DCE5DC] bg-white shadow-sm overflow-hidden flex-1 flex flex-col min-h-0">
+        <ScrollableTable
+          autoFitHeight={true}
+          bottomOffset={52}
+          containerRef={tableContainerRef}
+          onNearBottom={carregarMaisRegras}
+          bottomThreshold={250}
+          className="flex-1 min-h-0"
+        >
           <table className="w-full text-xs">
             <thead className="sticky top-0 z-20 bg-[#F5F7F1] shadow-[0_1px_0_0_#DCE5DC]">
               <tr className="bg-[#F5F7F1] border-b border-[#DCE5DC] text-left text-[#5A6D5A]">
@@ -422,34 +490,40 @@ export function Regras() {
           </table>
         </ScrollableTable>
 
-        {/* Paginação */}
-        {totalPages > 1 && (
-          <div className="flex items-center justify-between p-4 border-t border-[#DCE5DC] text-xs text-[#5A6D5A]">
-            <span>
-              Página {page} de {totalPages}
+        {/* Sentinel e Indicadores de Rolagem Infinita */}
+        <div ref={sentinelRef} className="h-1 w-full" aria-hidden="true" />
+
+        {/* Rodapé informativo de rolagem infinita */}
+        <div className="flex items-center justify-between p-3.5 border-t border-[#DCE5DC] bg-[#FAFBF9] text-xs text-[#5A6D5A]">
+          <div className="flex items-center gap-2">
+            <span className="font-semibold text-[#1C2B1C]">
+              {regras.length} {regras.length === 1 ? 'regra exibida' : 'regras exibidas'}
             </span>
-            <div className="flex gap-2">
-              <Button
-                variant="outline"
-                size="sm"
-                disabled={page <= 1}
-                onClick={() => setPage((p) => p - 1)}
-                className="h-8 text-xs"
-              >
-                Anterior
-              </Button>
-              <Button
-                variant="outline"
-                size="sm"
-                disabled={page >= totalPages}
-                onClick={() => setPage((p) => p + 1)}
-                className="h-8 text-xs"
-              >
-                Próxima
-              </Button>
-            </div>
+            <span className="text-[#8A9A86]">•</span>
+            <span>Ordem alfabética por código NCM (padrão)</span>
+            <span className="text-[#8A9A86]">•</span>
+            <span>Total na base com critérios atuais: {totalCount}</span>
           </div>
-        )}
+
+          <div className="flex items-center gap-2">
+            {loadingMore && (
+              <div className="inline-flex items-center gap-1.5 text-xs text-[#1B5E20] font-medium bg-emerald-50 px-2.5 py-1 rounded-md border border-emerald-200 animate-in fade-in">
+                <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                <span>Carregando próximo lote...</span>
+              </div>
+            )}
+            {!hasMore && regras.length > 0 && !loading && (
+              <span className="text-[11px] text-[#5A6D5A] bg-[#F5F7F1] px-2.5 py-1 rounded-md border border-[#DCE5DC]">
+                Fim da lista — todas as {regras.length} regras carregadas
+              </span>
+            )}
+            {hasMore && !loadingMore && !loading && (
+              <span className="text-[11px] text-[#8A9A86] hidden sm:inline">
+                Role para baixo para carregar mais automaticamente
+              </span>
+            )}
+          </div>
+        </div>
       </Card>
 
       {/* ------------------------------------------------------------------ */}

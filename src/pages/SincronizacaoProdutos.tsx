@@ -741,7 +741,7 @@ export function SincronizacaoProdutos() {
               </p>
             </div>
           ) : (
-            <ScrollableTable autoFitHeight={true} bottomOffset={76}>
+            <ScrollableTable autoFitHeight={false} maxHeight="460px" bottomOffset={52}>
               <Table>
                 <TableHeader className="sticky top-0 z-20 bg-[#FAFBF9] shadow-[0_1px_0_0_#DCE5DC]">
                   <TableRow className="bg-[#FAFBF9]">
@@ -891,6 +891,19 @@ export function SincronizacaoProdutos() {
                 </TableBody>
               </Table>
             </ScrollableTable>
+          )}
+
+          {historico.length > 0 && !carregandoHistorico && (
+            <div className="flex items-center justify-between p-3.5 border-t border-[#DCE5DC] bg-[#FAFBF9] text-xs text-[#5A6D5A] mt-2">
+              <span className="font-semibold text-[#1C2B1C]">
+                {historico.length}{' '}
+                {historico.length === 1 ? 'execução registrada' : 'execuções registradas'}
+              </span>
+              <span className="text-[11px] text-[#8A9A86]">
+                Clique em qualquer linha para ver detalhes e o relatório de integração
+                correspondente
+              </span>
+            </div>
           )}
         </CardContent>
       </Card>

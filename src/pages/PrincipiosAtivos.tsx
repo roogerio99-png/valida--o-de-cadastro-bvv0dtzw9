@@ -1,4 +1,4 @@
-import { useEffect, useState, useTransition } from 'react'
+import { useEffect, useState, useTransition, useRef, useCallback } from 'react'
 import {
   FlaskConical,
   Search,
@@ -86,10 +86,15 @@ export function PrincipiosAtivos() {
   // Estado de sincronização em cascata por linha
   const [sincronizandoId, setSincronizandoId] = useState<string | null>(null)
 
-  // Paginação
-  const [page, setPage] = useState(1)
-  const [totalPages, setTotalPages] = useState(1)
+  // Rolagem infinita contínua
   const [totalCount, setTotalCount] = useState(0)
+  const [hasMore, setHasMore] = useState(true)
+  const [loadingMore, setLoadingMore] = useState(false)
+  const pageRef = useRef(1)
+  const hasMoreRef = useRef(true)
+  const loadingMoreRef = useRef(false)
+  const tableContainerRef = useRef<HTMLDivElement | null>(null)
+  const sentinelRef = useRef<HTMLDivElement | null>(null)
 
   // Formatar NCM 0000.00.00
   const formatarNcm = (val: string) => {
@@ -99,37 +104,45 @@ export function PrincipiosAtivos() {
     return `${digitos.slice(0, 4)}.${digitos.slice(4, 6)}.${digitos.slice(6, 8)}`
   }
 
-  const carregarDados = async () => {
-    setLoading(true)
-    try {
-      const filters: string[] = []
-      if (search.trim()) {
-        const clean = search.trim().replace(/'/g, "\\'")
-        filters.push(
-          `(principio_ativo_chave ~ '${clean}' || principio_ativo ~ '${clean}' || macro_grupo_subgrupo_padrao ~ '${clean}' || ncm_padrao_referencia ~ '${clean}')`,
-        )
-      }
-      if (nota2Filter !== 'todos') {
-        filters.push(`nota_subpos_2 = '${nota2Filter}'`)
-      }
-      if (pisFilter !== 'todos') {
-        if (pisFilter === 'beneficiado') filters.push(`enquadramento_pis_cofins ~ 'Beneficiado'`)
-        if (pisFilter === 'condicional') filters.push(`enquadramento_pis_cofins ~ 'Condicional'`)
-        if (pisFilter === 'tributado') filters.push(`enquadramento_pis_cofins ~ 'Tributado'`)
-      }
+  const buildFilterString = useCallback(() => {
+    const filters: string[] = []
+    if (search.trim()) {
+      const clean = search.trim().replace(/'/g, "\\'")
+      filters.push(
+        `(principio_ativo_chave ~ '${clean}' || principio_ativo ~ '${clean}' || macro_grupo_subgrupo_padrao ~ '${clean}' || ncm_padrao_referencia ~ '${clean}')`,
+      )
+    }
+    if (nota2Filter !== 'todos') {
+      filters.push(`nota_subpos_2 = '${nota2Filter}'`)
+    }
+    if (pisFilter !== 'todos') {
+      if (pisFilter === 'beneficiado') filters.push(`enquadramento_pis_cofins ~ 'Beneficiado'`)
+      if (pisFilter === 'condicional') filters.push(`enquadramento_pis_cofins ~ 'Condicional'`)
+      if (pisFilter === 'tributado') filters.push(`enquadramento_pis_cofins ~ 'Tributado'`)
+    }
+    return filters.join(' && ')
+  }, [search, nota2Filter, pisFilter])
 
+  const carregarDados = useCallback(async () => {
+    setLoading(true)
+    pageRef.current = 1
+    hasMoreRef.current = true
+    try {
+      const filterStr = buildFilterString()
       const res = await listarPrincipiosAtivos({
-        page,
-        perPage: 25,
-        filter: filters.join(' && ') || undefined,
+        page: 1,
+        perPage: 50,
+        filter: filterStr || undefined,
         sort: 'principio_ativo_chave',
       })
 
       setPrincipios(res.items)
-      setTotalPages(res.totalPages || 1)
       setTotalCount(res.totalItems)
+      const more = res.totalPages > 1
+      setHasMore(more)
+      hasMoreRef.current = more
 
-      // Carregar contagem real de produtos vinculados para cada princípio ativo retornado
+      // Carregar contagem real de produtos vinculados
       const contagens: Record<string, number> = {}
       await Promise.all(
         res.items.map(async (pa) => {
@@ -143,11 +156,76 @@ export function PrincipiosAtivos() {
     } finally {
       setLoading(false)
     }
-  }
+  }, [buildFilterString])
+
+  const carregarMaisDados = useCallback(async () => {
+    if (loadingMoreRef.current || !hasMoreRef.current) return
+    loadingMoreRef.current = true
+    setLoadingMore(true)
+    const nextPage = pageRef.current + 1
+
+    try {
+      const filterStr = buildFilterString()
+      const res = await listarPrincipiosAtivos({
+        page: nextPage,
+        perPage: 50,
+        filter: filterStr || undefined,
+        sort: 'principio_ativo_chave',
+      })
+
+      pageRef.current = nextPage
+      setPrincipios((prev) => {
+        const ids = new Set(prev.map((p) => p.id))
+        const novos = res.items.filter((item) => !ids.has(item.id))
+        return [...prev, ...novos]
+      })
+      setTotalCount(res.totalItems)
+      const more = nextPage < (res.totalPages || 1)
+      setHasMore(more)
+      hasMoreRef.current = more
+
+      // Carregar contagens dos novos itens
+      const novasContagens: Record<string, number> = {}
+      await Promise.all(
+        res.items.map(async (pa) => {
+          const total = await contarProdutosVinculadosAoPrincipioAtivo(pa.id)
+          novasContagens[pa.id] = total
+        }),
+      )
+      setContagensVinculados((prev) => ({ ...prev, ...novasContagens }))
+    } catch (err) {
+      console.error('Erro ao carregar mais princípios ativos:', err)
+    } finally {
+      loadingMoreRef.current = false
+      setLoadingMore(false)
+    }
+  }, [buildFilterString])
 
   useEffect(() => {
     carregarDados()
-  }, [page, search, nota2Filter, pisFilter])
+  }, [carregarDados])
+
+  // Sentinel de rolagem infinita
+  useEffect(() => {
+    const sentinel = sentinelRef.current
+    if (!sentinel) return
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries[0]?.isIntersecting) {
+          carregarMaisDados()
+        }
+      },
+      {
+        root: tableContainerRef.current,
+        rootMargin: '250px',
+        threshold: 0,
+      },
+    )
+
+    observer.observe(sentinel)
+    return () => observer.disconnect()
+  }, [carregarMaisDados, principios.length])
 
   const toggleExpand = (id: string) => {
     setExpandedRows((prev) => ({ ...prev, [id]: !prev[id] }))
@@ -430,7 +508,7 @@ export function PrincipiosAtivos() {
   }
 
   return (
-    <div className="space-y-6 animate-in fade-in-up duration-300">
+    <div className="flex-1 flex flex-col space-y-4 min-h-0 animate-in fade-in-up duration-300">
       {/* Top Header */}
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
         <div>
@@ -493,7 +571,6 @@ export function PrincipiosAtivos() {
                 const val = e.target.value
                 startTransition(() => {
                   setSearch(val)
-                  setPage(1)
                 })
               }}
               placeholder="Pesquisar por Princípio Ativo (chave), Macro/Sub-Grupo ou NCM Padrão..."
@@ -508,7 +585,6 @@ export function PrincipiosAtivos() {
               <button
                 onClick={() => {
                   setNota2Filter('todos')
-                  setPage(1)
                 }}
                 className={`px-2.5 py-1 rounded-lg text-xs transition-colors ${
                   nota2Filter === 'todos'
@@ -521,7 +597,6 @@ export function PrincipiosAtivos() {
               <button
                 onClick={() => {
                   setNota2Filter('SIM')
-                  setPage(1)
                 }}
                 className={`px-2.5 py-1 rounded-lg text-xs transition-colors ${
                   nota2Filter === 'SIM' ? 'bg-amber-100 text-amber-900 font-bold' : 'text-[#5A6D5A]'
@@ -532,7 +607,6 @@ export function PrincipiosAtivos() {
               <button
                 onClick={() => {
                   setNota2Filter('NÃO')
-                  setPage(1)
                 }}
                 className={`px-2.5 py-1 rounded-lg text-xs transition-colors ${
                   nota2Filter === 'NÃO'
@@ -552,7 +626,6 @@ export function PrincipiosAtivos() {
                   key={opt}
                   onClick={() => {
                     setPisFilter(opt)
-                    setPage(1)
                   }}
                   className={`px-2.5 py-1 rounded-lg text-xs capitalize transition-colors ${
                     pisFilter === opt
@@ -569,8 +642,15 @@ export function PrincipiosAtivos() {
       </Card>
 
       {/* Tabela da Matriz Canônica */}
-      <Card className="rounded-2xl border-[#DCE5DC] bg-white shadow-sm overflow-hidden flex flex-col">
-        <ScrollableTable autoFitHeight={true} bottomOffset={76}>
+      <Card className="rounded-2xl border-[#DCE5DC] bg-white shadow-sm overflow-hidden flex-1 flex flex-col min-h-0">
+        <ScrollableTable
+          autoFitHeight={true}
+          bottomOffset={52}
+          containerRef={tableContainerRef}
+          onNearBottom={carregarMaisDados}
+          bottomThreshold={250}
+          className="flex-1 min-h-0"
+        >
           <table className="w-full text-xs">
             <thead className="sticky top-0 z-20 bg-[#F5F7F1] shadow-[0_1px_0_0_#DCE5DC]">
               <tr className="bg-[#F5F7F1] border-b border-[#DCE5DC] text-left text-[#5A6D5A]">
@@ -896,34 +976,41 @@ export function PrincipiosAtivos() {
           </table>
         </ScrollableTable>
 
-        {/* Paginação */}
-        {totalPages > 1 && (
-          <div className="flex items-center justify-between p-4 border-t border-[#DCE5DC] text-xs text-[#5A6D5A]">
-            <span>
-              Página {page} de {totalPages} ({totalCount} princípios ativos)
+        {/* Sentinel e Indicadores de Rolagem Infinita */}
+        <div ref={sentinelRef} className="h-1 w-full" aria-hidden="true" />
+
+        {/* Rodapé informativo de rolagem infinita */}
+        <div className="flex items-center justify-between p-3.5 border-t border-[#DCE5DC] bg-[#FAFBF9] text-xs text-[#5A6D5A]">
+          <div className="flex items-center gap-2">
+            <span className="font-semibold text-[#1C2B1C]">
+              {principios.length}{' '}
+              {principios.length === 1 ? 'princípio ativo exibido' : 'princípios ativos exibidos'}
             </span>
-            <div className="flex gap-2">
-              <Button
-                variant="outline"
-                size="sm"
-                disabled={page <= 1}
-                onClick={() => setPage((p) => p - 1)}
-                className="h-8 text-xs"
-              >
-                Anterior
-              </Button>
-              <Button
-                variant="outline"
-                size="sm"
-                disabled={page >= totalPages}
-                onClick={() => setPage((p) => p + 1)}
-                className="h-8 text-xs"
-              >
-                Próxima
-              </Button>
-            </div>
+            <span className="text-[#8A9A86]">•</span>
+            <span>Ordem alfabética por princípio ativo (padrão)</span>
+            <span className="text-[#8A9A86]">•</span>
+            <span>Total na base com critérios atuais: {totalCount}</span>
           </div>
-        )}
+
+          <div className="flex items-center gap-2">
+            {loadingMore && (
+              <div className="inline-flex items-center gap-1.5 text-xs text-[#1B5E20] font-medium bg-emerald-50 px-2.5 py-1 rounded-md border border-emerald-200 animate-in fade-in">
+                <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                <span>Carregando próximo lote...</span>
+              </div>
+            )}
+            {!hasMore && principios.length > 0 && !loading && (
+              <span className="text-[11px] text-[#5A6D5A] bg-[#F5F7F1] px-2.5 py-1 rounded-md border border-[#DCE5DC]">
+                Fim da lista — todos os {principios.length} princípios ativos carregados
+              </span>
+            )}
+            {hasMore && !loadingMore && !loading && (
+              <span className="text-[11px] text-[#8A9A86] hidden sm:inline">
+                Role para baixo para carregar mais automaticamente
+              </span>
+            )}
+          </div>
+        </div>
       </Card>
 
       {/* ------------------------------------------------------------------ */}

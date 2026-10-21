@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react'
+import React, { useEffect, useState, useRef, useCallback } from 'react'
 import { Percent, Plus, Search, Save, Loader2, HelpCircle } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import { ScrollableTable } from '@/components/ScrollableTable'
@@ -35,26 +35,98 @@ export function Parametrizacao() {
   const [novoTrib, setNovoTrib] = useState('Tributação Reduzida (60%)')
   const [addingNovo, setAddingNovo] = useState(false)
 
-  const carregarParametros = async () => {
+  // Rolagem infinita contínua
+  const [totalCount, setTotalCount] = useState(0)
+  const [hasMore, setHasMore] = useState(true)
+  const [loadingMore, setLoadingMore] = useState(false)
+  const pageRef = useRef(1)
+  const hasMoreRef = useRef(true)
+  const loadingMoreRef = useRef(false)
+  const tableContainerRef = useRef<HTMLDivElement | null>(null)
+  const sentinelRef = useRef<HTMLDivElement | null>(null)
+
+  const buildFilter = useCallback(() => {
+    if (!search.trim()) return undefined
+    const clean = search.trim().replace(/'/g, "\\'")
+    return `ncm ~ '${clean}' || classificacao ~ '${clean}'`
+  }, [search])
+
+  const carregarParametros = useCallback(async () => {
     setLoading(true)
+    pageRef.current = 1
+    hasMoreRef.current = true
     try {
-      let filter = ''
-      if (search.trim()) {
-        const clean = search.trim().replace(/'/g, "\\'")
-        filter = `ncm ~ '${clean}' || classificacao ~ '${clean}'`
-      }
-      const res = await listarParametrizacaoFiscal({ perPage: 50, filter })
+      const filter = buildFilter()
+      const res = await listarParametrizacaoFiscal({ page: 1, perPage: 50, filter, sort: 'ncm' })
       setParametros(res.items)
+      setTotalCount(res.totalItems)
+      const more = res.totalPages > 1
+      setHasMore(more)
+      hasMoreRef.current = more
     } catch (err) {
       console.error(err)
     } finally {
       setLoading(false)
     }
-  }
+  }, [buildFilter])
+
+  const carregarMaisParametros = useCallback(async () => {
+    if (loadingMoreRef.current || !hasMoreRef.current) return
+    loadingMoreRef.current = true
+    setLoadingMore(true)
+    const nextPage = pageRef.current + 1
+
+    try {
+      const filter = buildFilter()
+      const res = await listarParametrizacaoFiscal({
+        page: nextPage,
+        perPage: 50,
+        filter,
+        sort: 'ncm',
+      })
+      pageRef.current = nextPage
+      setParametros((prev) => {
+        const ids = new Set(prev.map((p) => p.id))
+        const novos = res.items.filter((item) => !ids.has(item.id))
+        return [...prev, ...novos]
+      })
+      setTotalCount(res.totalItems)
+      const more = nextPage < (res.totalPages || 1)
+      setHasMore(more)
+      hasMoreRef.current = more
+    } catch (err) {
+      console.error('Erro ao carregar mais parametrizações fiscais:', err)
+    } finally {
+      loadingMoreRef.current = false
+      setLoadingMore(false)
+    }
+  }, [buildFilter])
 
   useEffect(() => {
     carregarParametros()
-  }, [search])
+  }, [carregarParametros])
+
+  // Sentinel de rolagem infinita
+  useEffect(() => {
+    const sentinel = sentinelRef.current
+    if (!sentinel) return
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries[0]?.isIntersecting) {
+          carregarMaisParametros()
+        }
+      },
+      {
+        root: tableContainerRef.current,
+        rootMargin: '250px',
+        threshold: 0,
+      },
+    )
+
+    observer.observe(sentinel)
+    return () => observer.disconnect()
+  }, [carregarMaisParametros, parametros.length])
 
   const handleUpdateItemField = (id: string, field: keyof ParametrizacaoFiscal, value: any) => {
     setParametros((prev) =>
@@ -119,7 +191,7 @@ export function Parametrizacao() {
   }
 
   return (
-    <div className="space-y-6 animate-in fade-in-up duration-300">
+    <div className="flex-1 flex flex-col space-y-4 min-h-0 animate-in fade-in-up duration-300">
       {/* Top Header */}
       <div>
         <h2 className="text-xl font-bold text-[#1C2B1C] flex items-center gap-2">
@@ -128,7 +200,7 @@ export function Parametrizacao() {
         </h2>
         <p className="text-xs text-[#5A6D5A] mt-0.5">
           Configuração de alíquotas por código NCM para cálculo automático de carga tributária e
-          enquadramento da Reforma Tributária.
+          enquadramento da Reforma Tributária ({totalCount} parametrizações cadastradas).
         </p>
       </div>
 
@@ -271,8 +343,15 @@ export function Parametrizacao() {
         </div>
       </Card>
 
-      <Card className="rounded-2xl border-[#DCE5DC] bg-white shadow-sm overflow-hidden flex flex-col">
-        <ScrollableTable autoFitHeight={true} bottomOffset={76}>
+      <Card className="rounded-2xl border-[#DCE5DC] bg-white shadow-sm overflow-hidden flex-1 flex flex-col min-h-0">
+        <ScrollableTable
+          autoFitHeight={true}
+          bottomOffset={52}
+          containerRef={tableContainerRef}
+          onNearBottom={carregarMaisParametros}
+          bottomThreshold={250}
+          className="flex-1 min-h-0"
+        >
           <table className="w-full text-xs">
             <thead className="sticky top-0 z-20 bg-[#F5F7F1] shadow-[0_1px_0_0_#DCE5DC]">
               <tr className="bg-[#F5F7F1] border-b border-[#DCE5DC] text-left text-[#5A6D5A]">
@@ -414,6 +493,42 @@ export function Parametrizacao() {
             </tbody>
           </table>
         </ScrollableTable>
+
+        {/* Sentinel e Indicadores de Rolagem Infinita */}
+        <div ref={sentinelRef} className="h-1 w-full" aria-hidden="true" />
+
+        {/* Rodapé informativo de rolagem infinita */}
+        <div className="flex items-center justify-between p-3.5 border-t border-[#DCE5DC] bg-[#FAFBF9] text-xs text-[#5A6D5A]">
+          <div className="flex items-center gap-2">
+            <span className="font-semibold text-[#1C2B1C]">
+              {parametros.length}{' '}
+              {parametros.length === 1 ? 'parametrização exibida' : 'parametrizações exibidas'}
+            </span>
+            <span className="text-[#8A9A86]">•</span>
+            <span>Ordem alfabética por NCM (padrão)</span>
+            <span className="text-[#8A9A86]">•</span>
+            <span>Total na base com critérios atuais: {totalCount}</span>
+          </div>
+
+          <div className="flex items-center gap-2">
+            {loadingMore && (
+              <div className="inline-flex items-center gap-1.5 text-xs text-[#1B5E20] font-medium bg-emerald-50 px-2.5 py-1 rounded-md border border-emerald-200 animate-in fade-in">
+                <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                <span>Carregando próximo lote...</span>
+              </div>
+            )}
+            {!hasMore && parametros.length > 0 && !loading && (
+              <span className="text-[11px] text-[#5A6D5A] bg-[#F5F7F1] px-2.5 py-1 rounded-md border border-[#DCE5DC]">
+                Fim da lista — todas as {parametros.length} parametrizações carregadas
+              </span>
+            )}
+            {hasMore && !loadingMore && !loading && (
+              <span className="text-[11px] text-[#8A9A86] hidden sm:inline">
+                Role para baixo para carregar mais automaticamente
+              </span>
+            )}
+          </div>
+        </div>
       </Card>
 
       {/* Explicação da Reforma Tributária Agro */}

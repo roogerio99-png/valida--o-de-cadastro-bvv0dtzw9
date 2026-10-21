@@ -225,10 +225,11 @@ export function Travas() {
             Trilha de Auditoria e Histórico de Eventos
           </CardTitle>
           <CardDescription className="text-xs text-[#5A6D5A]">
-            Registro imutável das análises realizadas para fins de compliance fiscal e agrônomo
+            Registro imutável das análises realizadas para fins de compliance fiscal e agrônomo (
+            {logs.length} eventos registrados)
           </CardDescription>
         </CardHeader>
-        <ScrollableTable autoFitHeight={true} bottomOffset={76}>
+        <ScrollableTable autoFitHeight={false} maxHeight="480px" bottomOffset={52}>
           <table className="w-full text-xs">
             <thead className="sticky top-0 z-20 bg-[#F5F7F1] shadow-[0_1px_0_0_#DCE5DC]">
               <tr className="bg-[#F5F7F1] border-b border-[#DCE5DC] text-left text-[#5A6D5A]">
@@ -294,6 +295,18 @@ export function Travas() {
             </tbody>
           </table>
         </ScrollableTable>
+
+        <div className="flex items-center justify-between p-3.5 border-t border-[#DCE5DC] bg-[#FAFBF9] text-xs text-[#5A6D5A]">
+          <span className="font-semibold text-[#1C2B1C]">
+            {logs.length}{' '}
+            {logs.length === 1
+              ? 'evento de auditoria registrado'
+              : 'eventos de auditoria registrados'}
+          </span>
+          <span className="text-[11px] text-[#8A9A86]">
+            Histórico mais recente sincronizado em tempo real
+          </span>
+        </div>
       </Card>
     </div>
   )
