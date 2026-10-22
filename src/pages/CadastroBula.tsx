@@ -278,17 +278,33 @@ export function CadastroBula() {
   }
 
   const handleLimparBase = async () => {
+    if (!isAdmin) {
+      toast({
+        variant: 'destructive',
+        title: 'Ação não permitida',
+        description: 'Apenas administradores podem executar a limpeza do Cadastro de Bula.',
+      })
+      return
+    }
     if (confirmacaoTexto.trim() !== 'LIMPAR') return
     setExecutandoLimpeza(true)
     try {
       const res = await limparCadastroBula({ confirmar: 'LIMPAR' })
-      const total = res.apagados.total
+      const total = res?.apagados?.total ?? 0
+      const detalhes = res?.apagados
+        ? `Removidos: ${res.apagados.bula_produtos} produtos mestre, ${res.apagados.bula_composicao} composições, ${res.apagados.bula_empresas} empresas, ${res.apagados.bula_embalagens} embalagens, ${res.apagados.bula_culturas} culturas, ${res.apagados.bula_alvos} alvos, ${res.apagados.bula_aplicacao} aplicações.`
+        : ''
       toast({
         title: 'Cadastro de Bula limpo com sucesso',
-        description: `Total de ${total} registros removidos de todas as 7 coleções de bula.`,
+        description: `Total de ${total} registros removidos de todas as 7 coleções de bula. ${detalhes}`,
       })
       setModalLimparOpen(false)
       setConfirmacaoTexto('')
+      setProdutos([])
+      setTotalCount(0)
+      setHasMore(false)
+      hasMoreRef.current = false
+      setExpandedRowIds({})
       await carregarProdutos()
     } catch (err: unknown) {
       const msg =
@@ -680,51 +696,66 @@ export function CadastroBula() {
           </DialogHeader>
 
           <div className="space-y-3.5 py-2 text-xs">
-            {/* Caixa de detalhes do que será apagado */}
-            <div className="p-3 bg-red-50/70 rounded-xl border border-red-200 text-red-900 space-y-1">
-              <div className="flex items-center gap-1.5 font-bold text-[11px] text-red-950">
-                <Trash2 className="w-4 h-4 text-red-600" />
-                <span>Coleções que serão totalmente esvaziadas (7 blocos):</span>
+            {!isAdmin ? (
+              <div className="p-3 bg-red-50 rounded-xl border border-red-200 text-red-800 flex items-start gap-2">
+                <AlertTriangle className="w-5 h-5 shrink-0 text-red-600 mt-0.5" />
+                <div>
+                  <strong>Acesso Restrito a Administradores</strong>
+                  <p className="mt-0.5">
+                    Seu perfil é de <strong>Analista</strong>. A limpeza do Cadastro de Bula é uma
+                    operação crítica reservada exclusivamente para administradores.
+                  </p>
+                </div>
               </div>
-              <ul className="list-disc list-inside text-[11px] text-red-800 space-y-0.5 pl-1">
-                <li>Bula Produtos (Cadastro Mestre 1:1)</li>
-                <li>Composição em Linhas (Ingredientes ativos e garantias)</li>
-                <li>Cadeia de Empresas (Titular, Formulador, Manipulador, Importador)</li>
-                <li>Embalagens × NCM (Capacidades, lavabilidade e TIPI)</li>
-                <li>Culturas e Carência (Intervalos de segurança e reentrada)</li>
-                <li>Alvos e Doses (Pragas, doenças e doses PC)</li>
-                <li>Aplicação e EPI (Recomendações técnicas e proteção)</li>
-              </ul>
-            </div>
+            ) : (
+              <>
+                {/* Caixa de detalhes do que será apagado */}
+                <div className="p-3 bg-red-50/70 rounded-xl border border-red-200 text-red-900 space-y-1">
+                  <div className="flex items-center gap-1.5 font-bold text-[11px] text-red-950">
+                    <Trash2 className="w-4 h-4 text-red-600" />
+                    <span>Coleções que serão totalmente esvaziadas (7 blocos):</span>
+                  </div>
+                  <ul className="list-disc list-inside text-[11px] text-red-800 space-y-0.5 pl-1">
+                    <li>Bula Produtos (Cadastro Mestre 1:1)</li>
+                    <li>Composição em Linhas (Ingredientes ativos e garantias)</li>
+                    <li>Cadeia de Empresas (Titular, Formulador, Manipulador, Importador)</li>
+                    <li>Embalagens × NCM (Capacidades, lavabilidade e TIPI)</li>
+                    <li>Culturas e Carência (Intervalos de segurança e reentrada)</li>
+                    <li>Alvos e Doses (Pragas, doenças e doses PC)</li>
+                    <li>Aplicação e EPI (Recomendações técnicas e proteção)</li>
+                  </ul>
+                </div>
 
-            {/* Caixa de garantia de preservação */}
-            <div className="p-3 bg-emerald-50 rounded-xl border border-emerald-200 text-emerald-900 space-y-1">
-              <div className="flex items-center gap-1.5 font-bold text-[11px] text-emerald-950">
-                <ShieldCheck className="w-4 h-4 text-emerald-700" />
-                <span>O que permanece 100% intacto e protegido:</span>
-              </div>
-              <ul className="list-disc list-inside text-[11px] text-emerald-800 space-y-0.5 pl-1">
-                <li>Base Mestre de Produtos e Dicionário de Princípios Ativos</li>
-                <li>Regras Fiscais NCM × Embalagem e Parametrização Tributária</li>
-                <li>Histórico de Validações e Relatórios de Sincronização</li>
-                <li>Usuários, perfis e credenciais do sistema</li>
-              </ul>
-            </div>
+                {/* Caixa de garantia de preservação */}
+                <div className="p-3 bg-emerald-50 rounded-xl border border-emerald-200 text-emerald-900 space-y-1">
+                  <div className="flex items-center gap-1.5 font-bold text-[11px] text-emerald-950">
+                    <ShieldCheck className="w-4 h-4 text-emerald-700" />
+                    <span>O que permanece 100% intacto e protegido:</span>
+                  </div>
+                  <ul className="list-disc list-inside text-[11px] text-emerald-800 space-y-0.5 pl-1">
+                    <li>Base Mestre de Produtos e Dicionário de Princípios Ativos</li>
+                    <li>Regras Fiscais NCM × Embalagem e Parametrização Tributária</li>
+                    <li>Histórico de Validações e Relatórios de Sincronização</li>
+                    <li>Usuários, perfis e credenciais do sistema</li>
+                  </ul>
+                </div>
 
-            <div className="space-y-1.5">
-              <Label className="text-xs font-semibold text-[#1C2B1C]">
-                Digite <span className="font-mono font-bold text-red-700">LIMPAR</span> para
-                confirmar:
-              </Label>
-              <Input
-                value={confirmacaoTexto}
-                onChange={(e) => setConfirmacaoTexto(e.target.value)}
-                placeholder="Digite LIMPAR"
-                disabled={executandoLimpeza}
-                className="h-9 text-xs font-mono font-bold tracking-wider uppercase border-red-300 focus-visible:ring-red-500"
-                autoFocus
-              />
-            </div>
+                <div className="space-y-1.5">
+                  <Label className="text-xs font-semibold text-[#1C2B1C]">
+                    Digite <span className="font-mono font-bold text-red-700">LIMPAR</span> para
+                    confirmar:
+                  </Label>
+                  <Input
+                    value={confirmacaoTexto}
+                    onChange={(e) => setConfirmacaoTexto(e.target.value)}
+                    placeholder="Digite LIMPAR"
+                    disabled={executandoLimpeza}
+                    className="h-9 text-xs font-mono font-bold tracking-wider uppercase border-red-300 focus-visible:ring-red-500"
+                    autoFocus
+                  />
+                </div>
+              </>
+            )}
           </div>
 
           <DialogFooter className="pt-2 gap-2 sm:gap-0">
@@ -741,26 +772,28 @@ export function CadastroBula() {
             >
               Cancelar
             </Button>
-            <Button
-              type="button"
-              variant="destructive"
-              size="sm"
-              onClick={handleLimparBase}
-              disabled={confirmacaoTexto.trim() !== 'LIMPAR' || executandoLimpeza}
-              className="text-xs h-9 bg-red-600 hover:bg-red-700 text-white font-semibold flex items-center gap-1.5"
-            >
-              {executandoLimpeza ? (
-                <>
-                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                  Apagando registros...
-                </>
-              ) : (
-                <>
-                  <Trash2 className="w-3.5 h-3.5" />
-                  Confirmar Limpeza Total
-                </>
-              )}
-            </Button>
+            {isAdmin && (
+              <Button
+                type="button"
+                variant="destructive"
+                size="sm"
+                onClick={handleLimparBase}
+                disabled={confirmacaoTexto.trim() !== 'LIMPAR' || executandoLimpeza}
+                className="text-xs h-9 bg-red-600 hover:bg-red-700 text-white font-semibold flex items-center gap-1.5"
+              >
+                {executandoLimpeza ? (
+                  <>
+                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                    Apagando registros...
+                  </>
+                ) : (
+                  <>
+                    <Trash2 className="w-3.5 h-3.5" />
+                    Confirmar Limpeza Total
+                  </>
+                )}
+              </Button>
+            )}
           </DialogFooter>
         </DialogContent>
       </Dialog>

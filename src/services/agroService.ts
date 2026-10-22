@@ -405,30 +405,10 @@ export async function limparBases(params: {
   alvo: 'todas' | 'base_mestre' | 'dicionario_principios_ativos'
   confirmar: string
 }): Promise<RespostaLimpezaBases> {
-  const token = pb.authStore.token
-  const baseUrl = import.meta.env.VITE_POCKETBASE_URL || ''
-
-  const response = await fetch(`${baseUrl}/backend/v1/limpar-bases`, {
+  return pb.send<RespostaLimpezaBases>('/backend/v1/limpar-bases', {
     method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      ...(token ? { Authorization: token } : {}),
-    },
-    body: JSON.stringify(params),
+    body: params,
   })
-
-  if (!response.ok) {
-    let msg = `Erro na operação de limpeza (HTTP ${response.status})`
-    try {
-      const data = await response.json()
-      if (data?.error || data?.message) msg = data.error || data.message
-    } catch {
-      /* ignore */
-    }
-    throw new Error(msg)
-  }
-
-  return (await response.json()) as RespostaLimpezaBases
 }
 
 /**
@@ -680,28 +660,8 @@ export interface RespostaLimpezaBula {
 export async function limparCadastroBula(params: {
   confirmar: string
 }): Promise<RespostaLimpezaBula> {
-  const token = pb.authStore.token
-  const baseUrl = import.meta.env.VITE_POCKETBASE_URL || ''
-
-  const response = await fetch(`${baseUrl}/backend/v1/limpar-bula`, {
+  return pb.send<RespostaLimpezaBula>('/backend/v1/limpar-bula', {
     method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      ...(token ? { Authorization: token } : {}),
-    },
-    body: JSON.stringify(params),
+    body: params,
   })
-
-  if (!response.ok) {
-    let msg = `Erro na operação de limpeza da bula (HTTP ${response.status})`
-    try {
-      const data = await response.json()
-      if (data?.error || data?.message) msg = data.error || data.message
-    } catch {
-      /* ignore */
-    }
-    throw new Error(msg)
-  }
-
-  return (await response.json()) as RespostaLimpezaBula
 }

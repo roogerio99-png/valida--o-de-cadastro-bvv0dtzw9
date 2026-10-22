@@ -211,23 +211,31 @@ routerAdd('POST', '/backend/v1/limpar-bula', (e) => {
     }
   }
 
-  // Truncar as coleções na ordem inversa de dependência (acessórias primeiro, depois mestre)
+  const userRole = authRecord.getString('role') || 'analista'
+  if (userRole !== 'admin') {
+    return e.json(403, {
+      sucesso: false,
+      error: 'Apenas administradores podem executar a limpeza do Cadastro de Bula.',
+    })
+  }
+
+  // Exclusão em lote na ordem inversa de dependência (acessórias primeiro, depois mestre)
   for (let i = 0; i < colecoesBula.length; i++) {
     const nomeCol = colecoesBula[i]
     try {
-      const col = $app.findCollectionByNameOrId(nomeCol)
-      $app.truncateCollection(col)
-    } catch (err) {
-      console.log('Aviso ao truncar ' + nomeCol + ':', err.message)
+      $app
+        .db()
+        .newQuery('DELETE FROM ' + nomeCol)
+        .execute()
+    } catch (sqlErr) {
       try {
-        $app
-          .db()
-          .newQuery('DELETE FROM ' + nomeCol)
-          .execute()
-      } catch (sqlErr) {
+        const col = $app.findCollectionByNameOrId(nomeCol)
+        $app.truncateCollection(col)
+      } catch (truncErr) {
+        const msg = sqlErr ? sqlErr.message || String(sqlErr) : String(truncErr)
         return e.json(500, {
           sucesso: false,
-          error: 'Falha ao limpar ' + nomeCol + ': ' + sqlErr.message,
+          error: 'Falha ao limpar coleção ' + nomeCol + ': ' + msg,
         })
       }
     }
