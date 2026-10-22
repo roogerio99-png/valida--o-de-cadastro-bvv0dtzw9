@@ -1077,6 +1077,7 @@ export function Importar() {
       // Ingestão na íntegra: SEM NENHUM FILTRO DE VALIDAÇÃO OU RECUSA
       // ------------------------------------------------------------------
       else if (targetCol === 'bula_produtos') {
+        const codigo = getFieldValue(row, ['codigo', 'cod', 'codigo_produto', 'id'])
         const mapa = getFieldValue(row, [
           'registro_mapa',
           'registro_no_mapa',
@@ -1085,6 +1086,7 @@ export function Importar() {
           'nr_registro',
           'mapa',
           'registro',
+          'mapa_oficial_limpo',
         ])
         const nome = getFieldValue(row, [
           'nome_comercial',
@@ -1118,6 +1120,15 @@ export function Importar() {
           'pa_oficial_correto',
           'pa_oficial',
         ])
+        const paOficialCorreto = getFieldValue(row, ['pa_oficial_correto', 'pa_oficial'])
+        const mapaOficialLimpo = getFieldValue(row, ['mapa_oficial_limpo', 'mapa_limpo'])
+        const embalagemVal = getFieldValue(row, ['embalagem', 'embalagem_detectada'])
+        const ncmOficialExata = getFieldValue(row, ['ncm_oficial_exata', 'ncm_exata'])
+        const urlOficialVal = getFieldValue(row, ['url_oficial', 'url', 'link'])
+        const macroGrupoVal = getFieldValue(row, ['macro_grupo', 'macro_grupo_subgrupo'])
+        const subGrupoVal = getFieldValue(row, ['sub_grupo', 'subgrupo'])
+        const notaSubpos2Val = getFieldValue(row, ['nota_subpos_2', 'nota_subpos2', 'subpos_2'])
+        const regraTipiVal = getFieldValue(row, ['regra_tipi', 'regra_tipi_embalagem'])
         const classe = getFieldValue(row, ['classe_agronomica', 'classe', 'sub_grupo', 'funcao'])
         const grupoQ = getFieldValue(row, ['grupo_quimico', 'grupo'])
         const tox = getFieldValue(row, [
@@ -1171,6 +1182,18 @@ export function Importar() {
             ncm_padrao: cleanNcm(ncmRaw) ? formatarNcmMascara(cleanNcm(ncmRaw)) : ncmRaw || '',
             tipo_produto: tipoProd || 'Produto Formulado Comercial',
             status_registro: statusReg || 'Ativo',
+            codigo: codigo || '',
+            pa_oficial_correto: paOficialCorreto || '',
+            mapa_oficial_limpo: mapaOficialLimpo || '',
+            embalagem: embalagemVal || '',
+            ncm_oficial_exata: cleanNcm(ncmOficialExata)
+              ? formatarNcmMascara(cleanNcm(ncmOficialExata))
+              : ncmOficialExata || '',
+            url_oficial: urlOficialVal || '',
+            macro_grupo: macroGrupoVal || '',
+            sub_grupo: subGrupoVal || '',
+            nota_subpos_2: notaSubpos2Val || '',
+            regra_tipi: regraTipiVal || '',
             dados_extras: dadosExtrasObj,
           },
         })
@@ -1203,6 +1226,9 @@ export function Importar() {
         const und = getFieldValue(row, ['unidade_medida', 'unidade', 'uom'])
         const func = getFieldValue(row, ['funcao_ingrediente', 'funcao', 'tipo'])
         const grupoQ = getFieldValue(row, ['grupo_quimico', 'grupo'])
+        const codigo = getFieldValue(row, ['codigo', 'cod', 'id'])
+        const percPeso = getFieldValue(row, ['percentual_peso', 'peso_percentual', 'pct_peso'])
+        const percVol = getFieldValue(row, ['percentual_volume', 'volume_percentual', 'pct_volume'])
 
         const mapaFinal = mapa ? sanitizarRegistroMapa(mapa) : `LINHA-${originalLineNum}`
         const iaFinal = ia || nomeQuim || nomeProd || 'Ingrediente Ativo'
@@ -1219,6 +1245,9 @@ export function Importar() {
             unidade_medida: und || 'g/L',
             funcao_ingrediente: func || '',
             grupo_quimico: grupoQ || '',
+            codigo: codigo || '',
+            percentual_peso: percPeso || '',
+            percentual_volume: percVol || '',
             dados_extras: row,
           },
         })
@@ -1257,6 +1286,10 @@ export function Importar() {
         const mun = getFieldValue(row, ['municipio', 'cidade'])
         const uf = getFieldValue(row, ['uf', 'estado'])
         const pais = getFieldValue(row, ['pais'])
+        const codigo = getFieldValue(row, ['codigo', 'cod', 'id'])
+        const cep = getFieldValue(row, ['cep', 'codigo_postal'])
+        const bairro = getFieldValue(row, ['bairro', 'distrito'])
+        const ie = getFieldValue(row, ['inscricao_estadual', 'ie', 'inscr_estadual'])
 
         const mapaFinal = mapa ? sanitizarRegistroMapa(mapa) : `LINHA-${originalLineNum}`
         const razaoFinal = razao || fant || 'Empresa Vinculada'
@@ -1274,6 +1307,10 @@ export function Importar() {
             municipio: mun || '',
             uf: uf || '',
             pais: pais || 'Brasil',
+            codigo: codigo || '',
+            cep: cep || '',
+            bairro: bairro || '',
+            inscricao_estadual: ie || '',
             dados_extras: row,
           },
         })
@@ -1298,6 +1335,9 @@ export function Importar() {
         const und = getFieldValue(row, ['unidade_medida', 'unidade'])
         const ncmRaw = getFieldValue(row, ['ncm', 'classificacao_fiscal'])
         const dest = getFieldValue(row, ['destinacao_final', 'destinacao', 'descarte'])
+        const codigo = getFieldValue(row, ['codigo', 'cod', 'id'])
+        const ncmFaixa = getFieldValue(row, ['ncm_faixa', 'faixa_ncm', 'faixa'])
+        const descEmb = getFieldValue(row, ['descricao_embalagem', 'descricao', 'desc_embalagem'])
 
         const mapaFinal = mapa ? sanitizarRegistroMapa(mapa) : `LINHA-${originalLineNum}`
 
@@ -1312,6 +1352,9 @@ export function Importar() {
             unidade_medida: und || 'L',
             ncm: cleanNcm(ncmRaw) ? formatarNcmMascara(cleanNcm(ncmRaw)) : ncmRaw || '',
             destinacao_final: dest || '',
+            codigo: codigo || '',
+            ncm_faixa: ncmFaixa || '',
+            descricao_embalagem: descEmb || '',
             dados_extras: row,
           },
         })
@@ -1345,6 +1388,9 @@ export function Importar() {
         const mod = getFieldValue(row, ['modalidade_emprego', 'modalidade', 'aplicacao'])
         const lmr = getFieldValue(row, ['limite_maximo_residuos_lmr', 'lmr'])
         const obs = getFieldValue(row, ['observacoes', 'observacao', 'obs'])
+        const codigo = getFieldValue(row, ['codigo', 'cod', 'id'])
+        const tipoCult = getFieldValue(row, ['tipo_cultura', 'tipo'])
+        const epocaCar = getFieldValue(row, ['epoca_carencia', 'epoca', 'momento_carencia'])
 
         const mapaFinal = mapa ? sanitizarRegistroMapa(mapa) : `LINHA-${originalLineNum}`
         const cultFinal = cult || 'Todas as Culturas Autorizadas'
@@ -1360,6 +1406,9 @@ export function Importar() {
             modalidade_emprego: mod || '',
             limite_maximo_residuos_lmr: lmr || '',
             observacoes: obs || '',
+            codigo: codigo || '',
+            tipo_cultura: tipoCult || '',
+            epoca_carencia: epocaCar || '',
             dados_extras: row,
           },
         })
@@ -1397,6 +1446,13 @@ export function Importar() {
           'aplicacoes',
         ])
         const epoca = getFieldValue(row, ['epoca_aplicacao', 'epoca', 'momento_aplicacao'])
+        const codigo = getFieldValue(row, ['codigo', 'cod', 'id'])
+        const tipoAlvo = getFieldValue(row, ['tipo_alvo', 'tipo'])
+        const intAplDias = getFieldValue(row, [
+          'intervalo_aplicacao_dias',
+          'intervalo_dias',
+          'intervalo_aplicacao',
+        ])
 
         const mapaFinal = mapa ? sanitizarRegistroMapa(mapa) : `LINHA-${originalLineNum}`
         const alvoFinal = alvo || 'Alvo Biológico da Bula'
@@ -1415,6 +1471,9 @@ export function Importar() {
             volume_calda: vol || '',
             numero_maximo_aplicacoes: numAp || '',
             epoca_aplicacao: epoca || '',
+            codigo: codigo || '',
+            tipo_alvo: tipoAlvo || '',
+            intervalo_aplicacao_dias: intAplDias || '',
             dados_extras: row,
           },
         })
@@ -1449,6 +1508,18 @@ export function Importar() {
           'socorro',
         ])
         const descarte = getFieldValue(row, ['descarte_embalagens', 'descarte', 'triplice_lavagem'])
+        const codigo = getFieldValue(row, ['codigo', 'cod', 'id'])
+        const volCaldaApl = getFieldValue(row, ['volume_calda_aplicacao', 'volume_calda', 'calda'])
+        const toxApl = getFieldValue(row, [
+          'classe_toxicologica_aplicacao',
+          'toxicologia',
+          'classe_tox',
+        ])
+        const orientGerais = getFieldValue(row, [
+          'orientacoes_gerais',
+          'orientacoes',
+          'recomendacoes',
+        ])
 
         const mapaFinal = mapa ? sanitizarRegistroMapa(mapa) : `LINHA-${originalLineNum}`
 
@@ -1464,6 +1535,10 @@ export function Importar() {
             epi_aplicacao: epiApl || '',
             medidas_primeiros_socorros: socorro || '',
             descarte_embalagens: descarte || '',
+            codigo: codigo || '',
+            volume_calda_aplicacao: volCaldaApl || '',
+            classe_toxicologica_aplicacao: toxApl || '',
+            orientacoes_gerais: orientGerais || '',
             dados_extras: row,
           },
         })

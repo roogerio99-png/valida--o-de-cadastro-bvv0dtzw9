@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-10-22T18:33:27.720Z",
+  "generatedAt": "2026-10-22T18:43:38.150Z",
   "collections": [
     {
       "name": "users",
@@ -991,6 +991,66 @@
           "required": false,
           "system": false,
           "autodateTriggers": ["onCreate", "onUpdate"]
+        },
+        {
+          "name": "codigo",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "pa_oficial_correto",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "mapa_oficial_limpo",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "embalagem",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "ncm_oficial_exata",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "url_oficial",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "macro_grupo",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "sub_grupo",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "nota_subpos_2",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "regra_tipi",
+          "type": "text",
+          "required": false,
+          "system": false
         }
       ],
       "indexes": [
@@ -1084,6 +1144,24 @@
           "required": false,
           "system": false,
           "autodateTriggers": ["onCreate", "onUpdate"]
+        },
+        {
+          "name": "codigo",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "percentual_peso",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "percentual_volume",
+          "type": "text",
+          "required": false,
+          "system": false
         }
       ],
       "indexes": [
@@ -1181,6 +1259,30 @@
           "required": false,
           "system": false,
           "autodateTriggers": ["onCreate", "onUpdate"]
+        },
+        {
+          "name": "codigo",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "cep",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "bairro",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "inscricao_estadual",
+          "type": "text",
+          "required": false,
+          "system": false
         }
       ],
       "indexes": [
@@ -1268,6 +1370,24 @@
           "required": false,
           "system": false,
           "autodateTriggers": ["onCreate", "onUpdate"]
+        },
+        {
+          "name": "codigo",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "ncm_faixa",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "descricao_embalagem",
+          "type": "text",
+          "required": false,
+          "system": false
         }
       ],
       "indexes": [
@@ -1354,6 +1474,24 @@
           "required": false,
           "system": false,
           "autodateTriggers": ["onCreate", "onUpdate"]
+        },
+        {
+          "name": "codigo",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "tipo_cultura",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "epoca_carencia",
+          "type": "text",
+          "required": false,
+          "system": false
         }
       ],
       "indexes": [
@@ -1458,6 +1596,24 @@
           "required": false,
           "system": false,
           "autodateTriggers": ["onCreate", "onUpdate"]
+        },
+        {
+          "name": "codigo",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "tipo_alvo",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "intervalo_aplicacao_dias",
+          "type": "text",
+          "required": false,
+          "system": false
         }
       ],
       "indexes": [
@@ -1551,6 +1707,30 @@
           "required": false,
           "system": false,
           "autodateTriggers": ["onCreate", "onUpdate"]
+        },
+        {
+          "name": "codigo",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "volume_calda_aplicacao",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "classe_toxicologica_aplicacao",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "orientacoes_gerais",
+          "type": "text",
+          "required": false,
+          "system": false
         }
       ],
       "indexes": [

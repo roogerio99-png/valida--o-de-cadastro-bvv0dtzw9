@@ -29,6 +29,16 @@ export interface BulaProdutoItem extends RecordModel {
   ncm_padrao?: string
   tipo_produto?: string
   status_registro?: string
+  codigo?: string
+  pa_oficial_correto?: string
+  mapa_oficial_limpo?: string
+  embalagem?: string
+  ncm_oficial_exata?: string
+  url_oficial?: string
+  macro_grupo?: string
+  sub_grupo?: string
+  nota_subpos_2?: string
+  regra_tipi?: string
   dados_extras?: Record<string, unknown>
   created: string
   updated: string
@@ -44,6 +54,9 @@ export interface BulaComposicaoItem extends RecordModel {
   unidade_medida?: string
   funcao_ingrediente?: string
   grupo_quimico?: string
+  codigo?: string
+  percentual_peso?: string
+  percentual_volume?: string
   dados_extras?: Record<string, unknown>
   created: string
   updated: string
@@ -60,6 +73,10 @@ export interface BulaEmpresaItem extends RecordModel {
   municipio?: string
   uf?: string
   pais?: string
+  codigo?: string
+  cep?: string
+  bairro?: string
+  inscricao_estadual?: string
   dados_extras?: Record<string, unknown>
   created: string
   updated: string
@@ -74,6 +91,9 @@ export interface BulaEmbalagemItem extends RecordModel {
   unidade_medida?: string
   ncm?: string
   destinacao_final?: string
+  codigo?: string
+  ncm_faixa?: string
+  descricao_embalagem?: string
   dados_extras?: Record<string, unknown>
   created: string
   updated: string
@@ -88,6 +108,9 @@ export interface BulaCulturaItem extends RecordModel {
   modalidade_emprego?: string
   limite_maximo_residuos_lmr?: string
   observacoes?: string
+  codigo?: string
+  tipo_cultura?: string
+  epoca_carencia?: string
   dados_extras?: Record<string, unknown>
   created: string
   updated: string
@@ -105,6 +128,9 @@ export interface BulaAlvoItem extends RecordModel {
   volume_calda?: string
   numero_maximo_aplicacoes?: string
   epoca_aplicacao?: string
+  codigo?: string
+  tipo_alvo?: string
+  intervalo_aplicacao_dias?: string
   dados_extras?: Record<string, unknown>
   created: string
   updated: string
@@ -120,6 +146,10 @@ export interface BulaAplicacaoItem extends RecordModel {
   epi_aplicacao?: string
   medidas_primeiros_socorros?: string
   descarte_embalagens?: string
+  codigo?: string
+  volume_calda_aplicacao?: string
+  classe_toxicologica_aplicacao?: string
+  orientacoes_gerais?: string
   dados_extras?: Record<string, unknown>
   created: string
   updated: string

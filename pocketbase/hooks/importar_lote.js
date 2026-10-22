@@ -1060,6 +1060,19 @@ routerAdd('POST', '/backend/v1/importar-lote', (e) => {
             if (data.tipo_produto) rec.set('tipo_produto', String(data.tipo_produto).trim())
             if (data.status_registro)
               rec.set('status_registro', String(data.status_registro).trim())
+            if (data.codigo) rec.set('codigo', String(data.codigo).trim())
+            if (data.pa_oficial_correto)
+              rec.set('pa_oficial_correto', String(data.pa_oficial_correto).trim())
+            if (data.mapa_oficial_limpo)
+              rec.set('mapa_oficial_limpo', String(data.mapa_oficial_limpo).trim())
+            if (data.embalagem) rec.set('embalagem', String(data.embalagem).trim())
+            if (data.ncm_oficial_exata)
+              rec.set('ncm_oficial_exata', String(data.ncm_oficial_exata).trim())
+            if (data.url_oficial) rec.set('url_oficial', String(data.url_oficial).trim())
+            if (data.macro_grupo) rec.set('macro_grupo', String(data.macro_grupo).trim())
+            if (data.sub_grupo) rec.set('sub_grupo', String(data.sub_grupo).trim())
+            if (data.nota_subpos_2) rec.set('nota_subpos_2', String(data.nota_subpos_2).trim())
+            if (data.regra_tipi) rec.set('regra_tipi', String(data.regra_tipi).trim())
           } else {
             // Novo registro (INSERT)
             rec.set('registro_mapa', regMapa)
@@ -1086,6 +1099,16 @@ routerAdd('POST', '/backend/v1/importar-lote', (e) => {
               String(data.tipo_produto || 'Produto Formulado Comercial').trim(),
             )
             rec.set('status_registro', String(data.status_registro || 'Ativo').trim())
+            rec.set('codigo', String(data.codigo || '').trim())
+            rec.set('pa_oficial_correto', String(data.pa_oficial_correto || '').trim())
+            rec.set('mapa_oficial_limpo', String(data.mapa_oficial_limpo || '').trim())
+            rec.set('embalagem', String(data.embalagem || '').trim())
+            rec.set('ncm_oficial_exata', String(data.ncm_oficial_exata || '').trim())
+            rec.set('url_oficial', String(data.url_oficial || '').trim())
+            rec.set('macro_grupo', String(data.macro_grupo || '').trim())
+            rec.set('sub_grupo', String(data.sub_grupo || '').trim())
+            rec.set('nota_subpos_2', String(data.nota_subpos_2 || '').trim())
+            rec.set('regra_tipi', String(data.regra_tipi || '').trim())
           }
 
           if (Object.keys(extrasObj).length > 0) {
@@ -1163,6 +1186,9 @@ routerAdd('POST', '/backend/v1/importar-lote', (e) => {
           rec.set('unidade_medida', String(data.unidade_medida || 'g/L').trim())
           rec.set('funcao_ingrediente', String(data.funcao_ingrediente || '').trim())
           rec.set('grupo_quimico', String(data.grupo_quimico || '').trim())
+          rec.set('codigo', String(data.codigo || '').trim())
+          rec.set('percentual_peso', String(data.percentual_peso || '').trim())
+          rec.set('percentual_volume', String(data.percentual_volume || '').trim())
           if (data.dados_extras) rec.set('dados_extras', JSON.stringify(data.dados_extras))
 
           try {
@@ -1238,6 +1264,10 @@ routerAdd('POST', '/backend/v1/importar-lote', (e) => {
           rec.set('municipio', String(data.municipio || '').trim())
           rec.set('uf', String(data.uf || '').trim())
           rec.set('pais', String(data.pais || 'Brasil').trim())
+          rec.set('codigo', String(data.codigo || '').trim())
+          rec.set('cep', String(data.cep || '').trim())
+          rec.set('bairro', String(data.bairro || '').trim())
+          rec.set('inscricao_estadual', String(data.inscricao_estadual || '').trim())
           if (data.dados_extras) rec.set('dados_extras', JSON.stringify(data.dados_extras))
 
           try {
@@ -1309,6 +1339,9 @@ routerAdd('POST', '/backend/v1/importar-lote', (e) => {
           rec.set('unidade_medida', String(data.unidade_medida || 'L').trim())
           rec.set('ncm', fmtNcmMascara(data.ncm))
           rec.set('destinacao_final', String(data.destinacao_final || '').trim())
+          rec.set('codigo', String(data.codigo || '').trim())
+          rec.set('ncm_faixa', String(data.ncm_faixa || '').trim())
+          rec.set('descricao_embalagem', String(data.descricao_embalagem || '').trim())
           if (data.dados_extras) rec.set('dados_extras', JSON.stringify(data.dados_extras))
 
           try {
@@ -1382,6 +1415,9 @@ routerAdd('POST', '/backend/v1/importar-lote', (e) => {
             String(data.limite_maximo_residuos_lmr || '').trim(),
           )
           rec.set('observacoes', String(data.observacoes || '').trim())
+          rec.set('codigo', String(data.codigo || '').trim())
+          rec.set('tipo_cultura', String(data.tipo_cultura || '').trim())
+          rec.set('epoca_carencia', String(data.epoca_carencia || '').trim())
           if (data.dados_extras) rec.set('dados_extras', JSON.stringify(data.dados_extras))
 
           try {
@@ -1457,6 +1493,9 @@ routerAdd('POST', '/backend/v1/importar-lote', (e) => {
           rec.set('volume_calda', String(data.volume_calda || '').trim())
           rec.set('numero_maximo_aplicacoes', String(data.numero_maximo_aplicacoes || '').trim())
           rec.set('epoca_aplicacao', String(data.epoca_aplicacao || '').trim())
+          rec.set('codigo', String(data.codigo || '').trim())
+          rec.set('tipo_alvo', String(data.tipo_alvo || '').trim())
+          rec.set('intervalo_aplicacao_dias', String(data.intervalo_aplicacao_dias || '').trim())
           if (data.dados_extras) rec.set('dados_extras', JSON.stringify(data.dados_extras))
 
           try {
@@ -1529,6 +1568,13 @@ routerAdd('POST', '/backend/v1/importar-lote', (e) => {
             String(data.medidas_primeiros_socorros || '').trim(),
           )
           rec.set('descarte_embalagens', String(data.descarte_embalagens || '').trim())
+          rec.set('codigo', String(data.codigo || '').trim())
+          rec.set('volume_calda_aplicacao', String(data.volume_calda_aplicacao || '').trim())
+          rec.set(
+            'classe_toxicologica_aplicacao',
+            String(data.classe_toxicologica_aplicacao || '').trim(),
+          )
+          rec.set('orientacoes_gerais', String(data.orientacoes_gerais || '').trim())
           if (data.dados_extras) rec.set('dados_extras', JSON.stringify(data.dados_extras))
 
           try {
