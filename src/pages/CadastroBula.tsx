@@ -459,211 +459,240 @@ export function CadastroBula() {
       {/* TABELA MESTRE DE PRODUTOS */}
       {/* ------------------------------------------------------------------ */}
       <Card className="rounded-2xl border-[#DCE5DC] bg-white shadow-sm flex-1 min-h-0 flex flex-col overflow-hidden">
-        <div ref={tableContainerRef} className="flex-1 min-h-0 overflow-y-auto">
-          <ScrollableTable autoFitHeight={false} maxHeight="100%">
-            <table className="w-full text-left border-collapse text-xs">
-              <thead className="sticky top-0 z-20 bg-[#F5F7F1] text-[#5A6D5A] border-b border-[#DCE5DC] shadow-[0_1px_0_0_#DCE5DC]">
+        <ScrollableTable
+          autoFitHeight={true}
+          bottomOffset={52}
+          containerRef={tableContainerRef}
+          onNearBottom={carregarMaisProdutos}
+          bottomThreshold={250}
+          className="flex-1 min-h-0"
+        >
+          <table className="w-full text-left border-collapse text-xs min-w-[1150px]">
+            <thead className="sticky top-0 z-20 bg-[#F5F7F1] text-[#5A6D5A] border-b border-[#DCE5DC] shadow-[0_1px_0_0_#DCE5DC]">
+              <tr className="bg-[#F5F7F1] border-b border-[#DCE5DC] text-left text-[#5A6D5A]">
+                <th className="py-3 px-3 w-10 text-center">#</th>
+                <th className="py-3 px-3 font-semibold min-w-[220px]">Produto Comercial</th>
+                <th className="py-3 px-3 font-semibold min-w-[130px]">Registro MAPA</th>
+                <th className="py-3 px-3 font-semibold min-w-[180px]">Titular do Registro</th>
+                <th className="py-3 px-3 font-semibold min-w-[200px]">Princípio Ativo</th>
+                <th className="py-3 px-3 font-semibold min-w-[140px]">Classe Agronômica</th>
+                <th className="py-3 px-3 font-semibold min-w-[110px]">NCM</th>
+                <th className="py-3 px-3 font-semibold min-w-[130px]">Toxicologia</th>
+                <th className="py-3 px-3 font-semibold text-center w-28 whitespace-nowrap">
+                  Ações
+                </th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-[#F0F4F0] bg-white">
+              {loading && produtos.length === 0 ? (
                 <tr>
-                  <th className="py-2.5 px-3 w-10 text-center">#</th>
-                  <th className="py-2.5 px-3 font-semibold min-w-[200px]">Produto Comercial</th>
-                  <th className="py-2.5 px-3 font-semibold min-w-[120px]">Registro MAPA</th>
-                  <th className="py-2.5 px-3 font-semibold min-w-[160px]">Titular do Registro</th>
-                  <th className="py-2.5 px-3 font-semibold min-w-[180px]">Princípio Ativo</th>
-                  <th className="py-2.5 px-3 font-semibold min-w-[130px]">Classe Agronômica</th>
-                  <th className="py-2.5 px-3 font-semibold min-w-[100px]">NCM</th>
-                  <th className="py-2.5 px-3 font-semibold min-w-[110px]">Toxicologia</th>
-                  <th className="py-2.5 px-3 text-center w-28">Ações</th>
+                  <td colSpan={9} className="py-12 text-center text-[#5A6D5A]">
+                    <div className="flex flex-col items-center justify-center gap-2">
+                      <Loader2 className="w-6 h-6 animate-spin text-[#1B5E20]" />
+                      <span className="text-xs">Carregando Cadastro de Bula...</span>
+                    </div>
+                  </td>
                 </tr>
-              </thead>
-              <tbody className="divide-y divide-[#F0F4F0] bg-white">
-                {loading && produtos.length === 0 ? (
-                  <tr>
-                    <td colSpan={9} className="py-12 text-center text-[#5A6D5A]">
-                      <div className="flex flex-col items-center justify-center gap-2">
-                        <Loader2 className="w-6 h-6 animate-spin text-[#1B5E20]" />
-                        <span className="text-xs">Carregando Cadastro de Bula...</span>
-                      </div>
-                    </td>
-                  </tr>
-                ) : produtos.length === 0 ? (
-                  <tr>
-                    <td colSpan={9} className="py-12 text-center text-[#5A6D5A]">
-                      <div className="flex flex-col items-center justify-center gap-2 max-w-md mx-auto">
-                        <FileText className="w-10 h-10 text-emerald-300 stroke-[1.5]" />
-                        <p className="font-bold text-sm text-[#1C2B1C]">
-                          Nenhum produto encontrado no Cadastro de Bula
-                        </p>
-                        <p className="text-xs text-[#5A6D5A] leading-relaxed">
-                          Para começar, faça o upload da planilha oficial com as 7 abas na tela de
-                          importação.
-                        </p>
-                        <Link to="/importar">
-                          <Button
-                            size="sm"
-                            className="mt-2 bg-[#1B5E20] hover:bg-[#2E7D32] text-xs"
-                          >
-                            <UploadCloud className="w-3.5 h-3.5 mr-1.5" />
-                            Ir para Importar Planilhas
-                          </Button>
-                        </Link>
-                      </div>
-                    </td>
-                  </tr>
-                ) : (
-                  produtos.map((p, idx) => {
-                    const isExpanded = !!expandedRowIds[p.id]
-                    return (
-                      <React.Fragment key={p.id}>
-                        <tr
-                          onClick={() => toggleRowExpanded(p.id)}
-                          className={`hover:bg-[#F5F7F1]/70 transition-colors cursor-pointer ${
-                            isExpanded ? 'bg-emerald-50/40 font-medium' : ''
-                          }`}
-                        >
-                          <td className="py-2.5 px-3 text-center text-[#5A6D5A] font-mono text-[11px]">
-                            {idx + 1}
-                          </td>
+              ) : produtos.length === 0 ? (
+                <tr>
+                  <td colSpan={9} className="py-12 text-center text-[#5A6D5A]">
+                    <div className="flex flex-col items-center justify-center gap-2 max-w-md mx-auto">
+                      <FileText className="w-10 h-10 text-emerald-300 stroke-[1.5]" />
+                      <p className="font-bold text-sm text-[#1C2B1C]">
+                        Nenhum produto encontrado no Cadastro de Bula
+                      </p>
+                      <p className="text-xs text-[#5A6D5A] leading-relaxed">
+                        Para começar, faça o upload da planilha oficial com as 7 abas na tela de
+                        importação.
+                      </p>
+                      <Link to="/importar">
+                        <Button size="sm" className="mt-2 bg-[#1B5E20] hover:bg-[#2E7D32] text-xs">
+                          <UploadCloud className="w-3.5 h-3.5 mr-1.5" />
+                          Ir para Importar Planilhas
+                        </Button>
+                      </Link>
+                    </div>
+                  </td>
+                </tr>
+              ) : (
+                produtos.map((p, idx) => {
+                  const isExpanded = !!expandedRowIds[p.id]
+                  return (
+                    <React.Fragment key={p.id}>
+                      <tr
+                        onClick={() => toggleRowExpanded(p.id)}
+                        className={`hover:bg-[#F5F7F1]/70 transition-colors cursor-pointer ${
+                          isExpanded ? 'bg-emerald-50/40 font-medium' : ''
+                        }`}
+                      >
+                        <td className="py-2.5 px-3 text-center text-[#5A6D5A] font-mono text-[11px]">
+                          {idx + 1}
+                        </td>
 
-                          <td className="py-2.5 px-3">
-                            <div className="font-bold text-[#1C2B1C] text-xs flex items-center gap-1.5">
-                              <span>{p.nome_comercial}</span>
-                              {p.tipo_formulacao && (
-                                <Badge
-                                  variant="outline"
-                                  className="text-[10px] py-0 px-1.5 font-normal border-emerald-300 bg-emerald-50 text-emerald-800"
-                                >
-                                  {p.tipo_formulacao}
-                                </Badge>
-                              )}
-                            </div>
-                            {p.marca_padronizada && p.marca_padronizada !== p.nome_comercial && (
-                              <p className="text-[11px] text-[#5A6D5A] truncate">
-                                {p.marca_padronizada}
-                              </p>
-                            )}
-                          </td>
-
-                          <td className="py-2.5 px-3">
-                            <Badge
-                              variant="outline"
-                              className="font-mono text-xs font-semibold bg-emerald-50 text-emerald-900 border-emerald-200"
-                            >
-                              {p.registro_mapa}
-                            </Badge>
-                          </td>
-
-                          <td
-                            className="py-2.5 px-3 text-[#1C2B1C] truncate max-w-[200px]"
-                            title={p.titular_registro || ''}
-                          >
-                            {p.titular_registro || (
-                              <span className="text-[#5A6D5A] italic">Não informado</span>
-                            )}
-                          </td>
-
-                          <td
-                            className="py-2.5 px-3 text-[#1C2B1C] truncate max-w-[220px]"
-                            title={p.principio_ativo || ''}
-                          >
-                            {p.principio_ativo || (
-                              <span className="text-[#5A6D5A] italic">Não informado</span>
-                            )}
-                          </td>
-
-                          <td className="py-2.5 px-3">
-                            {p.classe_agronomica ? (
+                        <td className="py-2.5 px-3">
+                          <div className="font-bold text-[#1C2B1C] text-xs flex items-center gap-1.5">
+                            <span>{p.nome_comercial}</span>
+                            {p.tipo_formulacao && (
                               <Badge
                                 variant="outline"
-                                className="text-[11px] bg-[#F5F7F1] text-[#1C2B1C] border-[#DCE5DC]"
+                                className="text-[10px] py-0 px-1.5 font-normal border-emerald-300 bg-emerald-50 text-emerald-800"
                               >
-                                {p.classe_agronomica}
+                                {p.tipo_formulacao}
                               </Badge>
-                            ) : (
-                              '—'
                             )}
-                          </td>
+                          </div>
+                          {p.marca_padronizada && p.marca_padronizada !== p.nome_comercial && (
+                            <p className="text-[11px] text-[#5A6D5A] truncate">
+                              {p.marca_padronizada}
+                            </p>
+                          )}
+                        </td>
 
-                          <td className="py-2.5 px-3 font-mono text-xs text-[#1C2B1C]">
-                            {p.ncm_padrao || '—'}
-                          </td>
-
-                          <td className="py-2.5 px-3 text-xs text-[#5A6D5A] truncate max-w-[120px]">
-                            {p.classificacao_toxicologica || '—'}
-                          </td>
-
-                          <td
-                            className="py-2.5 px-3 text-center"
-                            onClick={(e) => e.stopPropagation()}
+                        <td className="py-2.5 px-3 whitespace-nowrap">
+                          <Badge
+                            variant="outline"
+                            className="font-mono text-xs font-semibold bg-emerald-50 text-emerald-900 border-emerald-200"
                           >
-                            <div className="flex items-center justify-center gap-1.5">
-                              <Button
-                                variant="ghost"
-                                size="sm"
-                                onClick={() => {
-                                  setSelectedBula(p)
-                                  setModalBulaOpen(true)
-                                }}
-                                title="Ver Cadastro Completo e Blocos"
-                                className="h-7 px-2 text-xs text-[#1B5E20] hover:bg-emerald-100/60 rounded-lg"
-                              >
-                                <ExternalLink className="w-3.5 h-3.5 mr-1" />
-                                <span>Bula</span>
-                              </Button>
+                            {p.registro_mapa}
+                          </Badge>
+                        </td>
 
+                        <td
+                          className="py-2.5 px-3 text-[#1C2B1C] truncate max-w-[220px]"
+                          title={p.titular_registro || ''}
+                        >
+                          {p.titular_registro || (
+                            <span className="text-[#5A6D5A] italic">Não informado</span>
+                          )}
+                        </td>
+
+                        <td
+                          className="py-2.5 px-3 text-[#1C2B1C] truncate max-w-[240px]"
+                          title={p.principio_ativo || ''}
+                        >
+                          {p.principio_ativo || (
+                            <span className="text-[#5A6D5A] italic">Não informado</span>
+                          )}
+                        </td>
+
+                        <td className="py-2.5 px-3 whitespace-nowrap">
+                          {p.classe_agronomica ? (
+                            <Badge
+                              variant="outline"
+                              className="text-[11px] bg-[#F5F7F1] text-[#1C2B1C] border-[#DCE5DC]"
+                            >
+                              {p.classe_agronomica}
+                            </Badge>
+                          ) : (
+                            '—'
+                          )}
+                        </td>
+
+                        <td className="py-2.5 px-3 font-mono text-xs text-[#1C2B1C] whitespace-nowrap">
+                          {p.ncm_padrao || '—'}
+                        </td>
+
+                        <td className="py-2.5 px-3 text-xs text-[#5A6D5A] truncate max-w-[140px]">
+                          {p.classificacao_toxicologica || '—'}
+                        </td>
+
+                        <td
+                          className="py-2.5 px-3 text-center whitespace-nowrap"
+                          onClick={(e) => e.stopPropagation()}
+                        >
+                          <div className="flex items-center justify-center gap-1.5">
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => {
+                                setSelectedBula(p)
+                                setModalBulaOpen(true)
+                              }}
+                              title="Ver Cadastro Completo e Blocos"
+                              className="h-7 px-2 text-xs text-[#1B5E20] hover:bg-emerald-100/60 rounded-lg"
+                            >
+                              <ExternalLink className="w-3.5 h-3.5 mr-1" />
+                              <span>Bula</span>
+                            </Button>
+
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              onClick={() => toggleRowExpanded(p.id)}
+                              title={isExpanded ? 'Recolher detalhes' : 'Expandir blocos'}
+                              className="h-7 w-7 text-[#5A6D5A] hover:text-[#1C2B1C] rounded-lg"
+                            >
+                              {isExpanded ? (
+                                <ChevronUp className="w-4 h-4" />
+                              ) : (
+                                <ChevronDown className="w-4 h-4" />
+                              )}
+                            </Button>
+
+                            {isAdmin && (
                               <Button
                                 variant="ghost"
                                 size="icon"
-                                onClick={() => toggleRowExpanded(p.id)}
-                                title={isExpanded ? 'Recolher detalhes' : 'Expandir blocos'}
-                                className="h-7 w-7 text-[#5A6D5A] hover:text-[#1C2B1C] rounded-lg"
+                                onClick={() => handleExcluir(p.id, p.nome_comercial)}
+                                title="Excluir Bula"
+                                className="h-7 w-7 text-red-500 hover:text-red-700 hover:bg-red-50 rounded-lg"
                               >
-                                {isExpanded ? (
-                                  <ChevronUp className="w-4 h-4" />
-                                ) : (
-                                  <ChevronDown className="w-4 h-4" />
-                                )}
+                                <Trash2 className="w-3.5 h-3.5" />
                               </Button>
+                            )}
+                          </div>
+                        </td>
+                      </tr>
 
-                              {isAdmin && (
-                                <Button
-                                  variant="ghost"
-                                  size="icon"
-                                  onClick={() => handleExcluir(p.id, p.nome_comercial)}
-                                  title="Excluir Bula"
-                                  className="h-7 w-7 text-red-500 hover:text-red-700 hover:bg-red-50 rounded-lg"
-                                >
-                                  <Trash2 className="w-3.5 h-3.5" />
-                                </Button>
-                              )}
-                            </div>
+                      {/* BLOCO EXPANDIDO: VISÃO INTEGRADA COM ABAS DOS BLOCOS ACESSÓRIOS */}
+                      {isExpanded && (
+                        <tr className="bg-[#FAFBF9]">
+                          <td colSpan={9} className="p-4 border-b border-[#DCE5DC]">
+                            <PainelBlocosAcessoriosBula bula={p} />
                           </td>
                         </tr>
-
-                        {/* BLOCO EXPANDIDO: VISÃO INTEGRADA COM ABAS DOS BLOCOS ACESSÓRIOS */}
-                        {isExpanded && (
-                          <tr className="bg-[#FAFBF9]">
-                            <td colSpan={9} className="p-4 border-b border-[#DCE5DC]">
-                              <PainelBlocosAcessoriosBula bula={p} />
-                            </td>
-                          </tr>
-                        )}
-                      </React.Fragment>
-                    )
-                  })
-                )}
-              </tbody>
-            </table>
-
-            {/* Sentinel de rolagem infinita */}
-            <div ref={sentinelRef} className="py-2 text-center">
-              {loadingMore && (
-                <div className="flex items-center justify-center gap-2 text-xs text-[#5A6D5A]">
-                  <Loader2 className="w-4 h-4 animate-spin text-[#1B5E20]" />
-                  <span>Carregando mais produtos de bula...</span>
-                </div>
+                      )}
+                    </React.Fragment>
+                  )
+                })
               )}
-            </div>
-          </ScrollableTable>
+            </tbody>
+          </table>
+        </ScrollableTable>
+
+        {/* Sentinel e Indicadores de Rolagem Infinita */}
+        <div ref={sentinelRef} className="h-1 w-full" aria-hidden="true" />
+
+        {/* Rodapé informativo de rolagem infinita igual ao da Base Mestre */}
+        <div className="flex items-center justify-between p-3.5 border-t border-[#DCE5DC] bg-[#FAFBF9] text-xs text-[#5A6D5A]">
+          <div className="flex items-center gap-2">
+            <span className="font-semibold text-[#1C2B1C]">
+              {produtos.length} {produtos.length === 1 ? 'produto exibido' : 'produtos exibidos'}
+            </span>
+            <span className="text-[#8A9A86]">•</span>
+            <span>Ordem alfabética por produto comercial</span>
+            <span className="text-[#8A9A86]">•</span>
+            <span>Total na base com critérios atuais: {totalCount}</span>
+          </div>
+
+          <div className="flex items-center gap-2">
+            {loadingMore && (
+              <div className="inline-flex items-center gap-1.5 text-xs text-[#1B5E20] font-medium bg-emerald-50 px-2.5 py-1 rounded-md border border-emerald-200 animate-in fade-in">
+                <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                <span>Carregando próximo lote...</span>
+              </div>
+            )}
+            {!hasMore && produtos.length > 0 && !loading && (
+              <span className="text-[11px] text-[#5A6D5A] bg-[#F5F7F1] px-2.5 py-1 rounded-md border border-[#DCE5DC]">
+                Fim da lista — todos os {produtos.length} produtos carregados
+              </span>
+            )}
+            {hasMore && !loadingMore && !loading && (
+              <span className="text-[11px] text-[#8A9A86] hidden sm:inline">
+                Role para baixo para carregar mais automaticamente
+              </span>
+            )}
+          </div>
         </div>
       </Card>
 
@@ -1158,49 +1187,63 @@ function PainelBlocosAcessoriosBula({ bula }: PainelBlocosProps) {
               descricao="Use a tela Importar Planilhas para carregar a aba 'Sheet 2. Composicao_Em_Linhas'."
             />
           ) : (
-            <div className="border border-[#DCE5DC] rounded-xl overflow-hidden">
-              <table className="w-full text-xs text-left">
-                <thead className="bg-[#F5F7F1] text-[#5A6D5A] border-b border-[#DCE5DC]">
-                  <tr>
-                    <th className="py-2 px-3 font-semibold">Cód</th>
-                    <th className="py-2 px-3 font-semibold">Ingrediente Ativo</th>
-                    <th className="py-2 px-3 font-semibold">Nome Químico</th>
-                    <th className="py-2 px-3 font-semibold">Nº CAS</th>
-                    <th className="py-2 px-3 font-semibold">Concentração</th>
-                    <th className="py-2 px-3 font-semibold">% Peso</th>
-                    <th className="py-2 px-3 font-semibold">% Volume</th>
-                    <th className="py-2 px-3 font-semibold">Função</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-[#F0F4F0] bg-white">
-                  {composicao.map((item) => (
-                    <tr key={item.id} className="hover:bg-[#F5F7F1]/60">
-                      <td className="py-2 px-3 font-mono text-[11px] text-[#5A6D5A]">
-                        {item.codigo || '—'}
-                      </td>
-                      <td className="py-2 px-3 font-bold text-[#1C2B1C]">
-                        {item.ingrediente_ativo}
-                      </td>
-                      <td className="py-2 px-3 text-[#5A6D5A]">{item.nome_quimico || '—'}</td>
-                      <td className="py-2 px-3 font-mono text-xs">{item.numero_cas || '—'}</td>
-                      <td className="py-2 px-3 font-semibold text-[#1B5E20]">
-                        {item.concentracao
-                          ? `${item.concentracao} ${item.unidade_medida || ''}`
-                          : '—'}
-                      </td>
-                      <td className="py-2 px-3 font-mono text-xs text-[#1C2B1C]">
-                        {item.percentual_peso ? `${item.percentual_peso}%` : '—'}
-                      </td>
-                      <td className="py-2 px-3 font-mono text-xs text-[#1C2B1C]">
-                        {item.percentual_volume ? `${item.percentual_volume}%` : '—'}
-                      </td>
-                      <td className="py-2 px-3">
-                        {item.funcao_ingrediente || 'Ingrediente Ativo'}
-                      </td>
+            <div className="border border-[#DCE5DC] rounded-xl overflow-hidden bg-white shadow-xs">
+              <ScrollableTable autoFitHeight={false} maxHeight="360px" minHeight="180px">
+                <table className="w-full text-xs text-left min-w-[900px]">
+                  <thead className="sticky top-0 z-20 bg-[#F5F7F1] text-[#5A6D5A] border-b border-[#DCE5DC] shadow-[0_1px_0_0_#DCE5DC]">
+                    <tr className="bg-[#F5F7F1] border-b border-[#DCE5DC] text-left text-[#5A6D5A]">
+                      <th className="py-2.5 px-3 font-semibold w-12 whitespace-nowrap">Cód</th>
+                      <th className="py-2.5 px-3 font-semibold min-w-[180px]">Ingrediente Ativo</th>
+                      <th className="py-2.5 px-3 font-semibold min-w-[200px]">Nome Químico</th>
+                      <th className="py-2.5 px-3 font-semibold min-w-[110px] whitespace-nowrap">
+                        Nº CAS
+                      </th>
+                      <th className="py-2.5 px-3 font-semibold min-w-[120px] whitespace-nowrap">
+                        Concentração
+                      </th>
+                      <th className="py-2.5 px-3 font-semibold min-w-[90px] whitespace-nowrap">
+                        % Peso
+                      </th>
+                      <th className="py-2.5 px-3 font-semibold min-w-[90px] whitespace-nowrap">
+                        % Volume
+                      </th>
+                      <th className="py-2.5 px-3 font-semibold min-w-[140px] whitespace-nowrap">
+                        Função
+                      </th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
+                  </thead>
+                  <tbody className="divide-y divide-[#F0F4F0] bg-white">
+                    {composicao.map((item) => (
+                      <tr key={item.id} className="hover:bg-[#F5F7F1]/60 transition-colors">
+                        <td className="py-2.5 px-3 font-mono text-[11px] text-[#5A6D5A] whitespace-nowrap">
+                          {item.codigo || '—'}
+                        </td>
+                        <td className="py-2.5 px-3 font-bold text-[#1C2B1C] whitespace-nowrap">
+                          {item.ingrediente_ativo}
+                        </td>
+                        <td className="py-2.5 px-3 text-[#5A6D5A]">{item.nome_quimico || '—'}</td>
+                        <td className="py-2.5 px-3 font-mono text-xs whitespace-nowrap">
+                          {item.numero_cas || '—'}
+                        </td>
+                        <td className="py-2.5 px-3 font-semibold text-[#1B5E20] whitespace-nowrap">
+                          {item.concentracao
+                            ? `${item.concentracao} ${item.unidade_medida || ''}`
+                            : '—'}
+                        </td>
+                        <td className="py-2.5 px-3 font-mono text-xs text-[#1C2B1C] whitespace-nowrap">
+                          {item.percentual_peso ? `${item.percentual_peso}%` : '—'}
+                        </td>
+                        <td className="py-2.5 px-3 font-mono text-xs text-[#1C2B1C] whitespace-nowrap">
+                          {item.percentual_volume ? `${item.percentual_volume}%` : '—'}
+                        </td>
+                        <td className="py-2.5 px-3 whitespace-nowrap">
+                          {item.funcao_ingrediente || 'Ingrediente Ativo'}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </ScrollableTable>
             </div>
           )}
         </TabsContent>
@@ -1216,52 +1259,70 @@ function PainelBlocosAcessoriosBula({ bula }: PainelBlocosProps) {
               descricao="Use a tela Importar Planilhas para carregar a aba 'Sheet 3. Cadeia_Empresas_Linhas'."
             />
           ) : (
-            <div className="border border-[#DCE5DC] rounded-xl overflow-hidden">
-              <table className="w-full text-xs text-left">
-                <thead className="bg-[#F5F7F1] text-[#5A6D5A] border-b border-[#DCE5DC]">
-                  <tr>
-                    <th className="py-2 px-3 font-semibold">Cód</th>
-                    <th className="py-2 px-3 font-semibold">Papel / Relação</th>
-                    <th className="py-2 px-3 font-semibold">Razão Social</th>
-                    <th className="py-2 px-3 font-semibold">CNPJ</th>
-                    <th className="py-2 px-3 font-semibold">Inscrição Estadual</th>
-                    <th className="py-2 px-3 font-semibold">Bairro / CEP</th>
-                    <th className="py-2 px-3 font-semibold">Município / UF</th>
-                    <th className="py-2 px-3 font-semibold">País</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-[#F0F4F0] bg-white">
-                  {empresas.map((item) => (
-                    <tr key={item.id} className="hover:bg-[#F5F7F1]/60">
-                      <td className="py-2 px-3 font-mono text-[11px] text-[#5A6D5A]">
-                        {item.codigo || '—'}
-                      </td>
-                      <td className="py-2 px-3">
-                        <Badge
-                          variant="outline"
-                          className="bg-emerald-50 text-emerald-800 border-emerald-200 text-[10px]"
-                        >
-                          {item.tipo_relacao || 'Formulador'}
-                        </Badge>
-                      </td>
-                      <td className="py-2 px-3 font-bold text-[#1C2B1C]">{item.razao_social}</td>
-                      <td className="py-2 px-3 font-mono text-[11px]">{item.cnpj || '—'}</td>
-                      <td className="py-2 px-3 font-mono text-[11px] text-[#5A6D5A]">
-                        {item.inscricao_estadual || '—'}
-                      </td>
-                      <td className="py-2 px-3 text-[#5A6D5A]">
-                        {[item.bairro, item.cep ? `CEP: ${item.cep}` : null]
-                          .filter(Boolean)
-                          .join(' • ') || '—'}
-                      </td>
-                      <td className="py-2 px-3">
-                        {[item.municipio, item.uf].filter(Boolean).join(' / ') || '—'}
-                      </td>
-                      <td className="py-2 px-3 text-[#5A6D5A]">{item.pais || 'Brasil'}</td>
+            <div className="border border-[#DCE5DC] rounded-xl overflow-hidden bg-white shadow-xs">
+              <ScrollableTable autoFitHeight={false} maxHeight="360px" minHeight="180px">
+                <table className="w-full text-xs text-left min-w-[1000px]">
+                  <thead className="sticky top-0 z-20 bg-[#F5F7F1] text-[#5A6D5A] border-b border-[#DCE5DC] shadow-[0_1px_0_0_#DCE5DC]">
+                    <tr className="bg-[#F5F7F1] border-b border-[#DCE5DC] text-left text-[#5A6D5A]">
+                      <th className="py-2.5 px-3 font-semibold w-12 whitespace-nowrap">Cód</th>
+                      <th className="py-2.5 px-3 font-semibold min-w-[130px] whitespace-nowrap">
+                        Papel / Relação
+                      </th>
+                      <th className="py-2.5 px-3 font-semibold min-w-[220px]">Razão Social</th>
+                      <th className="py-2.5 px-3 font-semibold min-w-[130px] whitespace-nowrap">
+                        CNPJ
+                      </th>
+                      <th className="py-2.5 px-3 font-semibold min-w-[130px] whitespace-nowrap">
+                        Inscrição Estadual
+                      </th>
+                      <th className="py-2.5 px-3 font-semibold min-w-[180px]">Bairro / CEP</th>
+                      <th className="py-2.5 px-3 font-semibold min-w-[150px] whitespace-nowrap">
+                        Município / UF
+                      </th>
+                      <th className="py-2.5 px-3 font-semibold min-w-[100px] whitespace-nowrap">
+                        País
+                      </th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
+                  </thead>
+                  <tbody className="divide-y divide-[#F0F4F0] bg-white">
+                    {empresas.map((item) => (
+                      <tr key={item.id} className="hover:bg-[#F5F7F1]/60 transition-colors">
+                        <td className="py-2.5 px-3 font-mono text-[11px] text-[#5A6D5A] whitespace-nowrap">
+                          {item.codigo || '—'}
+                        </td>
+                        <td className="py-2.5 px-3 whitespace-nowrap">
+                          <Badge
+                            variant="outline"
+                            className="bg-emerald-50 text-emerald-800 border-emerald-200 text-[10px]"
+                          >
+                            {item.tipo_relacao || 'Formulador'}
+                          </Badge>
+                        </td>
+                        <td className="py-2.5 px-3 font-bold text-[#1C2B1C]">
+                          {item.razao_social}
+                        </td>
+                        <td className="py-2.5 px-3 font-mono text-[11px] whitespace-nowrap">
+                          {item.cnpj || '—'}
+                        </td>
+                        <td className="py-2.5 px-3 font-mono text-[11px] text-[#5A6D5A] whitespace-nowrap">
+                          {item.inscricao_estadual || '—'}
+                        </td>
+                        <td className="py-2.5 px-3 text-[#5A6D5A]">
+                          {[item.bairro, item.cep ? `CEP: ${item.cep}` : null]
+                            .filter(Boolean)
+                            .join(' • ') || '—'}
+                        </td>
+                        <td className="py-2.5 px-3 whitespace-nowrap">
+                          {[item.municipio, item.uf].filter(Boolean).join(' / ') || '—'}
+                        </td>
+                        <td className="py-2.5 px-3 text-[#5A6D5A] whitespace-nowrap">
+                          {item.pais || 'Brasil'}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </ScrollableTable>
             </div>
           )}
         </TabsContent>
@@ -1277,48 +1338,72 @@ function PainelBlocosAcessoriosBula({ bula }: PainelBlocosProps) {
               descricao="Use a tela Importar Planilhas para carregar a aba 'Sheet 4. Embalagens_NCM_Linhas'."
             />
           ) : (
-            <div className="border border-[#DCE5DC] rounded-xl overflow-hidden">
-              <table className="w-full text-xs text-left">
-                <thead className="bg-[#F5F7F1] text-[#5A6D5A] border-b border-[#DCE5DC]">
-                  <tr>
-                    <th className="py-2 px-3 font-semibold">Cód</th>
-                    <th className="py-2 px-3 font-semibold">Tipo Embalagem</th>
-                    <th className="py-2 px-3 font-semibold">Descrição Detalhada</th>
-                    <th className="py-2 px-3 font-semibold">Material</th>
-                    <th className="py-2 px-3 font-semibold">Capacidade</th>
-                    <th className="py-2 px-3 font-semibold">NCM</th>
-                    <th className="py-2 px-3 font-semibold">Faixa NCM</th>
-                    <th className="py-2 px-3 font-semibold">Destinação Final</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-[#F0F4F0] bg-white">
-                  {embalagens.map((item) => (
-                    <tr key={item.id} className="hover:bg-[#F5F7F1]/60">
-                      <td className="py-2 px-3 font-mono text-[11px] text-[#5A6D5A]">
-                        {item.codigo || '—'}
-                      </td>
-                      <td className="py-2 px-3 font-bold text-[#1C2B1C]">{item.tipo_embalagem}</td>
-                      <td
-                        className="py-2 px-3 text-[#5A6D5A] max-w-[220px] truncate"
-                        title={item.descricao_embalagem || ''}
-                      >
-                        {item.descricao_embalagem || '—'}
-                      </td>
-                      <td className="py-2 px-3 text-[#5A6D5A]">{item.material || '—'}</td>
-                      <td className="py-2 px-3 font-semibold text-[#1B5E20]">
-                        {item.capacidade ? `${item.capacidade} ${item.unidade_medida || ''}` : '—'}
-                      </td>
-                      <td className="py-2 px-3 font-mono text-xs">{item.ncm || '—'}</td>
-                      <td className="py-2 px-3 font-mono text-[11px] text-[#1C2B1C]">
-                        {item.ncm_faixa || '—'}
-                      </td>
-                      <td className="py-2 px-3 text-[#5A6D5A]">
-                        {item.destinacao_final || 'Logística Reversa / InpEV'}
-                      </td>
+            <div className="border border-[#DCE5DC] rounded-xl overflow-hidden bg-white shadow-xs">
+              <ScrollableTable autoFitHeight={false} maxHeight="360px" minHeight="180px">
+                <table className="w-full text-xs text-left min-w-[1050px]">
+                  <thead className="sticky top-0 z-20 bg-[#F5F7F1] text-[#5A6D5A] border-b border-[#DCE5DC] shadow-[0_1px_0_0_#DCE5DC]">
+                    <tr className="bg-[#F5F7F1] border-b border-[#DCE5DC] text-left text-[#5A6D5A]">
+                      <th className="py-2.5 px-3 font-semibold w-12 whitespace-nowrap">Cód</th>
+                      <th className="py-2.5 px-3 font-semibold min-w-[150px] whitespace-nowrap">
+                        Tipo Embalagem
+                      </th>
+                      <th className="py-2.5 px-3 font-semibold min-w-[220px]">
+                        Descrição Detalhada
+                      </th>
+                      <th className="py-2.5 px-3 font-semibold min-w-[120px] whitespace-nowrap">
+                        Material
+                      </th>
+                      <th className="py-2.5 px-3 font-semibold min-w-[120px] whitespace-nowrap">
+                        Capacidade
+                      </th>
+                      <th className="py-2.5 px-3 font-semibold min-w-[100px] whitespace-nowrap">
+                        NCM
+                      </th>
+                      <th className="py-2.5 px-3 font-semibold min-w-[120px] whitespace-nowrap">
+                        Faixa NCM
+                      </th>
+                      <th className="py-2.5 px-3 font-semibold min-w-[160px] whitespace-nowrap">
+                        Destinação Final
+                      </th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
+                  </thead>
+                  <tbody className="divide-y divide-[#F0F4F0] bg-white">
+                    {embalagens.map((item) => (
+                      <tr key={item.id} className="hover:bg-[#F5F7F1]/60 transition-colors">
+                        <td className="py-2.5 px-3 font-mono text-[11px] text-[#5A6D5A] whitespace-nowrap">
+                          {item.codigo || '—'}
+                        </td>
+                        <td className="py-2.5 px-3 font-bold text-[#1C2B1C] whitespace-nowrap">
+                          {item.tipo_embalagem}
+                        </td>
+                        <td
+                          className="py-2.5 px-3 text-[#5A6D5A] max-w-[240px] truncate"
+                          title={item.descricao_embalagem || ''}
+                        >
+                          {item.descricao_embalagem || '—'}
+                        </td>
+                        <td className="py-2.5 px-3 text-[#5A6D5A] whitespace-nowrap">
+                          {item.material || '—'}
+                        </td>
+                        <td className="py-2.5 px-3 font-semibold text-[#1B5E20] whitespace-nowrap">
+                          {item.capacidade
+                            ? `${item.capacidade} ${item.unidade_medida || ''}`
+                            : '—'}
+                        </td>
+                        <td className="py-2.5 px-3 font-mono text-xs whitespace-nowrap">
+                          {item.ncm || '—'}
+                        </td>
+                        <td className="py-2.5 px-3 font-mono text-[11px] text-[#1C2B1C] whitespace-nowrap">
+                          {item.ncm_faixa || '—'}
+                        </td>
+                        <td className="py-2.5 px-3 text-[#5A6D5A] whitespace-nowrap">
+                          {item.destinacao_final || 'Logística Reversa / InpEV'}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </ScrollableTable>
             </div>
           )}
         </TabsContent>
@@ -1334,50 +1419,72 @@ function PainelBlocosAcessoriosBula({ bula }: PainelBlocosProps) {
               descricao="Use a tela Importar Planilhas para carregar a aba 'Sheet 5. Culturas_Carencia_Linhas'."
             />
           ) : (
-            <div className="border border-[#DCE5DC] rounded-xl overflow-hidden">
-              <table className="w-full text-xs text-left">
-                <thead className="bg-[#F5F7F1] text-[#5A6D5A] border-b border-[#DCE5DC]">
-                  <tr>
-                    <th className="py-2 px-3 font-semibold">Cód</th>
-                    <th className="py-2 px-3 font-semibold">Cultura Autorizada</th>
-                    <th className="py-2 px-3 font-semibold">Tipo de Cultura</th>
-                    <th className="py-2 px-3 font-semibold">Carência (Intervalo Segurança)</th>
-                    <th className="py-2 px-3 font-semibold">Época da Carência</th>
-                    <th className="py-2 px-3 font-semibold">Intervalo Reentrada</th>
-                    <th className="py-2 px-3 font-semibold">Modalidade de Emprego</th>
-                    <th className="py-2 px-3 font-semibold">LMR</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-[#F0F4F0] bg-white">
-                  {culturas.map((item) => (
-                    <tr key={item.id} className="hover:bg-[#F5F7F1]/60">
-                      <td className="py-2 px-3 font-mono text-[11px] text-[#5A6D5A]">
-                        {item.codigo || '—'}
-                      </td>
-                      <td className="py-2 px-3 font-bold text-[#1C2B1C] flex items-center gap-1.5">
-                        <Sprout className="w-3.5 h-3.5 text-emerald-600 flex-shrink-0" />
-                        <span>{item.cultura}</span>
-                      </td>
-                      <td className="py-2 px-3 text-[#5A6D5A]">{item.tipo_cultura || '—'}</td>
-                      <td className="py-2 px-3 font-semibold text-[#1B5E20]">
-                        {item.intervalo_seguranca_dias
-                          ? `${item.intervalo_seguranca_dias} dias`
-                          : '—'}
-                      </td>
-                      <td className="py-2 px-3 text-[#5A6D5A]">{item.epoca_carencia || '—'}</td>
-                      <td className="py-2 px-3 text-[#5A6D5A]">
-                        {item.intervalo_reentrada_horas
-                          ? `${item.intervalo_reentrada_horas} horas`
-                          : '—'}
-                      </td>
-                      <td className="py-2 px-3">{item.modalidade_emprego || 'Foliar'}</td>
-                      <td className="py-2 px-3 font-mono text-[11px]">
-                        {item.limite_maximo_residuos_lmr || '—'}
-                      </td>
+            <div className="border border-[#DCE5DC] rounded-xl overflow-hidden bg-white shadow-xs">
+              <ScrollableTable autoFitHeight={false} maxHeight="360px" minHeight="180px">
+                <table className="w-full text-xs text-left min-w-[1050px]">
+                  <thead className="sticky top-0 z-20 bg-[#F5F7F1] text-[#5A6D5A] border-b border-[#DCE5DC] shadow-[0_1px_0_0_#DCE5DC]">
+                    <tr className="bg-[#F5F7F1] border-b border-[#DCE5DC] text-left text-[#5A6D5A]">
+                      <th className="py-2.5 px-3 font-semibold w-12 whitespace-nowrap">Cód</th>
+                      <th className="py-2.5 px-3 font-semibold min-w-[180px]">
+                        Cultura Autorizada
+                      </th>
+                      <th className="py-2.5 px-3 font-semibold min-w-[130px] whitespace-nowrap">
+                        Tipo de Cultura
+                      </th>
+                      <th className="py-2.5 px-3 font-semibold min-w-[150px] whitespace-nowrap">
+                        Carência (Segurança)
+                      </th>
+                      <th className="py-2.5 px-3 font-semibold min-w-[140px] whitespace-nowrap">
+                        Época da Carência
+                      </th>
+                      <th className="py-2.5 px-3 font-semibold min-w-[140px] whitespace-nowrap">
+                        Intervalo Reentrada
+                      </th>
+                      <th className="py-2.5 px-3 font-semibold min-w-[140px] whitespace-nowrap">
+                        Modalidade de Emprego
+                      </th>
+                      <th className="py-2.5 px-3 font-semibold min-w-[100px] whitespace-nowrap">
+                        LMR
+                      </th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
+                  </thead>
+                  <tbody className="divide-y divide-[#F0F4F0] bg-white">
+                    {culturas.map((item) => (
+                      <tr key={item.id} className="hover:bg-[#F5F7F1]/60 transition-colors">
+                        <td className="py-2.5 px-3 font-mono text-[11px] text-[#5A6D5A] whitespace-nowrap">
+                          {item.codigo || '—'}
+                        </td>
+                        <td className="py-2.5 px-3 font-bold text-[#1C2B1C] flex items-center gap-1.5 whitespace-nowrap">
+                          <Sprout className="w-3.5 h-3.5 text-emerald-600 flex-shrink-0" />
+                          <span>{item.cultura}</span>
+                        </td>
+                        <td className="py-2.5 px-3 text-[#5A6D5A] whitespace-nowrap">
+                          {item.tipo_cultura || '—'}
+                        </td>
+                        <td className="py-2.5 px-3 font-semibold text-[#1B5E20] whitespace-nowrap">
+                          {item.intervalo_seguranca_dias
+                            ? `${item.intervalo_seguranca_dias} dias`
+                            : '—'}
+                        </td>
+                        <td className="py-2.5 px-3 text-[#5A6D5A] whitespace-nowrap">
+                          {item.epoca_carencia || '—'}
+                        </td>
+                        <td className="py-2.5 px-3 text-[#5A6D5A] whitespace-nowrap">
+                          {item.intervalo_reentrada_horas
+                            ? `${item.intervalo_reentrada_horas} horas`
+                            : '—'}
+                        </td>
+                        <td className="py-2.5 px-3 whitespace-nowrap">
+                          {item.modalidade_emprego || 'Foliar'}
+                        </td>
+                        <td className="py-2.5 px-3 font-mono text-[11px] whitespace-nowrap">
+                          {item.limite_maximo_residuos_lmr || '—'}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </ScrollableTable>
             </div>
           )}
         </TabsContent>
@@ -1393,53 +1500,75 @@ function PainelBlocosAcessoriosBula({ bula }: PainelBlocosProps) {
               descricao="Use a tela Importar Planilhas para carregar a aba 'Sheet 6. Alvos_e_Doses_Linhas'."
             />
           ) : (
-            <div className="border border-[#DCE5DC] rounded-xl overflow-hidden">
-              <table className="w-full text-xs text-left">
-                <thead className="bg-[#F5F7F1] text-[#5A6D5A] border-b border-[#DCE5DC]">
-                  <tr>
-                    <th className="py-2 px-3 font-semibold">Cód</th>
-                    <th className="py-2 px-3 font-semibold">Cultura</th>
-                    <th className="py-2 px-3 font-semibold">Alvo Biológico (Praga/Doença)</th>
-                    <th className="py-2 px-3 font-semibold">Tipo do Alvo</th>
-                    <th className="py-2 px-3 font-semibold">Dose Recomendada</th>
-                    <th className="py-2 px-3 font-semibold">Volume Calda</th>
-                    <th className="py-2 px-3 font-semibold">Intervalo (Dias)</th>
-                    <th className="py-2 px-3 font-semibold">Máx Aplicações</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-[#F0F4F0] bg-white">
-                  {alvos.map((item) => (
-                    <tr key={item.id} className="hover:bg-[#F5F7F1]/60">
-                      <td className="py-2 px-3 font-mono text-[11px] text-[#5A6D5A]">
-                        {item.codigo || '—'}
-                      </td>
-                      <td className="py-2 px-3 font-medium text-[#1C2B1C]">
-                        {item.cultura || 'Todas'}
-                      </td>
-                      <td className="py-2 px-3">
-                        <strong className="text-[#1C2B1C] block">{item.alvo_biologico}</strong>
-                        {item.nome_cientifico && (
-                          <span className="text-[10px] text-[#5A6D5A] italic block">
-                            {item.nome_cientifico}
-                          </span>
-                        )}
-                      </td>
-                      <td className="py-2 px-3 text-[#5A6D5A]">{item.tipo_alvo || '—'}</td>
-                      <td className="py-2 px-3 font-semibold text-[#1B5E20]">
-                        {[item.dose_minima, item.dose_maxima].filter(Boolean).join(' a ')}{' '}
-                        {item.unidade_dose || ''}
-                      </td>
-                      <td className="py-2 px-3 text-[#5A6D5A]">{item.volume_calda || '—'}</td>
-                      <td className="py-2 px-3 text-center font-mono text-[11px]">
-                        {item.intervalo_aplicacao_dias ? `${item.intervalo_aplicacao_dias} d` : '—'}
-                      </td>
-                      <td className="py-2 px-3 text-center">
-                        {item.numero_maximo_aplicacoes || '1'}
-                      </td>
+            <div className="border border-[#DCE5DC] rounded-xl overflow-hidden bg-white shadow-xs">
+              <ScrollableTable autoFitHeight={false} maxHeight="360px" minHeight="180px">
+                <table className="w-full text-xs text-left min-w-[1100px]">
+                  <thead className="sticky top-0 z-20 bg-[#F5F7F1] text-[#5A6D5A] border-b border-[#DCE5DC] shadow-[0_1px_0_0_#DCE5DC]">
+                    <tr className="bg-[#F5F7F1] border-b border-[#DCE5DC] text-left text-[#5A6D5A]">
+                      <th className="py-2.5 px-3 font-semibold w-12 whitespace-nowrap">Cód</th>
+                      <th className="py-2.5 px-3 font-semibold min-w-[140px] whitespace-nowrap">
+                        Cultura
+                      </th>
+                      <th className="py-2.5 px-3 font-semibold min-w-[220px]">
+                        Alvo Biológico (Praga/Doença)
+                      </th>
+                      <th className="py-2.5 px-3 font-semibold min-w-[130px] whitespace-nowrap">
+                        Tipo do Alvo
+                      </th>
+                      <th className="py-2.5 px-3 font-semibold min-w-[150px] whitespace-nowrap">
+                        Dose Recomendada
+                      </th>
+                      <th className="py-2.5 px-3 font-semibold min-w-[130px] whitespace-nowrap">
+                        Volume Calda
+                      </th>
+                      <th className="py-2.5 px-3 font-semibold min-w-[120px] text-center whitespace-nowrap">
+                        Intervalo (Dias)
+                      </th>
+                      <th className="py-2.5 px-3 font-semibold min-w-[110px] text-center whitespace-nowrap">
+                        Máx Aplicações
+                      </th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
+                  </thead>
+                  <tbody className="divide-y divide-[#F0F4F0] bg-white">
+                    {alvos.map((item) => (
+                      <tr key={item.id} className="hover:bg-[#F5F7F1]/60 transition-colors">
+                        <td className="py-2.5 px-3 font-mono text-[11px] text-[#5A6D5A] whitespace-nowrap">
+                          {item.codigo || '—'}
+                        </td>
+                        <td className="py-2.5 px-3 font-medium text-[#1C2B1C] whitespace-nowrap">
+                          {item.cultura || 'Todas'}
+                        </td>
+                        <td className="py-2.5 px-3">
+                          <strong className="text-[#1C2B1C] block">{item.alvo_biologico}</strong>
+                          {item.nome_cientifico && (
+                            <span className="text-[10px] text-[#5A6D5A] italic block">
+                              {item.nome_cientifico}
+                            </span>
+                          )}
+                        </td>
+                        <td className="py-2.5 px-3 text-[#5A6D5A] whitespace-nowrap">
+                          {item.tipo_alvo || '—'}
+                        </td>
+                        <td className="py-2.5 px-3 font-semibold text-[#1B5E20] whitespace-nowrap">
+                          {[item.dose_minima, item.dose_maxima].filter(Boolean).join(' a ')}{' '}
+                          {item.unidade_dose || ''}
+                        </td>
+                        <td className="py-2.5 px-3 text-[#5A6D5A] whitespace-nowrap">
+                          {item.volume_calda || '—'}
+                        </td>
+                        <td className="py-2.5 px-3 text-center font-mono text-[11px] whitespace-nowrap">
+                          {item.intervalo_aplicacao_dias
+                            ? `${item.intervalo_aplicacao_dias} d`
+                            : '—'}
+                        </td>
+                        <td className="py-2.5 px-3 text-center whitespace-nowrap">
+                          {item.numero_maximo_aplicacoes || '1'}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </ScrollableTable>
             </div>
           )}
         </TabsContent>
