@@ -924,14 +924,23 @@ function PainelBlocosAcessoriosBula({ bula }: PainelBlocosProps) {
             <span>Aplicação/EPI</span>
           </TabsTrigger>
         </TabsList>
-
         {/* ---------------------------------------------------------------- */}
         {/* ABA 1: CADASTRO PRINCIPAL 1:1 */}
         {/* ---------------------------------------------------------------- */}
         <TabsContent value="principal" className="mt-3 space-y-3">
           <div className="grid grid-cols-1 md:grid-cols-3 gap-3 text-xs">
             <div className="p-3 bg-[#F5F7F1] rounded-xl border border-[#DCE5DC]">
-              <span className="text-[#5A6D5A] block text-[11px]">Nome Comercial</span>
+              <div className="flex items-center justify-between">
+                <span className="text-[#5A6D5A] block text-[11px]">Nome Comercial</span>
+                {bula.codigo && (
+                  <Badge
+                    variant="outline"
+                    className="text-[10px] bg-white border-[#DCE5DC] font-mono"
+                  >
+                    Cód: {bula.codigo}
+                  </Badge>
+                )}
+              </div>
               <strong className="text-sm text-[#1C2B1C]">{bula.nome_comercial}</strong>
               <div className="mt-2 text-[11px] text-[#5A6D5A]">
                 Marca padronizada:{' '}
@@ -943,7 +952,14 @@ function PainelBlocosAcessoriosBula({ bula }: PainelBlocosProps) {
 
             <div className="p-3 bg-[#F5F7F1] rounded-xl border border-[#DCE5DC]">
               <span className="text-[#5A6D5A] block text-[11px]">Registro MAPA</span>
-              <strong className="text-sm font-mono text-[#1B5E20]">{bula.registro_mapa}</strong>
+              <div className="flex items-center gap-1.5 flex-wrap">
+                <strong className="text-sm font-mono text-[#1B5E20]">{bula.registro_mapa}</strong>
+                {bula.mapa_oficial_limpo && bula.mapa_oficial_limpo !== bula.registro_mapa && (
+                  <span className="text-[10px] text-[#5A6D5A] font-mono bg-white px-1.5 py-0.5 rounded border border-[#DCE5DC]">
+                    Limpo: {bula.mapa_oficial_limpo}
+                  </span>
+                )}
+              </div>
               <div className="mt-2 text-[11px] text-[#5A6D5A]">
                 Tipo:{' '}
                 <span className="font-semibold text-[#1C2B1C]">
@@ -954,17 +970,40 @@ function PainelBlocosAcessoriosBula({ bula }: PainelBlocosProps) {
 
             <div className="p-3 bg-[#F5F7F1] rounded-xl border border-[#DCE5DC]">
               <span className="text-[#5A6D5A] block text-[11px]">Classificação TIPI / NCM</span>
-              <strong className="text-sm font-mono text-[#1C2B1C]">
-                {bula.ncm_padrao || '3808.93.24'}
-              </strong>
-              <div className="mt-2 text-[11px] text-[#5A6D5A]">
-                Status:{' '}
-                <Badge
-                  variant="outline"
-                  className="text-[10px] bg-emerald-50 text-emerald-800 border-emerald-300 py-0"
-                >
-                  {bula.status_registro || 'Ativo'}
-                </Badge>
+              <div className="flex items-center gap-1.5 flex-wrap">
+                <strong className="text-sm font-mono text-[#1C2B1C]">
+                  {bula.ncm_oficial_exata || bula.ncm_padrao || '3808.93.24'}
+                </strong>
+                {bula.ncm_oficial_exata &&
+                  bula.ncm_padrao &&
+                  bula.ncm_oficial_exata !== bula.ncm_padrao && (
+                    <span className="text-[10px] text-[#5A6D5A] font-mono bg-white px-1.5 py-0.5 rounded border border-[#DCE5DC]">
+                      Padrão: {bula.ncm_padrao}
+                    </span>
+                  )}
+              </div>
+              <div className="mt-2 text-[11px] text-[#5A6D5A] flex items-center justify-between">
+                <span>
+                  Status:{' '}
+                  <Badge
+                    variant="outline"
+                    className="text-[10px] bg-emerald-50 text-emerald-800 border-emerald-300 py-0"
+                  >
+                    {bula.status_registro || 'Ativo'}
+                  </Badge>
+                </span>
+                {bula.nota_subpos_2 && (
+                  <Badge
+                    variant="outline"
+                    className={`text-[10px] py-0 ${
+                      bula.nota_subpos_2 === 'SIM'
+                        ? 'bg-amber-50 text-amber-900 border-amber-300 font-semibold'
+                        : 'bg-white text-[#5A6D5A] border-[#DCE5DC]'
+                    }`}
+                  >
+                    Nota Subpos 2: {bula.nota_subpos_2}
+                  </Badge>
+                )}
               </div>
             </div>
           </div>
@@ -985,6 +1024,11 @@ function PainelBlocosAcessoriosBula({ bula }: PainelBlocosProps) {
             <div className="border border-[#E2EBE2] p-2.5 rounded-lg">
               <span className="text-[#5A6D5A] text-[11px] block">Princípio Ativo</span>
               <p className="font-medium text-[#1C2B1C] mt-0.5">{bula.principio_ativo || '—'}</p>
+              {bula.pa_oficial_correto && bula.pa_oficial_correto !== bula.principio_ativo && (
+                <p className="text-[10px] text-emerald-800 mt-1 bg-emerald-50/70 p-1 rounded border border-emerald-200">
+                  <span className="font-semibold">PA Oficial:</span> {bula.pa_oficial_correto}
+                </p>
+              )}
             </div>
 
             <div className="border border-[#E2EBE2] p-2.5 rounded-lg">
@@ -1015,7 +1059,52 @@ function PainelBlocosAcessoriosBula({ bula }: PainelBlocosProps) {
                 {bula.classificacao_ambiental || '—'}
               </p>
             </div>
+
+            <div className="border border-[#E2EBE2] p-2.5 rounded-lg">
+              <span className="text-[#5A6D5A] text-[11px] block">Macro Grupo</span>
+              <p className="font-medium text-[#1C2B1C] mt-0.5">{bula.macro_grupo || '—'}</p>
+            </div>
+
+            <div className="border border-[#E2EBE2] p-2.5 rounded-lg">
+              <span className="text-[#5A6D5A] text-[11px] block">Sub-Grupo</span>
+              <p className="font-medium text-[#1C2B1C] mt-0.5">{bula.sub_grupo || '—'}</p>
+            </div>
+
+            <div className="border border-[#E2EBE2] p-2.5 rounded-lg">
+              <span className="text-[#5A6D5A] text-[11px] block">Embalagem (Oficial)</span>
+              <p className="font-medium text-[#1C2B1C] mt-0.5">{bula.embalagem || '—'}</p>
+            </div>
+
+            <div className="border border-[#E2EBE2] p-2.5 rounded-lg">
+              <span className="text-[#5A6D5A] text-[11px] block">Link Oficial / Agrofit</span>
+              {bula.url_oficial ? (
+                <a
+                  href={bula.url_oficial}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="font-medium text-[#1B5E20] hover:text-[#2E7D32] hover:underline mt-0.5 inline-flex items-center gap-1 max-w-full truncate"
+                  title={bula.url_oficial}
+                >
+                  <ExternalLink className="w-3.5 h-3.5 flex-shrink-0" />
+                  <span className="truncate">Acessar registro oficial</span>
+                </a>
+              ) : (
+                <p className="font-medium text-[#5A6D5A] mt-0.5">—</p>
+              )}
+            </div>
           </div>
+
+          {/* Regra TIPI quando preenchida */}
+          {bula.regra_tipi && (
+            <div className="p-3 bg-amber-50/60 rounded-xl border border-amber-200 text-xs text-[#1C2B1C]">
+              <strong className="text-amber-950 block mb-1">
+                Regra TIPI (Tabela de Incidência do IPI / NCM Embalagem):
+              </strong>
+              <p className="text-amber-900 leading-relaxed font-mono text-[11px]">
+                {bula.regra_tipi}
+              </p>
+            </div>
+          )}
 
           {bula.modo_acao && (
             <div className="p-3 bg-emerald-50/50 rounded-xl border border-emerald-200 text-xs text-[#1C2B1C]">
@@ -1024,7 +1113,6 @@ function PainelBlocosAcessoriosBula({ bula }: PainelBlocosProps) {
             </div>
           )}
         </TabsContent>
-
         {/* ---------------------------------------------------------------- */}
         {/* ABA 2: COMPOSIÇÃO EM LINHAS */}
         {/* ---------------------------------------------------------------- */}
@@ -1041,16 +1129,22 @@ function PainelBlocosAcessoriosBula({ bula }: PainelBlocosProps) {
               <table className="w-full text-xs text-left">
                 <thead className="bg-[#F5F7F1] text-[#5A6D5A] border-b border-[#DCE5DC]">
                   <tr>
+                    <th className="py-2 px-3 font-semibold">Cód</th>
                     <th className="py-2 px-3 font-semibold">Ingrediente Ativo</th>
                     <th className="py-2 px-3 font-semibold">Nome Químico</th>
                     <th className="py-2 px-3 font-semibold">Nº CAS</th>
                     <th className="py-2 px-3 font-semibold">Concentração</th>
+                    <th className="py-2 px-3 font-semibold">% Peso</th>
+                    <th className="py-2 px-3 font-semibold">% Volume</th>
                     <th className="py-2 px-3 font-semibold">Função</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-[#F0F4F0] bg-white">
                   {composicao.map((item) => (
                     <tr key={item.id} className="hover:bg-[#F5F7F1]/60">
+                      <td className="py-2 px-3 font-mono text-[11px] text-[#5A6D5A]">
+                        {item.codigo || '—'}
+                      </td>
                       <td className="py-2 px-3 font-bold text-[#1C2B1C]">
                         {item.ingrediente_ativo}
                       </td>
@@ -1060,6 +1154,12 @@ function PainelBlocosAcessoriosBula({ bula }: PainelBlocosProps) {
                         {item.concentracao
                           ? `${item.concentracao} ${item.unidade_medida || ''}`
                           : '—'}
+                      </td>
+                      <td className="py-2 px-3 font-mono text-xs text-[#1C2B1C]">
+                        {item.percentual_peso ? `${item.percentual_peso}%` : '—'}
+                      </td>
+                      <td className="py-2 px-3 font-mono text-xs text-[#1C2B1C]">
+                        {item.percentual_volume ? `${item.percentual_volume}%` : '—'}
                       </td>
                       <td className="py-2 px-3">
                         {item.funcao_ingrediente || 'Ingrediente Ativo'}
@@ -1071,7 +1171,6 @@ function PainelBlocosAcessoriosBula({ bula }: PainelBlocosProps) {
             </div>
           )}
         </TabsContent>
-
         {/* ---------------------------------------------------------------- */}
         {/* ABA 3: CADEIA DE EMPRESAS EM LINHAS */}
         {/* ---------------------------------------------------------------- */}
@@ -1088,9 +1187,12 @@ function PainelBlocosAcessoriosBula({ bula }: PainelBlocosProps) {
               <table className="w-full text-xs text-left">
                 <thead className="bg-[#F5F7F1] text-[#5A6D5A] border-b border-[#DCE5DC]">
                   <tr>
+                    <th className="py-2 px-3 font-semibold">Cód</th>
                     <th className="py-2 px-3 font-semibold">Papel / Relação</th>
                     <th className="py-2 px-3 font-semibold">Razão Social</th>
                     <th className="py-2 px-3 font-semibold">CNPJ</th>
+                    <th className="py-2 px-3 font-semibold">Inscrição Estadual</th>
+                    <th className="py-2 px-3 font-semibold">Bairro / CEP</th>
                     <th className="py-2 px-3 font-semibold">Município / UF</th>
                     <th className="py-2 px-3 font-semibold">País</th>
                   </tr>
@@ -1098,6 +1200,9 @@ function PainelBlocosAcessoriosBula({ bula }: PainelBlocosProps) {
                 <tbody className="divide-y divide-[#F0F4F0] bg-white">
                   {empresas.map((item) => (
                     <tr key={item.id} className="hover:bg-[#F5F7F1]/60">
+                      <td className="py-2 px-3 font-mono text-[11px] text-[#5A6D5A]">
+                        {item.codigo || '—'}
+                      </td>
                       <td className="py-2 px-3">
                         <Badge
                           variant="outline"
@@ -1108,6 +1213,14 @@ function PainelBlocosAcessoriosBula({ bula }: PainelBlocosProps) {
                       </td>
                       <td className="py-2 px-3 font-bold text-[#1C2B1C]">{item.razao_social}</td>
                       <td className="py-2 px-3 font-mono text-[11px]">{item.cnpj || '—'}</td>
+                      <td className="py-2 px-3 font-mono text-[11px] text-[#5A6D5A]">
+                        {item.inscricao_estadual || '—'}
+                      </td>
+                      <td className="py-2 px-3 text-[#5A6D5A]">
+                        {[item.bairro, item.cep ? `CEP: ${item.cep}` : null]
+                          .filter(Boolean)
+                          .join(' • ') || '—'}
+                      </td>
                       <td className="py-2 px-3">
                         {[item.municipio, item.uf].filter(Boolean).join(' / ') || '—'}
                       </td>
@@ -1119,7 +1232,6 @@ function PainelBlocosAcessoriosBula({ bula }: PainelBlocosProps) {
             </div>
           )}
         </TabsContent>
-
         {/* ---------------------------------------------------------------- */}
         {/* ABA 4: EMBALAGENS × NCM EM LINHAS */}
         {/* ---------------------------------------------------------------- */}
@@ -1136,22 +1248,37 @@ function PainelBlocosAcessoriosBula({ bula }: PainelBlocosProps) {
               <table className="w-full text-xs text-left">
                 <thead className="bg-[#F5F7F1] text-[#5A6D5A] border-b border-[#DCE5DC]">
                   <tr>
+                    <th className="py-2 px-3 font-semibold">Cód</th>
                     <th className="py-2 px-3 font-semibold">Tipo Embalagem</th>
+                    <th className="py-2 px-3 font-semibold">Descrição Detalhada</th>
                     <th className="py-2 px-3 font-semibold">Material</th>
                     <th className="py-2 px-3 font-semibold">Capacidade</th>
                     <th className="py-2 px-3 font-semibold">NCM</th>
+                    <th className="py-2 px-3 font-semibold">Faixa NCM</th>
                     <th className="py-2 px-3 font-semibold">Destinação Final</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-[#F0F4F0] bg-white">
                   {embalagens.map((item) => (
                     <tr key={item.id} className="hover:bg-[#F5F7F1]/60">
+                      <td className="py-2 px-3 font-mono text-[11px] text-[#5A6D5A]">
+                        {item.codigo || '—'}
+                      </td>
                       <td className="py-2 px-3 font-bold text-[#1C2B1C]">{item.tipo_embalagem}</td>
+                      <td
+                        className="py-2 px-3 text-[#5A6D5A] max-w-[220px] truncate"
+                        title={item.descricao_embalagem || ''}
+                      >
+                        {item.descricao_embalagem || '—'}
+                      </td>
                       <td className="py-2 px-3 text-[#5A6D5A]">{item.material || '—'}</td>
                       <td className="py-2 px-3 font-semibold text-[#1B5E20]">
                         {item.capacidade ? `${item.capacidade} ${item.unidade_medida || ''}` : '—'}
                       </td>
                       <td className="py-2 px-3 font-mono text-xs">{item.ncm || '—'}</td>
+                      <td className="py-2 px-3 font-mono text-[11px] text-[#1C2B1C]">
+                        {item.ncm_faixa || '—'}
+                      </td>
                       <td className="py-2 px-3 text-[#5A6D5A]">
                         {item.destinacao_final || 'Logística Reversa / InpEV'}
                       </td>
@@ -1162,7 +1289,6 @@ function PainelBlocosAcessoriosBula({ bula }: PainelBlocosProps) {
             </div>
           )}
         </TabsContent>
-
         {/* ---------------------------------------------------------------- */}
         {/* ABA 5: CULTURAS E CARÊNCIA EM LINHAS */}
         {/* ---------------------------------------------------------------- */}
@@ -1179,8 +1305,11 @@ function PainelBlocosAcessoriosBula({ bula }: PainelBlocosProps) {
               <table className="w-full text-xs text-left">
                 <thead className="bg-[#F5F7F1] text-[#5A6D5A] border-b border-[#DCE5DC]">
                   <tr>
+                    <th className="py-2 px-3 font-semibold">Cód</th>
                     <th className="py-2 px-3 font-semibold">Cultura Autorizada</th>
+                    <th className="py-2 px-3 font-semibold">Tipo de Cultura</th>
                     <th className="py-2 px-3 font-semibold">Carência (Intervalo Segurança)</th>
+                    <th className="py-2 px-3 font-semibold">Época da Carência</th>
                     <th className="py-2 px-3 font-semibold">Intervalo Reentrada</th>
                     <th className="py-2 px-3 font-semibold">Modalidade de Emprego</th>
                     <th className="py-2 px-3 font-semibold">LMR</th>
@@ -1189,15 +1318,20 @@ function PainelBlocosAcessoriosBula({ bula }: PainelBlocosProps) {
                 <tbody className="divide-y divide-[#F0F4F0] bg-white">
                   {culturas.map((item) => (
                     <tr key={item.id} className="hover:bg-[#F5F7F1]/60">
+                      <td className="py-2 px-3 font-mono text-[11px] text-[#5A6D5A]">
+                        {item.codigo || '—'}
+                      </td>
                       <td className="py-2 px-3 font-bold text-[#1C2B1C] flex items-center gap-1.5">
-                        <Sprout className="w-3.5 h-3.5 text-emerald-600" />
+                        <Sprout className="w-3.5 h-3.5 text-emerald-600 flex-shrink-0" />
                         <span>{item.cultura}</span>
                       </td>
+                      <td className="py-2 px-3 text-[#5A6D5A]">{item.tipo_cultura || '—'}</td>
                       <td className="py-2 px-3 font-semibold text-[#1B5E20]">
                         {item.intervalo_seguranca_dias
                           ? `${item.intervalo_seguranca_dias} dias`
                           : '—'}
                       </td>
+                      <td className="py-2 px-3 text-[#5A6D5A]">{item.epoca_carencia || '—'}</td>
                       <td className="py-2 px-3 text-[#5A6D5A]">
                         {item.intervalo_reentrada_horas
                           ? `${item.intervalo_reentrada_horas} horas`
@@ -1214,7 +1348,6 @@ function PainelBlocosAcessoriosBula({ bula }: PainelBlocosProps) {
             </div>
           )}
         </TabsContent>
-
         {/* ---------------------------------------------------------------- */}
         {/* ABA 6: ALVOS E DOSES EM LINHAS */}
         {/* ---------------------------------------------------------------- */}
@@ -1231,16 +1364,22 @@ function PainelBlocosAcessoriosBula({ bula }: PainelBlocosProps) {
               <table className="w-full text-xs text-left">
                 <thead className="bg-[#F5F7F1] text-[#5A6D5A] border-b border-[#DCE5DC]">
                   <tr>
+                    <th className="py-2 px-3 font-semibold">Cód</th>
                     <th className="py-2 px-3 font-semibold">Cultura</th>
                     <th className="py-2 px-3 font-semibold">Alvo Biológico (Praga/Doença)</th>
+                    <th className="py-2 px-3 font-semibold">Tipo do Alvo</th>
                     <th className="py-2 px-3 font-semibold">Dose Recomendada</th>
                     <th className="py-2 px-3 font-semibold">Volume Calda</th>
+                    <th className="py-2 px-3 font-semibold">Intervalo (Dias)</th>
                     <th className="py-2 px-3 font-semibold">Máx Aplicações</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-[#F0F4F0] bg-white">
                   {alvos.map((item) => (
                     <tr key={item.id} className="hover:bg-[#F5F7F1]/60">
+                      <td className="py-2 px-3 font-mono text-[11px] text-[#5A6D5A]">
+                        {item.codigo || '—'}
+                      </td>
                       <td className="py-2 px-3 font-medium text-[#1C2B1C]">
                         {item.cultura || 'Todas'}
                       </td>
@@ -1252,11 +1391,15 @@ function PainelBlocosAcessoriosBula({ bula }: PainelBlocosProps) {
                           </span>
                         )}
                       </td>
+                      <td className="py-2 px-3 text-[#5A6D5A]">{item.tipo_alvo || '—'}</td>
                       <td className="py-2 px-3 font-semibold text-[#1B5E20]">
                         {[item.dose_minima, item.dose_maxima].filter(Boolean).join(' a ')}{' '}
                         {item.unidade_dose || ''}
                       </td>
                       <td className="py-2 px-3 text-[#5A6D5A]">{item.volume_calda || '—'}</td>
+                      <td className="py-2 px-3 text-center font-mono text-[11px]">
+                        {item.intervalo_aplicacao_dias ? `${item.intervalo_aplicacao_dias} d` : '—'}
+                      </td>
                       <td className="py-2 px-3 text-center">
                         {item.numero_maximo_aplicacoes || '1'}
                       </td>
@@ -1267,7 +1410,6 @@ function PainelBlocosAcessoriosBula({ bula }: PainelBlocosProps) {
             </div>
           )}
         </TabsContent>
-
         {/* ---------------------------------------------------------------- */}
         {/* ABA 7: APLICAÇÃO E EPI EM LINHAS */}
         {/* ---------------------------------------------------------------- */}
@@ -1286,15 +1428,44 @@ function PainelBlocosAcessoriosBula({ bula }: PainelBlocosProps) {
                   key={item.id}
                   className="p-3 bg-[#F5F7F1] rounded-xl border border-[#DCE5DC] space-y-2"
                 >
-                  <div className="flex items-center justify-between">
-                    <span className="font-bold text-xs text-[#1C2B1C]">
-                      Modo de Aplicação: {item.tipo_aplicacao || 'Terrestre / Pulverização'}
-                    </span>
-                    {item.equipamento_recomendado && (
-                      <Badge variant="outline" className="text-[10px] bg-white border-[#DCE5DC]">
-                        Equipamento: {item.equipamento_recomendado}
-                      </Badge>
-                    )}
+                  <div className="flex items-center justify-between flex-wrap gap-2">
+                    <div className="flex items-center gap-2">
+                      {item.codigo && (
+                        <Badge
+                          variant="outline"
+                          className="text-[10px] bg-white border-[#DCE5DC] font-mono"
+                        >
+                          Cód: {item.codigo}
+                        </Badge>
+                      )}
+                      <span className="font-bold text-xs text-[#1C2B1C]">
+                        Modo de Aplicação: {item.tipo_aplicacao || 'Terrestre / Pulverização'}
+                      </span>
+                    </div>
+
+                    <div className="flex items-center gap-1.5 flex-wrap">
+                      {item.volume_calda_aplicacao && (
+                        <Badge
+                          variant="outline"
+                          className="text-[10px] bg-white border-emerald-300 text-emerald-900 font-medium"
+                        >
+                          Volume Calda: {item.volume_calda_aplicacao}
+                        </Badge>
+                      )}
+                      {item.classe_toxicologica_aplicacao && (
+                        <Badge
+                          variant="outline"
+                          className="text-[10px] bg-white border-amber-300 text-amber-900 font-medium"
+                        >
+                          Toxicológica: {item.classe_toxicologica_aplicacao}
+                        </Badge>
+                      )}
+                      {item.equipamento_recomendado && (
+                        <Badge variant="outline" className="text-[10px] bg-white border-[#DCE5DC]">
+                          Equipamento: {item.equipamento_recomendado}
+                        </Badge>
+                      )}
+                    </div>
                   </div>
 
                   {item.condicoes_meteorologicas && (
@@ -1326,17 +1497,35 @@ function PainelBlocosAcessoriosBula({ bula }: PainelBlocosProps) {
                     </div>
                   </div>
 
+                  {item.orientacoes_gerais && (
+                    <div className="p-2.5 bg-white rounded-lg border border-[#E2EBE2] text-xs text-[#1C2B1C]">
+                      <strong className="text-emerald-900 block mb-0.5">
+                        Orientações Gerais de Aplicação:
+                      </strong>
+                      <p className="text-[#3E523E] leading-relaxed whitespace-pre-line">
+                        {item.orientacoes_gerais}
+                      </p>
+                    </div>
+                  )}
+
                   {item.medidas_primeiros_socorros && (
                     <div className="text-[11px] text-[#5A6D5A] pt-1">
                       <strong>Primeiros Socorros: </strong>
                       {item.medidas_primeiros_socorros}
                     </div>
                   )}
+
+                  {item.descarte_embalagens && (
+                    <div className="text-[11px] text-[#5A6D5A] pt-0.5">
+                      <strong>Descarte de Embalagens: </strong>
+                      {item.descarte_embalagens}
+                    </div>
+                  )}
                 </div>
               ))}
             </div>
           )}
-        </TabsContent>
+        </TabsContent>{' '}
       </Tabs>
     </div>
   )
