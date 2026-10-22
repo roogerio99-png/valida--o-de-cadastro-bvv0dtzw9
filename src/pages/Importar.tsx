@@ -1074,9 +1074,9 @@ export function Importar() {
 
       // ------------------------------------------------------------------
       // BULA 1: bula_produtos (Cadastro Mestre 1:1 da Bula)
+      // Ingestão na íntegra: SEM NENHUM FILTRO DE VALIDAÇÃO OU RECUSA
       // ------------------------------------------------------------------
       else if (targetCol === 'bula_produtos') {
-        // Priorizar cabeçalhos específicos da planilha oficial para evitar falso-positivo em colunas genéricas
         const mapa = getFieldValue(row, [
           'registro_mapa',
           'registro_no_mapa',
@@ -1109,8 +1109,6 @@ export function Importar() {
           'formulador',
           'fabricante',
         ])
-        // Atenção à fidelidade do princípio ativo:
-        // NÃO incluir 'registro', 'pa' solto ou aliases que possam coincidir com 'nr_registro' ou 'mapa'
         const pa = getFieldValue(row, [
           'principio_ativo',
           'ingrediente_ativo',
@@ -1139,62 +1137,38 @@ export function Importar() {
         const tipoProd = getFieldValue(row, ['tipo_produto', 'categoria'])
         const statusReg = getFieldValue(row, ['status_registro', 'status', 'situacao'])
 
-        if (!mapa) {
-          rejeitados.push({
-            linhaOriginal: originalLineNum,
-            linhaLote: idx + 1,
-            motivo: 'Registro MAPA obrigatório ausente para o cadastro da bula.',
-            categoria: 'Registro MAPA Ausente',
-            campo: 'registro_mapa',
-            valor: 'vazio',
-            dados: row,
-          })
-          return
-        }
-
-        if (!nome) {
-          rejeitados.push({
-            linhaOriginal: originalLineNum,
-            linhaLote: idx + 1,
-            motivo: 'Nome Comercial do produto obrigatório ausente.',
-            categoria: 'Nome Comercial Ausente',
-            campo: 'nome_comercial',
-            valor: 'vazio',
-            dados: row,
-          })
-          return
-        }
-
-        // Preserva valores longos em dados_extras e prepara valores com truncamento defensivo
+        // Preserva valores na íntegra no JSON de dados_extras
         const dadosExtrasObj: Record<string, unknown> = { ...row }
-        if (titular && titular.length > 500) {
-          dadosExtrasObj['Titular do Registro (texto completo da planilha)'] = titular
-        }
-        if (fab && fab.length > 500) {
-          dadosExtrasObj['Fabricante/Formulador (texto completo da planilha)'] = fab
-        }
+        if (titular) dadosExtrasObj['titular_original'] = titular
+        if (fab) dadosExtrasObj['fabricante_original'] = fab
+        if (pa) dadosExtrasObj['principio_ativo_original'] = pa
 
-        const titularTrunc =
-          titular && titular.length > 1950 ? titular.slice(0, 1950) + '...' : titular
-        const fabTrunc = fab && fab.length > 1950 ? fab.slice(0, 1950) + '...' : fab
-        const paTrunc = pa && pa.length > 950 ? pa.slice(0, 950) + '...' : pa
+        // Defesa: se texto for extraordinariamente longo (> 4900), trunca defensivamente para o campo
+        const titularDefensivo =
+          titular && titular.length > 4900 ? titular.slice(0, 4900) + '...' : titular
+        const fabDefensivo = fab && fab.length > 4900 ? fab.slice(0, 4900) + '...' : fab
+        const paDefensivo = pa && pa.length > 1950 ? pa.slice(0, 1950) + '...' : pa
+        const modoDefensivo = modo && modo.length > 1950 ? modo.slice(0, 1950) + '...' : modo
+
+        const mapaFinal = mapa ? sanitizarRegistroMapa(mapa) : `LINHA-${originalLineNum}`
+        const nomeFinal = nome || mapaFinal || `Produto Linha ${originalLineNum}`
 
         validos.push({
           originalLine: originalLineNum,
           data: {
-            registro_mapa: sanitizarRegistroMapa(mapa),
-            nome_comercial: nome,
-            marca_padronizada: sanitizarMarcaComercial(nome),
-            titular_registro: titularTrunc,
-            fabricante_formulador: fabTrunc,
-            principio_ativo: paTrunc,
-            classe_agronomica: classe,
-            grupo_quimico: grupoQ,
-            classificacao_toxicologica: tox,
-            classificacao_ambiental: amb,
-            tipo_formulacao: form,
-            modo_acao: modo,
-            ncm_padrao: cleanNcm(ncmRaw) ? formatarNcmMascara(cleanNcm(ncmRaw)) : ncmRaw,
+            registro_mapa: mapaFinal,
+            nome_comercial: nomeFinal,
+            marca_padronizada: sanitizarMarcaComercial(nomeFinal),
+            titular_registro: titularDefensivo || '',
+            fabricante_formulador: fabDefensivo || '',
+            principio_ativo: paDefensivo || '',
+            classe_agronomica: classe || '',
+            grupo_quimico: grupoQ || '',
+            classificacao_toxicologica: tox || '',
+            classificacao_ambiental: amb || '',
+            tipo_formulacao: form || '',
+            modo_acao: modoDefensivo || '',
+            ncm_padrao: cleanNcm(ncmRaw) ? formatarNcmMascara(cleanNcm(ncmRaw)) : ncmRaw || '',
             tipo_produto: tipoProd || 'Produto Formulado Comercial',
             status_registro: statusReg || 'Ativo',
             dados_extras: dadosExtrasObj,
@@ -1204,6 +1178,7 @@ export function Importar() {
 
       // ------------------------------------------------------------------
       // BULA 2: bula_composicao (Composição em Linhas)
+      // Ingestão na íntegra: SEM NENHUM FILTRO DE VALIDAÇÃO OU RECUSA
       // ------------------------------------------------------------------
       else if (targetCol === 'bula_composicao') {
         const mapa = getFieldValue(row, [
@@ -1229,33 +1204,21 @@ export function Importar() {
         const func = getFieldValue(row, ['funcao_ingrediente', 'funcao', 'tipo'])
         const grupoQ = getFieldValue(row, ['grupo_quimico', 'grupo'])
 
-        if (!mapa || !ia) {
-          rejeitados.push({
-            linhaOriginal: originalLineNum,
-            linhaLote: idx + 1,
-            motivo: !mapa
-              ? 'Registro MAPA obrigatório ausente.'
-              : 'Ingrediente Ativo obrigatório ausente.',
-            categoria: 'Campo Obrigatório Ausente',
-            campo: !mapa ? 'registro_mapa' : 'ingrediente_ativo',
-            valor: !mapa ? mapa || 'vazio' : ia || 'vazio',
-            dados: row,
-          })
-          return
-        }
+        const mapaFinal = mapa ? sanitizarRegistroMapa(mapa) : `LINHA-${originalLineNum}`
+        const iaFinal = ia || nomeQuim || nomeProd || 'Ingrediente Ativo'
 
         validos.push({
           originalLine: originalLineNum,
           data: {
-            registro_mapa: sanitizarRegistroMapa(mapa),
-            nome_produto: nomeProd,
-            ingrediente_ativo: ia,
-            nome_quimico: nomeQuim,
-            numero_cas: cas,
-            concentracao: conc,
+            registro_mapa: mapaFinal,
+            nome_produto: nomeProd || '',
+            ingrediente_ativo: iaFinal,
+            nome_quimico: nomeQuim || '',
+            numero_cas: cas || '',
+            concentracao: conc || '',
             unidade_medida: und || 'g/L',
-            funcao_ingrediente: func,
-            grupo_quimico: grupoQ,
+            funcao_ingrediente: func || '',
+            grupo_quimico: grupoQ || '',
             dados_extras: row,
           },
         })
@@ -1263,6 +1226,7 @@ export function Importar() {
 
       // ------------------------------------------------------------------
       // BULA 3: bula_empresas (Cadeia de Empresas em Linhas)
+      // Ingestão na íntegra: SEM NENHUM FILTRO DE VALIDAÇÃO OU RECUSA
       // ------------------------------------------------------------------
       else if (targetCol === 'bula_empresas') {
         const mapa = getFieldValue(row, [
@@ -1294,33 +1258,21 @@ export function Importar() {
         const uf = getFieldValue(row, ['uf', 'estado'])
         const pais = getFieldValue(row, ['pais'])
 
-        if (!mapa || !razao) {
-          rejeitados.push({
-            linhaOriginal: originalLineNum,
-            linhaLote: idx + 1,
-            motivo: !mapa
-              ? 'Registro MAPA obrigatório ausente.'
-              : 'Razão Social obrigatória ausente.',
-            categoria: 'Campo Obrigatório Ausente',
-            campo: !mapa ? 'registro_mapa' : 'razao_social',
-            valor: !mapa ? mapa || 'vazio' : razao || 'vazio',
-            dados: row,
-          })
-          return
-        }
+        const mapaFinal = mapa ? sanitizarRegistroMapa(mapa) : `LINHA-${originalLineNum}`
+        const razaoFinal = razao || fant || 'Empresa Vinculada'
 
         validos.push({
           originalLine: originalLineNum,
           data: {
-            registro_mapa: sanitizarRegistroMapa(mapa),
-            nome_produto: nomeProd,
+            registro_mapa: mapaFinal,
+            nome_produto: nomeProd || '',
             tipo_relacao: tipoRel || 'Formulador',
-            razao_social: razao,
-            nome_fantasia: fant,
-            cnpj,
-            endereco: end,
-            municipio: mun,
-            uf,
+            razao_social: razaoFinal,
+            nome_fantasia: fant || '',
+            cnpj: cnpj || '',
+            endereco: end || '',
+            municipio: mun || '',
+            uf: uf || '',
             pais: pais || 'Brasil',
             dados_extras: row,
           },
@@ -1329,6 +1281,7 @@ export function Importar() {
 
       // ------------------------------------------------------------------
       // BULA 4: bula_embalagens (Embalagens × NCM em Linhas)
+      // Ingestão na íntegra: SEM NENHUM FILTRO DE VALIDAÇÃO OU RECUSA
       // ------------------------------------------------------------------
       else if (targetCol === 'bula_embalagens') {
         const mapa = getFieldValue(row, [
@@ -1346,30 +1299,19 @@ export function Importar() {
         const ncmRaw = getFieldValue(row, ['ncm', 'classificacao_fiscal'])
         const dest = getFieldValue(row, ['destinacao_final', 'destinacao', 'descarte'])
 
-        if (!mapa) {
-          rejeitados.push({
-            linhaOriginal: originalLineNum,
-            linhaLote: idx + 1,
-            motivo: 'Registro MAPA obrigatório ausente.',
-            categoria: 'Campo Obrigatório Ausente',
-            campo: 'registro_mapa',
-            valor: 'vazio',
-            dados: row,
-          })
-          return
-        }
+        const mapaFinal = mapa ? sanitizarRegistroMapa(mapa) : `LINHA-${originalLineNum}`
 
         validos.push({
           originalLine: originalLineNum,
           data: {
-            registro_mapa: sanitizarRegistroMapa(mapa),
-            nome_produto: nomeProd,
+            registro_mapa: mapaFinal,
+            nome_produto: nomeProd || '',
             tipo_embalagem: tipoEmb || 'Padrão',
-            material: mat,
-            capacidade: cap,
+            material: mat || '',
+            capacidade: cap || '',
             unidade_medida: und || 'L',
-            ncm: cleanNcm(ncmRaw) ? formatarNcmMascara(cleanNcm(ncmRaw)) : ncmRaw,
-            destinacao_final: dest,
+            ncm: cleanNcm(ncmRaw) ? formatarNcmMascara(cleanNcm(ncmRaw)) : ncmRaw || '',
+            destinacao_final: dest || '',
             dados_extras: row,
           },
         })
@@ -1377,6 +1319,7 @@ export function Importar() {
 
       // ------------------------------------------------------------------
       // BULA 5: bula_culturas (Culturas e Carência em Linhas)
+      // Ingestão na íntegra: SEM NENHUM FILTRO DE VALIDAÇÃO OU RECUSA
       // ------------------------------------------------------------------
       else if (targetCol === 'bula_culturas') {
         const mapa = getFieldValue(row, [
@@ -1403,32 +1346,20 @@ export function Importar() {
         const lmr = getFieldValue(row, ['limite_maximo_residuos_lmr', 'lmr'])
         const obs = getFieldValue(row, ['observacoes', 'observacao', 'obs'])
 
-        if (!mapa || !cult) {
-          rejeitados.push({
-            linhaOriginal: originalLineNum,
-            linhaLote: idx + 1,
-            motivo: !mapa
-              ? 'Registro MAPA obrigatório ausente.'
-              : 'Cultura autorizada obrigatória ausente.',
-            categoria: 'Campo Obrigatório Ausente',
-            campo: !mapa ? 'registro_mapa' : 'cultura',
-            valor: !mapa ? mapa || 'vazio' : cult || 'vazio',
-            dados: row,
-          })
-          return
-        }
+        const mapaFinal = mapa ? sanitizarRegistroMapa(mapa) : `LINHA-${originalLineNum}`
+        const cultFinal = cult || 'Todas as Culturas Autorizadas'
 
         validos.push({
           originalLine: originalLineNum,
           data: {
-            registro_mapa: sanitizarRegistroMapa(mapa),
-            nome_produto: nomeProd,
-            cultura: cult,
-            intervalo_seguranca_dias: car,
-            intervalo_reentrada_horas: reen,
-            modalidade_emprego: mod,
-            limite_maximo_residuos_lmr: lmr,
-            observacoes: obs,
+            registro_mapa: mapaFinal,
+            nome_produto: nomeProd || '',
+            cultura: cultFinal,
+            intervalo_seguranca_dias: car || '',
+            intervalo_reentrada_horas: reen || '',
+            modalidade_emprego: mod || '',
+            limite_maximo_residuos_lmr: lmr || '',
+            observacoes: obs || '',
             dados_extras: row,
           },
         })
@@ -1436,6 +1367,7 @@ export function Importar() {
 
       // ------------------------------------------------------------------
       // BULA 6: bula_alvos (Alvos e Doses em Linhas)
+      // Ingestão na íntegra: SEM NENHUM FILTRO DE VALIDAÇÃO OU RECUSA
       // ------------------------------------------------------------------
       else if (targetCol === 'bula_alvos') {
         const mapa = getFieldValue(row, [
@@ -1466,35 +1398,23 @@ export function Importar() {
         ])
         const epoca = getFieldValue(row, ['epoca_aplicacao', 'epoca', 'momento_aplicacao'])
 
-        if (!mapa || !alvo) {
-          rejeitados.push({
-            linhaOriginal: originalLineNum,
-            linhaLote: idx + 1,
-            motivo: !mapa
-              ? 'Registro MAPA obrigatório ausente.'
-              : 'Alvo Biológico obrigatório ausente.',
-            categoria: 'Campo Obrigatório Ausente',
-            campo: !mapa ? 'registro_mapa' : 'alvo_biologico',
-            valor: !mapa ? mapa || 'vazio' : alvo || 'vazio',
-            dados: row,
-          })
-          return
-        }
+        const mapaFinal = mapa ? sanitizarRegistroMapa(mapa) : `LINHA-${originalLineNum}`
+        const alvoFinal = alvo || 'Alvo Biológico da Bula'
 
         validos.push({
           originalLine: originalLineNum,
           data: {
-            registro_mapa: sanitizarRegistroMapa(mapa),
-            nome_produto: nomeProd,
-            cultura: cult,
-            alvo_biologico: alvo,
-            nome_cientifico: nomeCient,
-            dose_minima: doseMin,
-            dose_maxima: doseMax,
+            registro_mapa: mapaFinal,
+            nome_produto: nomeProd || '',
+            cultura: cult || '',
+            alvo_biologico: alvoFinal,
+            nome_cientifico: nomeCient || '',
+            dose_minima: doseMin || '',
+            dose_maxima: doseMax || '',
             unidade_dose: undDose || 'L/ha',
-            volume_calda: vol,
-            numero_maximo_aplicacoes: numAp,
-            epoca_aplicacao: epoca,
+            volume_calda: vol || '',
+            numero_maximo_aplicacoes: numAp || '',
+            epoca_aplicacao: epoca || '',
             dados_extras: row,
           },
         })
@@ -1502,6 +1422,7 @@ export function Importar() {
 
       // ------------------------------------------------------------------
       // BULA 7: bula_aplicacao (Aplicação e EPI em Linhas)
+      // Ingestão na íntegra: SEM NENHUM FILTRO DE VALIDAÇÃO OU RECUSA
       // ------------------------------------------------------------------
       else if (targetCol === 'bula_aplicacao') {
         const mapa = getFieldValue(row, [
@@ -1529,31 +1450,20 @@ export function Importar() {
         ])
         const descarte = getFieldValue(row, ['descarte_embalagens', 'descarte', 'triplice_lavagem'])
 
-        if (!mapa) {
-          rejeitados.push({
-            linhaOriginal: originalLineNum,
-            linhaLote: idx + 1,
-            motivo: 'Registro MAPA obrigatório ausente.',
-            categoria: 'Campo Obrigatório Ausente',
-            campo: 'registro_mapa',
-            valor: 'vazio',
-            dados: row,
-          })
-          return
-        }
+        const mapaFinal = mapa ? sanitizarRegistroMapa(mapa) : `LINHA-${originalLineNum}`
 
         validos.push({
           originalLine: originalLineNum,
           data: {
-            registro_mapa: sanitizarRegistroMapa(mapa),
-            nome_produto: nomeProd,
+            registro_mapa: mapaFinal,
+            nome_produto: nomeProd || '',
             tipo_aplicacao: tipoApl || 'Terrestre',
-            equipamento_recomendado: equip,
-            condicoes_meteorologicas: clima,
-            epi_preparo_calda: epiCalda,
-            epi_aplicacao: epiApl,
-            medidas_primeiros_socorros: socorro,
-            descarte_embalagens: descarte,
+            equipamento_recomendado: equip || '',
+            condicoes_meteorologicas: clima || '',
+            epi_preparo_calda: epiCalda || '',
+            epi_aplicacao: epiApl || '',
+            medidas_primeiros_socorros: socorro || '',
+            descarte_embalagens: descarte || '',
             dados_extras: row,
           },
         })
@@ -1588,6 +1498,7 @@ export function Importar() {
       // Se houver válidos, grava no banco de dados com tratamento de rate-limit
       let resultadoLote: ResultadoImportacaoLote = {
         inseridos: 0,
+        atualizados: 0,
         ignorados: 0,
         erros: [],
         resumoCategorias: {},
@@ -1608,6 +1519,7 @@ export function Importar() {
 
       const finalResult: ResultadoImportacaoLote = {
         inseridos: resultadoLote.inseridos,
+        atualizados: resultadoLote.atualizados ?? 0,
         ignorados: resultadoLote.ignorados,
         erros: todosErros,
         resumoCategorias: categoriasConsolidadas,
@@ -1615,18 +1527,17 @@ export function Importar() {
 
       setImportSummary(finalResult)
 
-      if (finalResult.inseridos > 0 || finalResult.ignorados > 0) {
+      const totalGravados = finalResult.inseridos + (finalResult.atualizados || 0)
+      if (totalGravados > 0 || finalResult.ignorados > 0) {
         toast({
-          title: 'Importação Concluída!',
-          description: `${finalResult.inseridos} registros inseridos e ${finalResult.ignorados} atualizados/mantidos com sucesso na tabela "${targetCol}".${
-            todosErros.length > 0 ? ` (${todosErros.length} linhas com ressalvas/erros).` : ''
-          }`,
+          title: 'Importação Concluída na Íntegra!',
+          description: `${finalResult.inseridos} registros inseridos e ${finalResult.atualizados || 0} enriquecidos/atualizados com sucesso na tabela "${targetCol}".`,
         })
       } else {
         toast({
           variant: 'destructive',
           title: 'Atenção na Importação',
-          description: `Nenhum registro pôde ser inserido. Verifique o resumo de erros abaixo.`,
+          description: `Nenhum registro pôde ser processado. Verifique os avisos abaixo.`,
         })
       }
     } catch (err: unknown) {
@@ -1930,35 +1841,41 @@ export function Importar() {
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs">
                   <div className="p-3 rounded-xl bg-emerald-50 text-emerald-900 border border-emerald-200">
                     <span className="block text-[11px] text-emerald-700 font-medium">
-                      Inseridos com Sucesso
+                      Novos Inseridos
                     </span>
                     <strong className="text-xl font-bold text-emerald-800">
                       {importSummary.inseridos}
                     </strong>
                     <span className="block text-[10px] text-emerald-600 mt-0.5">
-                      Prontos para validação
+                      Gravados na base
                     </span>
                   </div>
-                  <div className="p-3 rounded-xl bg-amber-50 text-amber-900 border border-amber-200">
-                    <span className="block text-[11px] text-amber-700 font-medium">
-                      Ignorados (Duplicados)
+                  <div className="p-3 rounded-xl bg-blue-50 text-blue-900 border border-blue-200">
+                    <span className="block text-[11px] text-blue-700 font-medium">
+                      Atualizados / Enriquecidos
                     </span>
-                    <strong className="text-xl font-bold text-amber-800">
-                      {importSummary.ignorados}
+                    <strong className="text-xl font-bold text-blue-800">
+                      {importSummary.atualizados ?? 0}
                     </strong>
-                    <span className="block text-[10px] text-amber-600 mt-0.5">
-                      Já existiam na base
+                    <span className="block text-[10px] text-blue-600 mt-0.5">
+                      Dados complementados
                     </span>
                   </div>
-                  <div className="p-3 rounded-xl bg-red-50 text-red-900 border border-red-200">
-                    <span className="block text-[11px] text-red-700 font-medium">
-                      Linhas com Inconsistências
+                  <div className="p-3 rounded-xl bg-slate-50 text-slate-900 border border-slate-200">
+                    <span className="block text-[11px] text-slate-700 font-medium">
+                      {importSummary.erros.length > 0
+                        ? 'Erros Técnicos de Infraestrutura'
+                        : 'Linhas Recusadas / Ignoradas'}
                     </span>
-                    <strong className="text-xl font-bold text-red-800">
+                    <strong
+                      className={`text-xl font-bold ${importSummary.erros.length > 0 ? 'text-red-800' : 'text-slate-800'}`}
+                    >
                       {importSummary.erros.length}
                     </strong>
-                    <span className="block text-[10px] text-red-600 mt-0.5">
-                      Exigem correção na planilha
+                    <span className="block text-[10px] text-slate-600 mt-0.5">
+                      {importSummary.erros.length === 0
+                        ? '0 perdas • 100% gravado'
+                        : 'Falhas de conexão ou DB'}
                     </span>
                   </div>
                 </div>

@@ -378,6 +378,7 @@ export interface ItemErroImportacao {
 
 export interface ResultadoImportacaoLote {
   inseridos: number
+  atualizados?: number
   ignorados: number
   erros: ItemErroImportacao[]
   resumoCategorias: Record<string, number>
@@ -446,13 +447,14 @@ export async function importarEmLote<T extends Record<string, unknown>>(
   onProgress?: (processados: number, total: number) => void,
 ): Promise<ResultadoImportacaoLote> {
   let inseridos = 0
+  let atualizados = 0
   let ignorados = 0
   const erros: ItemErroImportacao[] = []
   const resumoCategorias: Record<string, number> = {}
   const total = records.length
 
   if (total === 0) {
-    return { inseridos: 0, ignorados: 0, erros: [], resumoCategorias: {} }
+    return { inseridos: 0, atualizados: 0, ignorados: 0, erros: [], resumoCategorias: {} }
   }
 
   const token = pb.authStore.token
@@ -552,6 +554,7 @@ export async function importarEmLote<T extends Record<string, unknown>>(
 
     if (respostaChunk) {
       inseridos += respostaChunk.inseridos || 0
+      atualizados += respostaChunk.atualizados || 0
       ignorados += respostaChunk.ignorados || 0
 
       if (Array.isArray(respostaChunk.erros)) {
@@ -569,7 +572,7 @@ export async function importarEmLote<T extends Record<string, unknown>>(
     }
   }
 
-  return { inseridos, ignorados, erros, resumoCategorias }
+  return { inseridos, atualizados, ignorados, erros, resumoCategorias }
 }
 
 // -----------------------------------------------------------------------------

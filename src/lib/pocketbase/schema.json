@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-10-22T12:30:39.575Z",
+  "generatedAt": "2026-10-22T12:43:40.810Z",
   "collections": [
     {
       "name": "users",
@@ -885,13 +885,13 @@
         {
           "name": "registro_mapa",
           "type": "text",
-          "required": true,
+          "required": false,
           "system": false
         },
         {
           "name": "nome_comercial",
           "type": "text",
-          "required": true,
+          "required": false,
           "system": false
         },
         {
@@ -1014,7 +1014,7 @@
         {
           "name": "registro_mapa",
           "type": "text",
-          "required": true,
+          "required": false,
           "system": false
         },
         {
@@ -1026,7 +1026,7 @@
         {
           "name": "ingrediente_ativo",
           "type": "text",
-          "required": true,
+          "required": false,
           "system": false
         },
         {
@@ -1105,7 +1105,7 @@
         {
           "name": "registro_mapa",
           "type": "text",
-          "required": true,
+          "required": false,
           "system": false
         },
         {
@@ -1123,7 +1123,7 @@
         {
           "name": "razao_social",
           "type": "text",
-          "required": true,
+          "required": false,
           "system": false
         },
         {
@@ -1204,7 +1204,7 @@
         {
           "name": "registro_mapa",
           "type": "text",
-          "required": true,
+          "required": false,
           "system": false
         },
         {
@@ -1290,7 +1290,7 @@
         {
           "name": "registro_mapa",
           "type": "text",
-          "required": true,
+          "required": false,
           "system": false
         },
         {
@@ -1302,7 +1302,7 @@
         {
           "name": "cultura",
           "type": "text",
-          "required": true,
+          "required": false,
           "system": false
         },
         {
@@ -1376,7 +1376,7 @@
         {
           "name": "registro_mapa",
           "type": "text",
-          "required": true,
+          "required": false,
           "system": false
         },
         {
@@ -1394,7 +1394,7 @@
         {
           "name": "alvo_biologico",
           "type": "text",
-          "required": true,
+          "required": false,
           "system": false
         },
         {
@@ -1481,7 +1481,7 @@
         {
           "name": "registro_mapa",
           "type": "text",
-          "required": true,
+          "required": false,
           "system": false
         },
         {

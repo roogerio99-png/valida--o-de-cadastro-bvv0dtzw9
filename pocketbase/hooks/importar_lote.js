@@ -958,6 +958,8 @@ routerAdd('POST', '/backend/v1/importar-lote', (e) => {
 
       // =======================================================================
       // CASO 4: bula_produtos (Sheet 1: Cadastro_Mestre_1a1)
+      // Importação na íntegra SEM REGRAS DE RECUSA/DESCARTES.
+      // Atualiza e enriquece registros com o mesmo registro_mapa (contando como atualizados).
       // =======================================================================
       else if (collectionName === 'bula_produtos') {
         for (let i = 0; i < records.length; i++) {
@@ -968,33 +970,8 @@ routerAdd('POST', '/backend/v1/importar-lote', (e) => {
           const regMapaRaw = String(data.registro_mapa || '').trim()
           const nomeComercial = String(data.nome_comercial || data.nome_produto || '').trim()
 
-          if (!regMapaRaw) {
-            registrarErro(
-              rowNum,
-              i + 1,
-              'Campo Obrigatório Ausente',
-              'O Registro MAPA é obrigatório para o cadastro da bula.',
-              'registro_mapa',
-              '',
-              data,
-            )
-            continue
-          }
-
-          if (!nomeComercial) {
-            registrarErro(
-              rowNum,
-              i + 1,
-              'Campo Obrigatório Ausente',
-              'O Nome Comercial do produto é obrigatório para o cadastro da bula.',
-              'nome_comercial',
-              '',
-              data,
-            )
-            continue
-          }
-
-          const regMapa = sanitizarMapa(regMapaRaw)
+          // Normalização tolerante do registro MAPA (sem recusa caso venha vazio)
+          const regMapa = regMapaRaw ? sanitizarMapa(regMapaRaw) : `LINHA-${rowNum}`
           const escMapa = regMapa.replace(/'/g, "\\'")
 
           // Upsert idempotente por registro_mapa
@@ -1034,96 +1011,62 @@ routerAdd('POST', '/backend/v1/importar-lote', (e) => {
               extrasObj = {}
             }
           }
-          if (titularBruto.length > 500) {
+          if (titularBruto) {
             extrasObj['Titular do Registro (texto completo da planilha)'] = titularBruto
           }
-          if (fabricanteBruto.length > 500) {
+          if (fabricanteBruto) {
             extrasObj['Fabricante/Formulador (texto completo da planilha)'] = fabricanteBruto
           }
+          if (paBruto) {
+            extrasObj['Princípio Ativo (texto completo da planilha)'] = paBruto
+          }
 
-          // Trunca defensivamente para caber no campo de texto caso exceda 2000 ou 500
+          // Trunca defensivamente para caber no schema caso exceda 4900 caracteres (evita falha física no DB)
           const titularFinal =
-            titularBruto.length > 1950 ? titularBruto.slice(0, 1950) + '...' : titularBruto
+            titularBruto.length > 4900 ? titularBruto.slice(0, 4900) + '...' : titularBruto
           const fabricanteFinal =
-            fabricanteBruto.length > 1950 ? fabricanteBruto.slice(0, 1950) + '...' : fabricanteBruto
-          const paFinal = paBruto.length > 950 ? paBruto.slice(0, 950) + '...' : paBruto
+            fabricanteBruto.length > 4900 ? fabricanteBruto.slice(0, 4900) + '...' : fabricanteBruto
+          const paFinal = paBruto.length > 1950 ? paBruto.slice(0, 1950) + '...' : paBruto
           const modoAcaoFinal =
-            modoAcaoBruto.length > 950 ? modoAcaoBruto.slice(0, 950) + '...' : modoAcaoBruto
+            modoAcaoBruto.length > 1950 ? modoAcaoBruto.slice(0, 1950) + '...' : modoAcaoBruto
+          const nomeFinal =
+            nomeComercial || rec.getString('nome_comercial') || regMapa || `Produto Linha ${rowNum}`
 
-          // Se for UPDATE (registro existente repetido na planilha ou já no banco):
-          // Enriquece campos vazios ou atualiza com dados mais completos/relevantes, preservando fidelidade sem duplicar.
+          // Se for UPDATE (mesmo registro MAPA repetido na planilha ou já gravado):
+          // SEMPRE atualiza e enriquece com as informações mais recentes ou faltantes.
           if (isUpdate) {
-            if (
-              nomeComercial &&
-              (!rec.getString('nome_comercial') ||
-                rec.getString('nome_comercial').length < nomeComercial.length)
-            ) {
-              rec.set('nome_comercial', nomeComercial)
+            if (nomeFinal) {
+              rec.set('nome_comercial', nomeFinal)
               rec.set(
                 'marca_padronizada',
-                String(data.marca_padronizada || sanitizarMarca(nomeComercial)).trim(),
+                String(data.marca_padronizada || sanitizarMarca(nomeFinal)).trim(),
               )
             }
-            if (
-              titularFinal &&
-              (!rec.getString('titular_registro') ||
-                rec.getString('titular_registro') === 'Não Informado')
-            ) {
-              rec.set('titular_registro', titularFinal)
-            }
-            if (
-              fabricanteFinal &&
-              (!rec.getString('fabricante_formulador') ||
-                rec.getString('fabricante_formulador') === 'Não Informado')
-            ) {
-              rec.set('fabricante_formulador', fabricanteFinal)
-            }
-            if (
-              paFinal &&
-              (!rec.getString('principio_ativo') ||
-                rec.getString('principio_ativo') === 'Não Informado')
-            ) {
-              rec.set('principio_ativo', paFinal)
-            }
-            if (data.classe_agronomica && !rec.getString('classe_agronomica')) {
+            if (titularFinal) rec.set('titular_registro', titularFinal)
+            if (fabricanteFinal) rec.set('fabricante_formulador', fabricanteFinal)
+            if (paFinal) rec.set('principio_ativo', paFinal)
+            if (data.classe_agronomica)
               rec.set('classe_agronomica', String(data.classe_agronomica).trim())
-            }
-            if (data.grupo_quimico && !rec.getString('grupo_quimico')) {
-              rec.set('grupo_quimico', String(data.grupo_quimico).trim())
-            }
-            if (data.classificacao_toxicologica && !rec.getString('classificacao_toxicologica')) {
+            if (data.grupo_quimico) rec.set('grupo_quimico', String(data.grupo_quimico).trim())
+            if (data.classificacao_toxicologica)
               rec.set('classificacao_toxicologica', String(data.classificacao_toxicologica).trim())
-            }
-            if (data.classificacao_ambiental && !rec.getString('classificacao_ambiental')) {
+            if (data.classificacao_ambiental)
               rec.set('classificacao_ambiental', String(data.classificacao_ambiental).trim())
-            }
-            if (data.tipo_formulacao && !rec.getString('tipo_formulacao')) {
+            if (data.tipo_formulacao)
               rec.set('tipo_formulacao', String(data.tipo_formulacao).trim())
-            }
-            if (modoAcaoFinal && !rec.getString('modo_acao')) {
-              rec.set('modo_acao', modoAcaoFinal)
-            }
+            if (modoAcaoFinal) rec.set('modo_acao', modoAcaoFinal)
             const ncmFmt = fmtNcmMascara(data.ncm_padrao || data.ncm)
-            if (ncmFmt && !rec.getString('ncm_padrao')) {
-              rec.set('ncm_padrao', ncmFmt)
-            }
-            if (
-              data.tipo_produto &&
-              (!rec.getString('tipo_produto') ||
-                rec.getString('tipo_produto') === 'Produto Formulado Comercial')
-            ) {
-              rec.set('tipo_produto', String(data.tipo_produto).trim())
-            }
-            if (data.status_registro && !rec.getString('status_registro')) {
+            if (ncmFmt) rec.set('ncm_padrao', ncmFmt)
+            if (data.tipo_produto) rec.set('tipo_produto', String(data.tipo_produto).trim())
+            if (data.status_registro)
               rec.set('status_registro', String(data.status_registro).trim())
-            }
           } else {
             // Novo registro (INSERT)
             rec.set('registro_mapa', regMapa)
-            rec.set('nome_comercial', nomeComercial)
+            rec.set('nome_comercial', nomeFinal)
             rec.set(
               'marca_padronizada',
-              String(data.marca_padronizada || sanitizarMarca(nomeComercial)).trim(),
+              String(data.marca_padronizada || sanitizarMarca(nomeFinal)).trim(),
             )
             rec.set('titular_registro', titularFinal)
             rec.set('fabricante_formulador', fabricanteFinal)
@@ -1153,7 +1096,6 @@ routerAdd('POST', '/backend/v1/importar-lote', (e) => {
             txApp.save(rec)
             if (isUpdate) {
               atualizados++
-              ignorados++
             } else {
               inseridos++
             }
@@ -1174,6 +1116,7 @@ routerAdd('POST', '/backend/v1/importar-lote', (e) => {
 
       // =======================================================================
       // CASO 5: bula_composicao (Sheet 2: Composicao_Em_Linhas)
+      // Importação na íntegra SEM REGRAS DE RECUSA/DESCARTES.
       // =======================================================================
       else if (collectionName === 'bula_composicao') {
         for (let i = 0; i < records.length; i++) {
@@ -1182,22 +1125,13 @@ routerAdd('POST', '/backend/v1/importar-lote', (e) => {
           const rowNum = Number(itemWrapper.originalLine) || i + 1
 
           const regMapaRaw = String(data.registro_mapa || '').trim()
-          const ingrediente = String(data.ingrediente_ativo || data.principio_ativo || '').trim()
+          const ingredienteRaw = String(data.ingrediente_ativo || data.principio_ativo || '').trim()
 
-          if (!regMapaRaw || !ingrediente) {
-            registrarErro(
-              rowNum,
-              i + 1,
-              'Campo Obrigatório Ausente',
-              'Registro MAPA e Ingrediente Ativo são obrigatórios na composição da bula.',
-              !regMapaRaw ? 'registro_mapa' : 'ingrediente_ativo',
-              !regMapaRaw ? regMapaRaw : ingrediente,
-              data,
-            )
-            continue
-          }
+          const regMapa = regMapaRaw ? sanitizarMapa(regMapaRaw) : `LINHA-${rowNum}`
+          const ingrediente =
+            ingredienteRaw ||
+            String(data.nome_quimico || data.nome_produto || 'Ingrediente Ativo').trim()
 
-          const regMapa = sanitizarMapa(regMapaRaw)
           const escMapa = regMapa.replace(/'/g, "\\'")
           const escIa = ingrediente.replace(/'/g, "\\'")
 
@@ -1235,7 +1169,6 @@ routerAdd('POST', '/backend/v1/importar-lote', (e) => {
             txApp.save(rec)
             if (isUpdate) {
               atualizados++
-              ignorados++
             } else {
               inseridos++
             }
@@ -1256,6 +1189,7 @@ routerAdd('POST', '/backend/v1/importar-lote', (e) => {
 
       // =======================================================================
       // CASO 6: bula_empresas (Sheet 3: Cadeia_Empresas_Linhas)
+      // Importação na íntegra SEM REGRAS DE RECUSA/DESCARTES.
       // =======================================================================
       else if (collectionName === 'bula_empresas') {
         for (let i = 0; i < records.length; i++) {
@@ -1264,23 +1198,12 @@ routerAdd('POST', '/backend/v1/importar-lote', (e) => {
           const rowNum = Number(itemWrapper.originalLine) || i + 1
 
           const regMapaRaw = String(data.registro_mapa || '').trim()
-          const razao = String(data.razao_social || data.empresa || '').trim()
+          const razaoRaw = String(data.razao_social || data.empresa || '').trim()
           const tipoRelacao = String(data.tipo_relacao || 'Formulador').trim()
 
-          if (!regMapaRaw || !razao) {
-            registrarErro(
-              rowNum,
-              i + 1,
-              'Campo Obrigatório Ausente',
-              'Registro MAPA e Razão Social são obrigatórios na cadeia de empresas.',
-              !regMapaRaw ? 'registro_mapa' : 'razao_social',
-              !regMapaRaw ? regMapaRaw : razao,
-              data,
-            )
-            continue
-          }
+          const regMapa = regMapaRaw ? sanitizarMapa(regMapaRaw) : `LINHA-${rowNum}`
+          const razao = razaoRaw || String(data.nome_fantasia || 'Empresa Vinculada').trim()
 
-          const regMapa = sanitizarMapa(regMapaRaw)
           const escMapa = regMapa.replace(/'/g, "\\'")
           const escRazao = razao.replace(/'/g, "\\'")
           const escTipo = tipoRelacao.replace(/'/g, "\\'")
@@ -1321,7 +1244,6 @@ routerAdd('POST', '/backend/v1/importar-lote', (e) => {
             txApp.save(rec)
             if (isUpdate) {
               atualizados++
-              ignorados++
             } else {
               inseridos++
             }
@@ -1342,6 +1264,7 @@ routerAdd('POST', '/backend/v1/importar-lote', (e) => {
 
       // =======================================================================
       // CASO 7: bula_embalagens (Sheet 4: Embalagens_NCM_Linhas)
+      // Importação na íntegra SEM REGRAS DE RECUSA/DESCARTES.
       // =======================================================================
       else if (collectionName === 'bula_embalagens') {
         for (let i = 0; i < records.length; i++) {
@@ -1350,25 +1273,12 @@ routerAdd('POST', '/backend/v1/importar-lote', (e) => {
           const rowNum = Number(itemWrapper.originalLine) || i + 1
 
           const regMapaRaw = String(data.registro_mapa || '').trim()
-          const tipoEmb = String(data.tipo_embalagem || data.embalagem || '').trim()
+          const tipoEmb = String(data.tipo_embalagem || data.embalagem || 'Padrão').trim()
           const cap = String(data.capacidade || '').trim()
 
-          if (!regMapaRaw) {
-            registrarErro(
-              rowNum,
-              i + 1,
-              'Campo Obrigatório Ausente',
-              'Registro MAPA é obrigatório nas embalagens da bula.',
-              'registro_mapa',
-              '',
-              data,
-            )
-            continue
-          }
-
-          const regMapa = sanitizarMapa(regMapaRaw)
+          const regMapa = regMapaRaw ? sanitizarMapa(regMapaRaw) : `LINHA-${rowNum}`
           const escMapa = regMapa.replace(/'/g, "\\'")
-          const escTipo = (tipoEmb || 'Padrão').replace(/'/g, "\\'")
+          const escTipo = tipoEmb.replace(/'/g, "\\'")
           const escCap = cap.replace(/'/g, "\\'")
 
           const materialLimpo = String(data.material || '').trim()
@@ -1393,7 +1303,7 @@ routerAdd('POST', '/backend/v1/importar-lote', (e) => {
 
           rec.set('registro_mapa', regMapa)
           rec.set('nome_produto', String(data.nome_produto || '').trim())
-          rec.set('tipo_embalagem', tipoEmb || 'Padrão')
+          rec.set('tipo_embalagem', tipoEmb)
           rec.set('material', String(data.material || '').trim())
           rec.set('capacidade', cap)
           rec.set('unidade_medida', String(data.unidade_medida || 'L').trim())
@@ -1405,7 +1315,6 @@ routerAdd('POST', '/backend/v1/importar-lote', (e) => {
             txApp.save(rec)
             if (isUpdate) {
               atualizados++
-              ignorados++
             } else {
               inseridos++
             }
@@ -1426,6 +1335,7 @@ routerAdd('POST', '/backend/v1/importar-lote', (e) => {
 
       // =======================================================================
       // CASO 8: bula_culturas (Sheet 5: Culturas_Carencia_Linhas)
+      // Importação na íntegra SEM REGRAS DE RECUSA/DESCARTES.
       // =======================================================================
       else if (collectionName === 'bula_culturas') {
         for (let i = 0; i < records.length; i++) {
@@ -1434,22 +1344,11 @@ routerAdd('POST', '/backend/v1/importar-lote', (e) => {
           const rowNum = Number(itemWrapper.originalLine) || i + 1
 
           const regMapaRaw = String(data.registro_mapa || '').trim()
-          const cultura = String(data.cultura || '').trim()
+          const culturaRaw = String(data.cultura || '').trim()
 
-          if (!regMapaRaw || !cultura) {
-            registrarErro(
-              rowNum,
-              i + 1,
-              'Campo Obrigatório Ausente',
-              'Registro MAPA e Cultura são obrigatórios nas culturas e carência.',
-              !regMapaRaw ? 'registro_mapa' : 'cultura',
-              !regMapaRaw ? regMapaRaw : cultura,
-              data,
-            )
-            continue
-          }
+          const regMapa = regMapaRaw ? sanitizarMapa(regMapaRaw) : `LINHA-${rowNum}`
+          const cultura = culturaRaw || 'Todas as Culturas Autorizadas'
 
-          const regMapa = sanitizarMapa(regMapaRaw)
           const escMapa = regMapa.replace(/'/g, "\\'")
           const escCult = cultura.replace(/'/g, "\\'")
 
@@ -1489,7 +1388,6 @@ routerAdd('POST', '/backend/v1/importar-lote', (e) => {
             txApp.save(rec)
             if (isUpdate) {
               atualizados++
-              ignorados++
             } else {
               inseridos++
             }
@@ -1510,6 +1408,7 @@ routerAdd('POST', '/backend/v1/importar-lote', (e) => {
 
       // =======================================================================
       // CASO 9: bula_alvos (Sheet 6: Alvos_e_Doses_Linhas)
+      // Importação na íntegra SEM REGRAS DE RECUSA/DESCARTES.
       // =======================================================================
       else if (collectionName === 'bula_alvos') {
         for (let i = 0; i < records.length; i++) {
@@ -1518,23 +1417,12 @@ routerAdd('POST', '/backend/v1/importar-lote', (e) => {
           const rowNum = Number(itemWrapper.originalLine) || i + 1
 
           const regMapaRaw = String(data.registro_mapa || '').trim()
-          const alvo = String(data.alvo_biologico || data.alvo || data.praga || '').trim()
+          const alvoRaw = String(data.alvo_biologico || data.alvo || data.praga || '').trim()
           const cultura = String(data.cultura || '').trim()
 
-          if (!regMapaRaw || !alvo) {
-            registrarErro(
-              rowNum,
-              i + 1,
-              'Campo Obrigatório Ausente',
-              'Registro MAPA e Alvo Biológico são obrigatórios nos alvos e doses.',
-              !regMapaRaw ? 'registro_mapa' : 'alvo_biologico',
-              !regMapaRaw ? regMapaRaw : alvo,
-              data,
-            )
-            continue
-          }
+          const regMapa = regMapaRaw ? sanitizarMapa(regMapaRaw) : `LINHA-${rowNum}`
+          const alvo = alvoRaw || 'Alvo Biológico da Bula'
 
-          const regMapa = sanitizarMapa(regMapaRaw)
           const escMapa = regMapa.replace(/'/g, "\\'")
           const escAlvo = alvo.replace(/'/g, "\\'")
           const escCult = cultura.replace(/'/g, "\\'")
@@ -1575,7 +1463,6 @@ routerAdd('POST', '/backend/v1/importar-lote', (e) => {
             txApp.save(rec)
             if (isUpdate) {
               atualizados++
-              ignorados++
             } else {
               inseridos++
             }
@@ -1596,6 +1483,7 @@ routerAdd('POST', '/backend/v1/importar-lote', (e) => {
 
       // =======================================================================
       // CASO 10: bula_aplicacao (Sheet 7: Aplicacao_e_EPI_Linhas)
+      // Importação na íntegra SEM REGRAS DE RECUSA/DESCARTES.
       // =======================================================================
       else if (collectionName === 'bula_aplicacao') {
         for (let i = 0; i < records.length; i++) {
@@ -1606,20 +1494,7 @@ routerAdd('POST', '/backend/v1/importar-lote', (e) => {
           const regMapaRaw = String(data.registro_mapa || '').trim()
           const tipoApl = String(data.tipo_aplicacao || 'Geral').trim()
 
-          if (!regMapaRaw) {
-            registrarErro(
-              rowNum,
-              i + 1,
-              'Campo Obrigatório Ausente',
-              'Registro MAPA é obrigatório nas informações de Aplicação e EPI.',
-              'registro_mapa',
-              '',
-              data,
-            )
-            continue
-          }
-
-          const regMapa = sanitizarMapa(regMapaRaw)
+          const regMapa = regMapaRaw ? sanitizarMapa(regMapaRaw) : `LINHA-${rowNum}`
           const escMapa = regMapa.replace(/'/g, "\\'")
           const escTipo = tipoApl.replace(/'/g, "\\'")
 
@@ -1660,7 +1535,6 @@ routerAdd('POST', '/backend/v1/importar-lote', (e) => {
             txApp.save(rec)
             if (isUpdate) {
               atualizados++
-              ignorados++
             } else {
               inseridos++
             }
