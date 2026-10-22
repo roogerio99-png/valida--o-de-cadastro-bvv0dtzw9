@@ -22,7 +22,9 @@ import {
   CheckCircle2,
   AlertTriangle,
   Loader2,
+  FileCheck2,
 } from 'lucide-react'
+import { ModalImportarBulaPdf } from '@/components/ModalImportarBulaPdf'
 import { Card } from '@/components/ui/card'
 import { ScrollableTable } from '@/components/ScrollableTable'
 import { Button } from '@/components/ui/button'
@@ -83,6 +85,9 @@ export function CadastroBula() {
   const [modalLimparOpen, setModalLimparOpen] = useState(false)
   const [confirmacaoTexto, setConfirmacaoTexto] = useState('')
   const [executandoLimpeza, setExecutandoLimpeza] = useState(false)
+
+  // Modal Importar Bula (PDF)
+  const [modalImportarPdfOpen, setModalImportarPdfOpen] = useState(false)
 
   // Rolagem e paginação
   const [totalCount, setTotalCount] = useState(0)
@@ -372,10 +377,20 @@ export function CadastroBula() {
             <span>Limpar Base</span>
           </Button>
 
+          <Button
+            size="sm"
+            onClick={() => setModalImportarPdfOpen(true)}
+            className="bg-[#1B5E20] hover:bg-[#2E7D32] text-white text-xs h-9 rounded-xl shadow-sm flex items-center gap-1.5"
+          >
+            <FileCheck2 className="w-4 h-4 text-emerald-300" />
+            <span>Importar Bula (PDF)</span>
+          </Button>
+
           <Link to="/importar">
             <Button
+              variant="outline"
               size="sm"
-              className="bg-[#1B5E20] hover:bg-[#2E7D32] text-white text-xs h-9 rounded-xl shadow-sm flex items-center gap-1.5"
+              className="border-[#DCE5DC] text-[#1C2B1C] hover:bg-emerald-50 hover:text-[#1B5E20] text-xs h-9 rounded-xl shadow-sm flex items-center gap-1.5"
             >
               <UploadCloud className="w-4 h-4 text-[#F57F17]" />
               <span>Importar Planilhas</span>
@@ -695,6 +710,17 @@ export function CadastroBula() {
           </div>
         </div>
       </Card>
+
+      {/* ------------------------------------------------------------------ */}
+      {/* MODAL IMPORTAR BULA (PDF) */}
+      {/* ------------------------------------------------------------------ */}
+      <ModalImportarBulaPdf
+        open={modalImportarPdfOpen}
+        onOpenChange={setModalImportarPdfOpen}
+        onSucessoGravacao={() => {
+          carregarProdutos()
+        }}
+      />
 
       {/* ------------------------------------------------------------------ */}
       {/* MODAL LIMPAR BASE DE BULA */}

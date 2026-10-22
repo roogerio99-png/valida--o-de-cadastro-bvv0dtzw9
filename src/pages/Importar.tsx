@@ -1,4 +1,5 @@
 import React, { useState, useRef } from 'react'
+import { Link } from 'react-router-dom'
 import {
   UploadCloud,
   FileSpreadsheet,
@@ -14,8 +15,10 @@ import {
   Layers,
   HelpCircle,
   XCircle,
+  FileCheck2,
 } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
+import { ModalImportarBulaPdf } from '@/components/ModalImportarBulaPdf'
 import { Button } from '@/components/ui/button'
 import { Progress } from '@/components/ui/progress'
 import { Badge } from '@/components/ui/badge'
@@ -353,6 +356,9 @@ export function Importar() {
   const [importSummary, setImportSummary] = useState<ResultadoImportacaoLote | null>(null)
   const [selectedCategoryFilter, setSelectedCategoryFilter] = useState<string | null>(null)
   const [expandedErrorRow, setExpandedErrorRow] = useState<number | null>(null)
+
+  // Modal Importação de Bula (PDF)
+  const [modalPdfOpen, setModalPdfOpen] = useState<boolean>(false)
 
   const fileInputRef = useRef<HTMLInputElement>(null)
 
@@ -1837,18 +1843,80 @@ export function Importar() {
 
   return (
     <div className="space-y-6 animate-in fade-in-up duration-300">
-      {/* Top Header */}
-      <div>
-        <h2 className="text-xl font-bold text-[#1C2B1C] flex items-center gap-2">
-          <UploadCloud className="w-6 h-6 text-[#1B5E20]" />
-          <span>Importação Operacional de Planilhas</span>
-        </h2>
-        <p className="text-xs text-[#5A6D5A] mt-0.5">
-          Carregue suas planilhas de trabalho (.xlsx ou .csv). O validador identifica
-          automaticamente as abas, tolera cabeçalhos variados e ignora cabeçalhos informativos sem
-          quebrar a importação.
-        </p>
+      {/* Modal de Importação de Bula (PDF) */}
+      <ModalImportarBulaPdf open={modalPdfOpen} onOpenChange={setModalPdfOpen} />
+      {/* Top Header com Botão PDF em Destaque */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <div>
+          <h2 className="text-xl font-bold text-[#1C2B1C] flex items-center gap-2">
+            <UploadCloud className="w-6 h-6 text-[#1B5E20]" />
+            <span>Central de Importação</span>
+          </h2>
+          <p className="text-xs text-[#5A6D5A] mt-0.5">
+            Importe dados para o sistema via <strong>Bula Oficial em PDF</strong> (preenchimento
+            inteligente de todos os 7 blocos da bula) ou via{' '}
+            <strong>Planilhas Excel (.xlsx / .csv)</strong> 1:1 por linha.
+          </p>
+        </div>
+
+        <div className="flex items-center gap-2 flex-wrap">
+          <Button
+            onClick={() => setModalPdfOpen(true)}
+            className="bg-[#1B5E20] hover:bg-[#2E7D32] text-white text-xs h-9 rounded-xl shadow-sm flex items-center gap-1.5"
+          >
+            <FileText className="w-4 h-4 text-emerald-300" />
+            <span>Importar Bula (PDF)</span>
+            <Badge className="bg-emerald-400/20 text-emerald-100 text-[9px] border-emerald-300/30 px-1 py-0 ml-0.5">
+              Novo
+            </Badge>
+          </Button>
+
+          <Link to="/bula">
+            <Button
+              variant="outline"
+              size="sm"
+              className="text-xs h-9 rounded-xl border-[#DCE5DC] text-[#1C2B1C] hover:bg-emerald-50 hover:text-[#1B5E20] hover:border-emerald-300 flex items-center gap-1.5"
+            >
+              <FileCheck2 className="w-3.5 h-3.5" />
+              <span>Ver Cadastro de Bula</span>
+            </Button>
+          </Link>
+        </div>
       </div>
+
+      {/* Card Promocional da Nova Importação por PDF */}
+      <Card className="p-4 bg-gradient-to-r from-emerald-50/90 via-emerald-50/50 to-white border-emerald-200 rounded-2xl shadow-sm flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+        <div className="flex items-start gap-3">
+          <div className="w-10 h-10 rounded-xl bg-[#1B5E20] text-white flex items-center justify-center flex-shrink-0 shadow-sm mt-0.5">
+            <FileText className="w-5 h-5 text-emerald-200" />
+          </div>
+          <div>
+            <h4 className="font-bold text-xs sm:text-sm text-emerald-950 flex items-center gap-2">
+              <span>Importação Direta a partir da Bula em PDF</span>
+              <Badge
+                variant="outline"
+                className="text-[10px] bg-emerald-100/60 text-emerald-900 border-emerald-300 font-normal"
+              >
+                7 Blocos em 1 Clique
+              </Badge>
+            </h4>
+            <p className="text-xs text-[#5A6D5A] mt-0.5 leading-relaxed">
+              Suba o PDF da bula verdadeira do produto (ex: ROUNDUP ORIGINAL MAIS, MAPA Nº 01119). O
+              motor extrai cabeçalho, composição, fabricantes/formuladores, toxicologia, doses,
+              quadros de uso e modo de aplicação de uma única vez.
+            </p>
+          </div>
+        </div>
+
+        <Button
+          size="sm"
+          onClick={() => setModalPdfOpen(true)}
+          className="bg-[#1B5E20] hover:bg-[#2E7D32] text-white text-xs h-8 px-3.5 rounded-xl shadow-sm flex items-center gap-1.5 flex-shrink-0"
+        >
+          <span>Subir Bula (PDF)</span>
+          <ArrowRight className="w-3.5 h-3.5" />
+        </Button>
+      </Card>
 
       {/* ------------------------------------------------------------------ */}
       {/* 4 ZONAS DE DESTINO */}

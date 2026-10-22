@@ -665,3 +665,83 @@ export async function limparCadastroBula(params: {
     body: params,
   })
 }
+
+// -----------------------------------------------------------------------------
+// Importação de Bula a partir de PDF (Parser $documents + Gravação Atômica)
+// -----------------------------------------------------------------------------
+
+export interface RespostaAnaliseBulaPdf {
+  sucesso: boolean
+  error?: string
+  arquivo?: {
+    nome: string
+    tamanho: number
+    truncado?: boolean
+  }
+  checklist?: {
+    registro_mapa: { encontrado: boolean; valor: string }
+    nome_comercial: { encontrado: boolean; valor: string }
+    composicao: { encontrado: boolean; total: number; itens: string[] }
+    empresas: {
+      encontrado: boolean
+      total: number
+      titular: string
+      fabricantes: number
+      formuladores: number
+    }
+    classificacoes: {
+      encontrado: boolean
+      toxicologica: string
+      ambiental: string
+      classe_agronomica: string
+    }
+    culturas: { encontrado: boolean; total: number }
+    alvos: { encontrado: boolean; total: number }
+    aplicacao_epi: { encontrado: boolean; volume_calda?: string; reentrada?: string }
+  }
+  dados_extraidos: {
+    produto: Partial<BulaProdutoItem>
+    composicao: Partial<BulaComposicaoItem>[]
+    empresas: Partial<BulaEmpresaItem>[]
+    embalagens: Partial<BulaEmbalagemItem>[]
+    culturas: Partial<BulaCulturaItem>[]
+    alvos: Partial<BulaAlvoItem>[]
+    aplicacao: Partial<BulaAplicacaoItem>[]
+  }
+}
+
+export interface RespostaGravacaoBulaPdf {
+  sucesso: boolean
+  mensagem?: string
+  error?: string
+  registro_mapa?: string
+  nome_comercial?: string
+  contadores?: {
+    bula_produtos: { inseridos: number; atualizados: number }
+    bula_composicao: { inseridos: number; atualizados: number }
+    bula_empresas: { inseridos: number; atualizados: number }
+    bula_embalagens: { inseridos: number; atualizados: number }
+    bula_culturas: { inseridos: number; atualizados: number }
+    bula_alvos: { inseridos: number; atualizados: number }
+    bula_aplicacao: { inseridos: number; atualizados: number }
+  }
+}
+
+export async function analisarBulaPdf(arquivoPdf: File): Promise<RespostaAnaliseBulaPdf> {
+  const formData = new FormData()
+  formData.append('arquivo', arquivoPdf)
+
+  return pb.send<RespostaAnaliseBulaPdf>('/backend/v1/bula/analisar-pdf', {
+    method: 'POST',
+    body: formData,
+  })
+}
+
+export async function gravarBulaPdf(
+  dadosExtraidos: RespostaAnaliseBulaPdf['dados_extraidos'],
+): Promise<RespostaGravacaoBulaPdf> {
+  return pb.send<RespostaGravacaoBulaPdf>('/backend/v1/bula/gravar-pdf', {
+    method: 'POST',
+    body: { dados: dadosExtraidos },
+  })
+}
