@@ -1150,6 +1150,9 @@ routerAdd('POST', '/backend/v1/importar-lote', (e) => {
       // =======================================================================
       // CASO 5: bula_composicao (Sheet 2: Composicao_Em_Linhas)
       // Importação na íntegra SEM REGRAS DE RECUSA/DESCARTES.
+      // Idempotência por SKU/Produto: (registro_mapa + codigo / ID Produto Base + substancia/ingrediente_ativo),
+      // com fallback para (registro_mapa + nome_produto/marca + ingrediente_ativo) quando código for vazio.
+      // Garante 1:1 integral por linha (1.329 linhas) sem fusão indevida entre SKUs do mesmo registro MAPA.
       // =======================================================================
       else if (collectionName === 'bula_composicao') {
         for (let i = 0; i < records.length; i++) {
@@ -1159,6 +1162,8 @@ routerAdd('POST', '/backend/v1/importar-lote', (e) => {
 
           const regMapaRaw = String(data.registro_mapa || '').trim()
           const ingredienteRaw = String(data.ingrediente_ativo || data.principio_ativo || '').trim()
+          const codigoProd = String(data.codigo || '').trim()
+          const nomeProd = String(data.nome_produto || '').trim()
 
           const regMapa = regMapaRaw ? sanitizarMapa(regMapaRaw) : `LINHA-${rowNum}`
           const ingrediente =
@@ -1167,16 +1172,21 @@ routerAdd('POST', '/backend/v1/importar-lote', (e) => {
 
           const escMapa = regMapa.replace(/'/g, "\\'")
           const escIa = ingrediente.replace(/'/g, "\\'")
+          const escCodigo = codigoProd.replace(/'/g, "\\'")
+          const escNome = nomeProd.replace(/'/g, "\\'")
 
-          // Upsert idempotente por chave natural (registro_mapa + ingrediente_ativo)
+          // Upsert idempotente composto incluindo o identificador do produto/SKU da linha
+          let filtroComp = ''
+          if (escCodigo) {
+            filtroComp = `registro_mapa = '${escMapa}' && codigo = '${escCodigo}' && ingrediente_ativo = '${escIa}'`
+          } else if (escNome) {
+            filtroComp = `registro_mapa = '${escMapa}' && nome_produto = '${escNome}' && ingrediente_ativo = '${escIa}'`
+          } else {
+            filtroComp = `registro_mapa = '${escMapa}' && ingrediente_ativo = '${escIa}'`
+          }
+
           const existentes =
-            txApp.findRecordsByFilter(
-              'bula_composicao',
-              `registro_mapa = '${escMapa}' && ingrediente_ativo = '${escIa}'`,
-              '-created',
-              1,
-              0,
-            ) || []
+            txApp.findRecordsByFilter('bula_composicao', filtroComp, '-created', 1, 0) || []
 
           let rec = null
           let isUpdate = false
@@ -1188,7 +1198,7 @@ routerAdd('POST', '/backend/v1/importar-lote', (e) => {
           }
 
           rec.set('registro_mapa', regMapa)
-          rec.set('nome_produto', String(data.nome_produto || '').trim())
+          rec.set('nome_produto', nomeProd)
           rec.set('ingrediente_ativo', ingrediente)
           rec.set('nome_quimico', String(data.nome_quimico || '').trim())
           rec.set('numero_cas', String(data.numero_cas || '').trim())
@@ -1196,7 +1206,7 @@ routerAdd('POST', '/backend/v1/importar-lote', (e) => {
           rec.set('unidade_medida', String(data.unidade_medida || 'g/L').trim())
           rec.set('funcao_ingrediente', String(data.funcao_ingrediente || '').trim())
           rec.set('grupo_quimico', String(data.grupo_quimico || '').trim())
-          rec.set('codigo', String(data.codigo || '').trim())
+          rec.set('codigo', codigoProd)
           rec.set('percentual_peso', String(data.percentual_peso || '').trim())
           rec.set('percentual_volume', String(data.percentual_volume || '').trim())
           if (data.dados_extras) rec.set('dados_extras', JSON.stringify(data.dados_extras))
@@ -1226,6 +1236,7 @@ routerAdd('POST', '/backend/v1/importar-lote', (e) => {
       // =======================================================================
       // CASO 6: bula_empresas (Sheet 3: Cadeia_Empresas_Linhas)
       // Importação na íntegra SEM REGRAS DE RECUSA/DESCARTES.
+      // Idempotência por SKU/Produto: (registro_mapa + codigo + tipo_relacao + razao_social + cnpj)
       // =======================================================================
       else if (collectionName === 'bula_empresas') {
         for (let i = 0; i < records.length; i++) {
@@ -1236,6 +1247,8 @@ routerAdd('POST', '/backend/v1/importar-lote', (e) => {
           const regMapaRaw = String(data.registro_mapa || '').trim()
           const razaoRaw = String(data.razao_social || data.empresa || '').trim()
           const tipoRelacao = String(data.tipo_relacao || 'Formulador').trim()
+          const codigoProd = String(data.codigo || '').trim()
+          const nomeProd = String(data.nome_produto || '').trim()
 
           const regMapa = regMapaRaw ? sanitizarMapa(regMapaRaw) : `LINHA-${rowNum}`
           const razao = razaoRaw || String(data.nome_fantasia || 'Empresa Vinculada').trim()
@@ -1243,14 +1256,27 @@ routerAdd('POST', '/backend/v1/importar-lote', (e) => {
           const escMapa = regMapa.replace(/'/g, "\\'")
           const escRazao = razao.replace(/'/g, "\\'")
           const escTipo = tipoRelacao.replace(/'/g, "\\'")
+          const escCodigo = codigoProd.replace(/'/g, "\\'")
+          const escNome = nomeProd.replace(/'/g, "\\'")
 
           const cnpjLimpo = String(data.cnpj || '').trim()
           const escCnpj = cnpjLimpo.replace(/'/g, "\\'")
 
-          // Upsert idempotente por registro_mapa + tipo_relacao + razao_social + cnpj
-          const filtroEmp = escCnpj
-            ? `registro_mapa = '${escMapa}' && tipo_relacao = '${escTipo}' && razao_social = '${escRazao}' && cnpj = '${escCnpj}'`
-            : `registro_mapa = '${escMapa}' && tipo_relacao = '${escTipo}' && razao_social = '${escRazao}'`
+          // Upsert idempotente por identificador do produto + tipo_relacao + razao_social + cnpj
+          let filtroEmp = ''
+          if (escCodigo) {
+            filtroEmp = escCnpj
+              ? `registro_mapa = '${escMapa}' && codigo = '${escCodigo}' && tipo_relacao = '${escTipo}' && razao_social = '${escRazao}' && cnpj = '${escCnpj}'`
+              : `registro_mapa = '${escMapa}' && codigo = '${escCodigo}' && tipo_relacao = '${escTipo}' && razao_social = '${escRazao}'`
+          } else if (escNome) {
+            filtroEmp = escCnpj
+              ? `registro_mapa = '${escMapa}' && nome_produto = '${escNome}' && tipo_relacao = '${escTipo}' && razao_social = '${escRazao}' && cnpj = '${escCnpj}'`
+              : `registro_mapa = '${escMapa}' && nome_produto = '${escNome}' && tipo_relacao = '${escTipo}' && razao_social = '${escRazao}'`
+          } else {
+            filtroEmp = escCnpj
+              ? `registro_mapa = '${escMapa}' && tipo_relacao = '${escTipo}' && razao_social = '${escRazao}' && cnpj = '${escCnpj}'`
+              : `registro_mapa = '${escMapa}' && tipo_relacao = '${escTipo}' && razao_social = '${escRazao}'`
+          }
 
           const existentes =
             txApp.findRecordsByFilter('bula_empresas', filtroEmp, '-created', 1, 0) || []
@@ -1265,7 +1291,7 @@ routerAdd('POST', '/backend/v1/importar-lote', (e) => {
           }
 
           rec.set('registro_mapa', regMapa)
-          rec.set('nome_produto', String(data.nome_produto || '').trim())
+          rec.set('nome_produto', nomeProd)
           rec.set('tipo_relacao', tipoRelacao)
           rec.set('razao_social', razao)
           rec.set('nome_fantasia', String(data.nome_fantasia || '').trim())
@@ -1274,7 +1300,7 @@ routerAdd('POST', '/backend/v1/importar-lote', (e) => {
           rec.set('municipio', String(data.municipio || '').trim())
           rec.set('uf', String(data.uf || '').trim())
           rec.set('pais', String(data.pais || 'Brasil').trim())
-          rec.set('codigo', String(data.codigo || '').trim())
+          rec.set('codigo', codigoProd)
           rec.set('cep', String(data.cep || '').trim())
           rec.set('bairro', String(data.bairro || '').trim())
           rec.set('inscricao_estadual', String(data.inscricao_estadual || '').trim())
@@ -1305,6 +1331,7 @@ routerAdd('POST', '/backend/v1/importar-lote', (e) => {
       // =======================================================================
       // CASO 7: bula_embalagens (Sheet 4: Embalagens_NCM_Linhas)
       // Importação na íntegra SEM REGRAS DE RECUSA/DESCARTES.
+      // Idempotência por SKU/Produto: (registro_mapa + codigo + tipo_embalagem + capacidade + material)
       // =======================================================================
       else if (collectionName === 'bula_embalagens') {
         for (let i = 0; i < records.length; i++) {
@@ -1315,19 +1342,34 @@ routerAdd('POST', '/backend/v1/importar-lote', (e) => {
           const regMapaRaw = String(data.registro_mapa || '').trim()
           const tipoEmb = String(data.tipo_embalagem || data.embalagem || 'Padrão').trim()
           const cap = String(data.capacidade || '').trim()
+          const codigoProd = String(data.codigo || '').trim()
+          const nomeProd = String(data.nome_produto || '').trim()
 
           const regMapa = regMapaRaw ? sanitizarMapa(regMapaRaw) : `LINHA-${rowNum}`
           const escMapa = regMapa.replace(/'/g, "\\'")
           const escTipo = tipoEmb.replace(/'/g, "\\'")
           const escCap = cap.replace(/'/g, "\\'")
+          const escCodigo = codigoProd.replace(/'/g, "\\'")
+          const escNome = nomeProd.replace(/'/g, "\\'")
 
           const materialLimpo = String(data.material || '').trim()
           const escMat = materialLimpo.replace(/'/g, "\\'")
 
-          // Upsert idempotente por registro_mapa + tipo_embalagem + capacidade + material
-          const filtroEmb = escMat
-            ? `registro_mapa = '${escMapa}' && tipo_embalagem = '${escTipo}' && capacidade = '${escCap}' && material = '${escMat}'`
-            : `registro_mapa = '${escMapa}' && tipo_embalagem = '${escTipo}' && capacidade = '${escCap}'`
+          // Upsert idempotente por identificador do produto + tipo_embalagem + capacidade + material
+          let filtroEmb = ''
+          if (escCodigo) {
+            filtroEmb = escMat
+              ? `registro_mapa = '${escMapa}' && codigo = '${escCodigo}' && tipo_embalagem = '${escTipo}' && capacidade = '${escCap}' && material = '${escMat}'`
+              : `registro_mapa = '${escMapa}' && codigo = '${escCodigo}' && tipo_embalagem = '${escTipo}' && capacidade = '${escCap}'`
+          } else if (escNome) {
+            filtroEmb = escMat
+              ? `registro_mapa = '${escMapa}' && nome_produto = '${escNome}' && tipo_embalagem = '${escTipo}' && capacidade = '${escCap}' && material = '${escMat}'`
+              : `registro_mapa = '${escMapa}' && nome_produto = '${escNome}' && tipo_embalagem = '${escTipo}' && capacidade = '${escCap}'`
+          } else {
+            filtroEmb = escMat
+              ? `registro_mapa = '${escMapa}' && tipo_embalagem = '${escTipo}' && capacidade = '${escCap}' && material = '${escMat}'`
+              : `registro_mapa = '${escMapa}' && tipo_embalagem = '${escTipo}' && capacidade = '${escCap}'`
+          }
 
           const existentes =
             txApp.findRecordsByFilter('bula_embalagens', filtroEmb, '-created', 1, 0) || []
@@ -1342,14 +1384,14 @@ routerAdd('POST', '/backend/v1/importar-lote', (e) => {
           }
 
           rec.set('registro_mapa', regMapa)
-          rec.set('nome_produto', String(data.nome_produto || '').trim())
+          rec.set('nome_produto', nomeProd)
           rec.set('tipo_embalagem', tipoEmb)
           rec.set('material', String(data.material || '').trim())
           rec.set('capacidade', cap)
           rec.set('unidade_medida', String(data.unidade_medida || 'L').trim())
           rec.set('ncm', fmtNcmMascara(data.ncm))
           rec.set('destinacao_final', String(data.destinacao_final || '').trim())
-          rec.set('codigo', String(data.codigo || '').trim())
+          rec.set('codigo', codigoProd)
           rec.set('ncm_faixa', String(data.ncm_faixa || '').trim())
           rec.set('descricao_embalagem', String(data.descricao_embalagem || '').trim())
           if (data.dados_extras) rec.set('dados_extras', JSON.stringify(data.dados_extras))
@@ -1379,6 +1421,7 @@ routerAdd('POST', '/backend/v1/importar-lote', (e) => {
       // =======================================================================
       // CASO 8: bula_culturas (Sheet 5: Culturas_Carencia_Linhas)
       // Importação na íntegra SEM REGRAS DE RECUSA/DESCARTES.
+      // Idempotência por SKU/Produto: (registro_mapa + codigo + cultura)
       // =======================================================================
       else if (collectionName === 'bula_culturas') {
         for (let i = 0; i < records.length; i++) {
@@ -1388,22 +1431,29 @@ routerAdd('POST', '/backend/v1/importar-lote', (e) => {
 
           const regMapaRaw = String(data.registro_mapa || '').trim()
           const culturaRaw = String(data.cultura || '').trim()
+          const codigoProd = String(data.codigo || '').trim()
+          const nomeProd = String(data.nome_produto || '').trim()
 
           const regMapa = regMapaRaw ? sanitizarMapa(regMapaRaw) : `LINHA-${rowNum}`
           const cultura = culturaRaw || 'Todas as Culturas Autorizadas'
 
           const escMapa = regMapa.replace(/'/g, "\\'")
           const escCult = cultura.replace(/'/g, "\\'")
+          const escCodigo = codigoProd.replace(/'/g, "\\'")
+          const escNome = nomeProd.replace(/'/g, "\\'")
 
-          // Upsert idempotente por registro_mapa + cultura
+          // Upsert idempotente por identificador do produto + cultura
+          let filtroCult = ''
+          if (escCodigo) {
+            filtroCult = `registro_mapa = '${escMapa}' && codigo = '${escCodigo}' && cultura = '${escCult}'`
+          } else if (escNome) {
+            filtroCult = `registro_mapa = '${escMapa}' && nome_produto = '${escNome}' && cultura = '${escCult}'`
+          } else {
+            filtroCult = `registro_mapa = '${escMapa}' && cultura = '${escCult}'`
+          }
+
           const existentes =
-            txApp.findRecordsByFilter(
-              'bula_culturas',
-              `registro_mapa = '${escMapa}' && cultura = '${escCult}'`,
-              '-created',
-              1,
-              0,
-            ) || []
+            txApp.findRecordsByFilter('bula_culturas', filtroCult, '-created', 1, 0) || []
 
           let rec = null
           let isUpdate = false
@@ -1415,7 +1465,7 @@ routerAdd('POST', '/backend/v1/importar-lote', (e) => {
           }
 
           rec.set('registro_mapa', regMapa)
-          rec.set('nome_produto', String(data.nome_produto || '').trim())
+          rec.set('nome_produto', nomeProd)
           rec.set('cultura', cultura)
           rec.set('intervalo_seguranca_dias', String(data.intervalo_seguranca_dias || '').trim())
           rec.set('intervalo_reentrada_horas', String(data.intervalo_reentrada_horas || '').trim())
@@ -1425,7 +1475,7 @@ routerAdd('POST', '/backend/v1/importar-lote', (e) => {
             String(data.limite_maximo_residuos_lmr || '').trim(),
           )
           rec.set('observacoes', String(data.observacoes || '').trim())
-          rec.set('codigo', String(data.codigo || '').trim())
+          rec.set('codigo', codigoProd)
           rec.set('tipo_cultura', String(data.tipo_cultura || '').trim())
           rec.set('epoca_carencia', String(data.epoca_carencia || '').trim())
           if (data.dados_extras) rec.set('dados_extras', JSON.stringify(data.dados_extras))
@@ -1455,6 +1505,7 @@ routerAdd('POST', '/backend/v1/importar-lote', (e) => {
       // =======================================================================
       // CASO 9: bula_alvos (Sheet 6: Alvos_e_Doses_Linhas)
       // Importação na íntegra SEM REGRAS DE RECUSA/DESCARTES.
+      // Idempotência por SKU/Produto: (registro_mapa + codigo + cultura + alvo_biologico)
       // =======================================================================
       else if (collectionName === 'bula_alvos') {
         for (let i = 0; i < records.length; i++) {
@@ -1465,6 +1516,8 @@ routerAdd('POST', '/backend/v1/importar-lote', (e) => {
           const regMapaRaw = String(data.registro_mapa || '').trim()
           const alvoRaw = String(data.alvo_biologico || data.alvo || data.praga || '').trim()
           const cultura = String(data.cultura || '').trim()
+          const codigoProd = String(data.codigo || '').trim()
+          const nomeProd = String(data.nome_produto || '').trim()
 
           const regMapa = regMapaRaw ? sanitizarMapa(regMapaRaw) : `LINHA-${rowNum}`
           const alvo = alvoRaw || 'Alvo Biológico da Bula'
@@ -1472,16 +1525,21 @@ routerAdd('POST', '/backend/v1/importar-lote', (e) => {
           const escMapa = regMapa.replace(/'/g, "\\'")
           const escAlvo = alvo.replace(/'/g, "\\'")
           const escCult = cultura.replace(/'/g, "\\'")
+          const escCodigo = codigoProd.replace(/'/g, "\\'")
+          const escNome = nomeProd.replace(/'/g, "\\'")
 
-          // Upsert idempotente por registro_mapa + cultura + alvo_biologico
+          // Upsert idempotente por identificador do produto + cultura + alvo_biologico
+          let filtroAlvo = ''
+          if (escCodigo) {
+            filtroAlvo = `registro_mapa = '${escMapa}' && codigo = '${escCodigo}' && cultura = '${escCult}' && alvo_biologico = '${escAlvo}'`
+          } else if (escNome) {
+            filtroAlvo = `registro_mapa = '${escMapa}' && nome_produto = '${escNome}' && cultura = '${escCult}' && alvo_biologico = '${escAlvo}'`
+          } else {
+            filtroAlvo = `registro_mapa = '${escMapa}' && cultura = '${escCult}' && alvo_biologico = '${escAlvo}'`
+          }
+
           const existentes =
-            txApp.findRecordsByFilter(
-              'bula_alvos',
-              `registro_mapa = '${escMapa}' && cultura = '${escCult}' && alvo_biologico = '${escAlvo}'`,
-              '-created',
-              1,
-              0,
-            ) || []
+            txApp.findRecordsByFilter('bula_alvos', filtroAlvo, '-created', 1, 0) || []
 
           let rec = null
           let isUpdate = false
@@ -1493,7 +1551,7 @@ routerAdd('POST', '/backend/v1/importar-lote', (e) => {
           }
 
           rec.set('registro_mapa', regMapa)
-          rec.set('nome_produto', String(data.nome_produto || '').trim())
+          rec.set('nome_produto', nomeProd)
           rec.set('cultura', cultura)
           rec.set('alvo_biologico', alvo)
           rec.set('nome_cientifico', String(data.nome_cientifico || '').trim())
@@ -1503,7 +1561,7 @@ routerAdd('POST', '/backend/v1/importar-lote', (e) => {
           rec.set('volume_calda', String(data.volume_calda || '').trim())
           rec.set('numero_maximo_aplicacoes', String(data.numero_maximo_aplicacoes || '').trim())
           rec.set('epoca_aplicacao', String(data.epoca_aplicacao || '').trim())
-          rec.set('codigo', String(data.codigo || '').trim())
+          rec.set('codigo', codigoProd)
           rec.set('tipo_alvo', String(data.tipo_alvo || '').trim())
           rec.set('intervalo_aplicacao_dias', String(data.intervalo_aplicacao_dias || '').trim())
           if (data.dados_extras) rec.set('dados_extras', JSON.stringify(data.dados_extras))
@@ -1533,6 +1591,7 @@ routerAdd('POST', '/backend/v1/importar-lote', (e) => {
       // =======================================================================
       // CASO 10: bula_aplicacao (Sheet 7: Aplicacao_e_EPI_Linhas)
       // Importação na íntegra SEM REGRAS DE RECUSA/DESCARTES.
+      // Idempotência por SKU/Produto: (registro_mapa + codigo + tipo_aplicacao)
       // =======================================================================
       else if (collectionName === 'bula_aplicacao') {
         for (let i = 0; i < records.length; i++) {
@@ -1542,20 +1601,27 @@ routerAdd('POST', '/backend/v1/importar-lote', (e) => {
 
           const regMapaRaw = String(data.registro_mapa || '').trim()
           const tipoApl = String(data.tipo_aplicacao || 'Geral').trim()
+          const codigoProd = String(data.codigo || '').trim()
+          const nomeProd = String(data.nome_produto || '').trim()
 
           const regMapa = regMapaRaw ? sanitizarMapa(regMapaRaw) : `LINHA-${rowNum}`
           const escMapa = regMapa.replace(/'/g, "\\'")
           const escTipo = tipoApl.replace(/'/g, "\\'")
+          const escCodigo = codigoProd.replace(/'/g, "\\'")
+          const escNome = nomeProd.replace(/'/g, "\\'")
 
-          // Upsert idempotente por registro_mapa + tipo_aplicacao
+          // Upsert idempotente por identificador do produto + tipo_aplicacao
+          let filtroApl = ''
+          if (escCodigo) {
+            filtroApl = `registro_mapa = '${escMapa}' && codigo = '${escCodigo}' && tipo_aplicacao = '${escTipo}'`
+          } else if (escNome) {
+            filtroApl = `registro_mapa = '${escMapa}' && nome_produto = '${escNome}' && tipo_aplicacao = '${escTipo}'`
+          } else {
+            filtroApl = `registro_mapa = '${escMapa}' && tipo_aplicacao = '${escTipo}'`
+          }
+
           const existentes =
-            txApp.findRecordsByFilter(
-              'bula_aplicacao',
-              `registro_mapa = '${escMapa}' && tipo_aplicacao = '${escTipo}'`,
-              '-created',
-              1,
-              0,
-            ) || []
+            txApp.findRecordsByFilter('bula_aplicacao', filtroApl, '-created', 1, 0) || []
 
           let rec = null
           let isUpdate = false
@@ -1567,7 +1633,7 @@ routerAdd('POST', '/backend/v1/importar-lote', (e) => {
           }
 
           rec.set('registro_mapa', regMapa)
-          rec.set('nome_produto', String(data.nome_produto || '').trim())
+          rec.set('nome_produto', nomeProd)
           rec.set('tipo_aplicacao', tipoApl)
           rec.set('equipamento_recomendado', String(data.equipamento_recomendado || '').trim())
           rec.set('condicoes_meteorologicas', String(data.condicoes_meteorologicas || '').trim())
@@ -1578,7 +1644,7 @@ routerAdd('POST', '/backend/v1/importar-lote', (e) => {
             String(data.medidas_primeiros_socorros || '').trim(),
           )
           rec.set('descarte_embalagens', String(data.descarte_embalagens || '').trim())
-          rec.set('codigo', String(data.codigo || '').trim())
+          rec.set('codigo', codigoProd)
           rec.set('volume_calda_aplicacao', String(data.volume_calda_aplicacao || '').trim())
           rec.set(
             'classe_toxicologica_aplicacao',

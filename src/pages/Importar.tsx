@@ -1243,9 +1243,13 @@ export function Importar() {
           'nome_produto',
           'nome_comercial_completo_sku_base',
           'nome_comercial',
+          'marca_comercial',
           'produto',
         ])
         const ia = getFieldValue(row, [
+          'substancia_principio_ativo_garantia',
+          'substancia_principio_ativo',
+          'substancia',
           'ingrediente_ativo',
           'principio_ativo',
           'pa',
@@ -1253,13 +1257,41 @@ export function Importar() {
           'molecula',
           'quimico',
         ])
-        const nomeQuim = getFieldValue(row, ['nome_quimico', 'quimico'])
+        const nomeQuim = getFieldValue(row, [
+          'nome_quimico_oficial_iupac_cepa',
+          'nome_quimico_oficial',
+          'nome_quimico',
+          'quimico',
+        ])
         const cas = getFieldValue(row, ['numero_cas', 'cas'])
-        const conc = getFieldValue(row, ['concentracao', 'teor', 'garantia'])
-        const und = getFieldValue(row, ['unidade_medida', 'unidade', 'uom'])
-        const func = getFieldValue(row, ['funcao_ingrediente', 'funcao', 'tipo'])
-        const grupoQ = getFieldValue(row, ['grupo_quimico', 'grupo'])
-        const codigo = getFieldValue(row, ['codigo', 'cod', 'id'])
+        const conc = getFieldValue(row, [
+          'concentracao_garantia',
+          'concentracao',
+          'teor',
+          'garantia',
+        ])
+        const und = getFieldValue(row, ['unidade', 'unidade_medida', 'uom'])
+        const func = getFieldValue(row, [
+          'tipo_do_componente',
+          'tipo_componente',
+          'funcao_ingrediente',
+          'funcao',
+          'tipo',
+        ])
+        const grupoQ = getFieldValue(row, ['grupo_quimico_categoria', 'grupo_quimico', 'grupo'])
+        // ID Produto Base da planilha (ex.: 1014, 1, 2, 3...) alimenta codigo
+        const codigo = getFieldValue(row, [
+          'id_produto_base',
+          'id_produto',
+          'id produto base',
+          'id produto',
+          'id_prod',
+          'codigo_produto',
+          'codigo',
+          'cod',
+          'sku',
+          'id',
+        ])
         const percPeso = getFieldValue(row, ['percentual_peso', 'peso_percentual', 'pct_peso'])
         const percVol = getFieldValue(row, ['percentual_volume', 'volume_percentual', 'pct_volume'])
 
@@ -1305,6 +1337,7 @@ export function Importar() {
           'nome_produto',
           'nome_comercial_completo_sku_base',
           'nome_comercial',
+          'marca_comercial',
           'produto',
         ])
         const tipoRel = getFieldValue(row, [
@@ -1327,7 +1360,18 @@ export function Importar() {
         const mun = getFieldValue(row, ['municipio', 'cidade'])
         const uf = getFieldValue(row, ['uf', 'estado'])
         const pais = getFieldValue(row, ['pais'])
-        const codigo = getFieldValue(row, ['codigo', 'cod', 'id'])
+        const codigo = getFieldValue(row, [
+          'id_produto_base',
+          'id_produto',
+          'id produto base',
+          'id produto',
+          'id_prod',
+          'codigo_produto',
+          'codigo',
+          'cod',
+          'sku',
+          'id',
+        ])
         const cep = getFieldValue(row, ['cep', 'codigo_postal'])
         const bairro = getFieldValue(row, ['bairro', 'distrito'])
         const ie = getFieldValue(row, ['inscricao_estadual', 'ie', 'inscr_estadual'])
@@ -1376,6 +1420,7 @@ export function Importar() {
           'nome_produto',
           'nome_comercial_completo_sku_base',
           'nome_comercial',
+          'marca_comercial',
           'produto',
         ])
         const tipoEmb = getFieldValue(row, ['tipo_embalagem', 'embalagem', 'tipo', 'recipiente'])
@@ -1384,7 +1429,18 @@ export function Importar() {
         const und = getFieldValue(row, ['unidade_medida', 'unidade'])
         const ncmRaw = getFieldValue(row, ['ncm', 'classificacao_fiscal'])
         const dest = getFieldValue(row, ['destinacao_final', 'destinacao', 'descarte'])
-        const codigo = getFieldValue(row, ['codigo', 'cod', 'id'])
+        const codigo = getFieldValue(row, [
+          'id_produto_base',
+          'id_produto',
+          'id produto base',
+          'id produto',
+          'id_prod',
+          'codigo_produto',
+          'codigo',
+          'cod',
+          'sku',
+          'id',
+        ])
         const ncmFaixa = getFieldValue(row, ['ncm_faixa', 'faixa_ncm', 'faixa'])
         const descEmb = getFieldValue(row, ['descricao_embalagem', 'descricao', 'desc_embalagem'])
 
@@ -1428,6 +1484,7 @@ export function Importar() {
           'nome_produto',
           'nome_comercial_completo_sku_base',
           'nome_comercial',
+          'marca_comercial',
           'produto',
         ])
         const cult = getFieldValue(row, ['cultura', 'culturas', 'cultivo', 'planta'])
@@ -1445,7 +1502,18 @@ export function Importar() {
         const mod = getFieldValue(row, ['modalidade_emprego', 'modalidade', 'aplicacao'])
         const lmr = getFieldValue(row, ['limite_maximo_residuos_lmr', 'lmr'])
         const obs = getFieldValue(row, ['observacoes', 'observacao', 'obs'])
-        const codigo = getFieldValue(row, ['codigo', 'cod', 'id'])
+        const codigo = getFieldValue(row, [
+          'id_produto_base',
+          'id_produto',
+          'id produto base',
+          'id produto',
+          'id_prod',
+          'codigo_produto',
+          'codigo',
+          'cod',
+          'sku',
+          'id',
+        ])
         const tipoCult = getFieldValue(row, ['tipo_cultura', 'tipo'])
         const epocaCar = getFieldValue(row, ['epoca_carencia', 'epoca', 'momento_carencia'])
 
@@ -1490,6 +1558,7 @@ export function Importar() {
           'nome_produto',
           'nome_comercial_completo_sku_base',
           'nome_comercial',
+          'marca_comercial',
           'produto',
         ])
         const cult = getFieldValue(row, ['cultura', 'cultivo'])
@@ -1511,7 +1580,18 @@ export function Importar() {
           'aplicacoes',
         ])
         const epoca = getFieldValue(row, ['epoca_aplicacao', 'epoca', 'momento_aplicacao'])
-        const codigo = getFieldValue(row, ['codigo', 'cod', 'id'])
+        const codigo = getFieldValue(row, [
+          'id_produto_base',
+          'id_produto',
+          'id produto base',
+          'id produto',
+          'id_prod',
+          'codigo_produto',
+          'codigo',
+          'cod',
+          'sku',
+          'id',
+        ])
         const tipoAlvo = getFieldValue(row, ['tipo_alvo', 'tipo'])
         const intAplDias = getFieldValue(row, [
           'intervalo_aplicacao_dias',
@@ -1563,6 +1643,7 @@ export function Importar() {
           'nome_produto',
           'nome_comercial_completo_sku_base',
           'nome_comercial',
+          'marca_comercial',
           'produto',
         ])
         const tipoApl = getFieldValue(row, ['tipo_aplicacao', 'modo_aplicacao', 'aplicacao'])
@@ -1581,7 +1662,18 @@ export function Importar() {
           'socorro',
         ])
         const descarte = getFieldValue(row, ['descarte_embalagens', 'descarte', 'triplice_lavagem'])
-        const codigo = getFieldValue(row, ['codigo', 'cod', 'id'])
+        const codigo = getFieldValue(row, [
+          'id_produto_base',
+          'id_produto',
+          'id produto base',
+          'id produto',
+          'id_prod',
+          'codigo_produto',
+          'codigo',
+          'cod',
+          'sku',
+          'id',
+        ])
         const volCaldaApl = getFieldValue(row, ['volume_calda_aplicacao', 'volume_calda', 'calda'])
         const toxApl = getFieldValue(row, [
           'classe_toxicologica_aplicacao',
