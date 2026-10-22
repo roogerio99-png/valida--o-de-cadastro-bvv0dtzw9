@@ -1016,29 +1016,137 @@ routerAdd('POST', '/backend/v1/importar-lote', (e) => {
             rec = new Record(colTarget)
           }
 
-          rec.set('registro_mapa', regMapa)
-          rec.set('nome_comercial', nomeComercial)
-          rec.set(
-            'marca_padronizada',
-            String(data.marca_padronizada || sanitizarMarca(nomeComercial)).trim(),
-          )
-          rec.set('titular_registro', String(data.titular_registro || data.fabricante || '').trim())
-          rec.set('fabricante_formulador', String(data.fabricante_formulador || '').trim())
-          rec.set('principio_ativo', String(data.principio_ativo || '').trim())
-          rec.set('classe_agronomica', String(data.classe_agronomica || '').trim())
-          rec.set('grupo_quimico', String(data.grupo_quimico || '').trim())
-          rec.set(
-            'classificacao_toxicologica',
-            String(data.classificacao_toxicologica || '').trim(),
-          )
-          rec.set('classificacao_ambiental', String(data.classificacao_ambiental || '').trim())
-          rec.set('tipo_formulacao', String(data.tipo_formulacao || '').trim())
-          rec.set('modo_acao', String(data.modo_acao || '').trim())
-          rec.set('ncm_padrao', fmtNcmMascara(data.ncm_padrao || data.ncm))
-          rec.set('tipo_produto', String(data.tipo_produto || 'Produto Formulado Comercial').trim())
-          rec.set('status_registro', String(data.status_registro || 'Ativo').trim())
+          // Truncamento defensivo e preservação integral em dados_extras
+          const titularBruto = String(data.titular_registro || data.fabricante || '').trim()
+          const fabricanteBruto = String(data.fabricante_formulador || '').trim()
+          const paBruto = String(data.principio_ativo || '').trim()
+          const modoAcaoBruto = String(data.modo_acao || '').trim()
+
+          // Preserva valores integrais no JSON de dados_extras
+          let extrasObj = {}
           if (data.dados_extras) {
-            rec.set('dados_extras', JSON.stringify(data.dados_extras))
+            try {
+              extrasObj =
+                typeof data.dados_extras === 'string'
+                  ? JSON.parse(data.dados_extras)
+                  : Object.assign({}, data.dados_extras)
+            } catch (_) {
+              extrasObj = {}
+            }
+          }
+          if (titularBruto.length > 500) {
+            extrasObj['Titular do Registro (texto completo da planilha)'] = titularBruto
+          }
+          if (fabricanteBruto.length > 500) {
+            extrasObj['Fabricante/Formulador (texto completo da planilha)'] = fabricanteBruto
+          }
+
+          // Trunca defensivamente para caber no campo de texto caso exceda 2000 ou 500
+          const titularFinal =
+            titularBruto.length > 1950 ? titularBruto.slice(0, 1950) + '...' : titularBruto
+          const fabricanteFinal =
+            fabricanteBruto.length > 1950 ? fabricanteBruto.slice(0, 1950) + '...' : fabricanteBruto
+          const paFinal = paBruto.length > 950 ? paBruto.slice(0, 950) + '...' : paBruto
+          const modoAcaoFinal =
+            modoAcaoBruto.length > 950 ? modoAcaoBruto.slice(0, 950) + '...' : modoAcaoBruto
+
+          // Se for UPDATE (registro existente repetido na planilha ou já no banco):
+          // Enriquece campos vazios ou atualiza com dados mais completos/relevantes, preservando fidelidade sem duplicar.
+          if (isUpdate) {
+            if (
+              nomeComercial &&
+              (!rec.getString('nome_comercial') ||
+                rec.getString('nome_comercial').length < nomeComercial.length)
+            ) {
+              rec.set('nome_comercial', nomeComercial)
+              rec.set(
+                'marca_padronizada',
+                String(data.marca_padronizada || sanitizarMarca(nomeComercial)).trim(),
+              )
+            }
+            if (
+              titularFinal &&
+              (!rec.getString('titular_registro') ||
+                rec.getString('titular_registro') === 'Não Informado')
+            ) {
+              rec.set('titular_registro', titularFinal)
+            }
+            if (
+              fabricanteFinal &&
+              (!rec.getString('fabricante_formulador') ||
+                rec.getString('fabricante_formulador') === 'Não Informado')
+            ) {
+              rec.set('fabricante_formulador', fabricanteFinal)
+            }
+            if (
+              paFinal &&
+              (!rec.getString('principio_ativo') ||
+                rec.getString('principio_ativo') === 'Não Informado')
+            ) {
+              rec.set('principio_ativo', paFinal)
+            }
+            if (data.classe_agronomica && !rec.getString('classe_agronomica')) {
+              rec.set('classe_agronomica', String(data.classe_agronomica).trim())
+            }
+            if (data.grupo_quimico && !rec.getString('grupo_quimico')) {
+              rec.set('grupo_quimico', String(data.grupo_quimico).trim())
+            }
+            if (data.classificacao_toxicologica && !rec.getString('classificacao_toxicologica')) {
+              rec.set('classificacao_toxicologica', String(data.classificacao_toxicologica).trim())
+            }
+            if (data.classificacao_ambiental && !rec.getString('classificacao_ambiental')) {
+              rec.set('classificacao_ambiental', String(data.classificacao_ambiental).trim())
+            }
+            if (data.tipo_formulacao && !rec.getString('tipo_formulacao')) {
+              rec.set('tipo_formulacao', String(data.tipo_formulacao).trim())
+            }
+            if (modoAcaoFinal && !rec.getString('modo_acao')) {
+              rec.set('modo_acao', modoAcaoFinal)
+            }
+            const ncmFmt = fmtNcmMascara(data.ncm_padrao || data.ncm)
+            if (ncmFmt && !rec.getString('ncm_padrao')) {
+              rec.set('ncm_padrao', ncmFmt)
+            }
+            if (
+              data.tipo_produto &&
+              (!rec.getString('tipo_produto') ||
+                rec.getString('tipo_produto') === 'Produto Formulado Comercial')
+            ) {
+              rec.set('tipo_produto', String(data.tipo_produto).trim())
+            }
+            if (data.status_registro && !rec.getString('status_registro')) {
+              rec.set('status_registro', String(data.status_registro).trim())
+            }
+          } else {
+            // Novo registro (INSERT)
+            rec.set('registro_mapa', regMapa)
+            rec.set('nome_comercial', nomeComercial)
+            rec.set(
+              'marca_padronizada',
+              String(data.marca_padronizada || sanitizarMarca(nomeComercial)).trim(),
+            )
+            rec.set('titular_registro', titularFinal)
+            rec.set('fabricante_formulador', fabricanteFinal)
+            rec.set('principio_ativo', paFinal)
+            rec.set('classe_agronomica', String(data.classe_agronomica || '').trim())
+            rec.set('grupo_quimico', String(data.grupo_quimico || '').trim())
+            rec.set(
+              'classificacao_toxicologica',
+              String(data.classificacao_toxicologica || '').trim(),
+            )
+            rec.set('classificacao_ambiental', String(data.classificacao_ambiental || '').trim())
+            rec.set('tipo_formulacao', String(data.tipo_formulacao || '').trim())
+            rec.set('modo_acao', modoAcaoFinal)
+            rec.set('ncm_padrao', fmtNcmMascara(data.ncm_padrao || data.ncm))
+            rec.set(
+              'tipo_produto',
+              String(data.tipo_produto || 'Produto Formulado Comercial').trim(),
+            )
+            rec.set('status_registro', String(data.status_registro || 'Ativo').trim())
+          }
+
+          if (Object.keys(extrasObj).length > 0) {
+            rec.set('dados_extras', JSON.stringify(extrasObj))
           }
 
           try {

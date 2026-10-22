@@ -1076,13 +1076,15 @@ export function Importar() {
       // BULA 1: bula_produtos (Cadastro Mestre 1:1 da Bula)
       // ------------------------------------------------------------------
       else if (targetCol === 'bula_produtos') {
+        // Priorizar cabeçalhos específicos da planilha oficial para evitar falso-positivo em colunas genéricas
         const mapa = getFieldValue(row, [
           'registro_mapa',
-          'mapa',
+          'registro_no_mapa',
           'numero_mapa',
           'codigo_mapa',
-          'registro',
           'nr_registro',
+          'mapa',
+          'registro',
         ])
         const nome = getFieldValue(row, [
           'nome_comercial',
@@ -1094,18 +1096,29 @@ export function Importar() {
         ])
         const titular = getFieldValue(row, [
           'titular_registro',
+          'titular_do_registro',
           'titular',
+          'empresa_titular',
           'empresa',
           'fabricante',
           'razao_social',
         ])
-        const fab = getFieldValue(row, ['fabricante_formulador', 'formulador', 'fabricante'])
+        const fab = getFieldValue(row, [
+          'fabricante_formulador',
+          'fabricante_e_formulador',
+          'formulador',
+          'fabricante',
+        ])
+        // Atenção à fidelidade do princípio ativo:
+        // NÃO incluir 'registro', 'pa' solto ou aliases que possam coincidir com 'nr_registro' ou 'mapa'
         const pa = getFieldValue(row, [
           'principio_ativo',
           'ingrediente_ativo',
-          'pa',
+          'substancia_ativa',
           'ativo',
           'molecula',
+          'pa_oficial_correto',
+          'pa_oficial',
         ])
         const classe = getFieldValue(row, ['classe_agronomica', 'classe', 'sub_grupo', 'funcao'])
         const grupoQ = getFieldValue(row, ['grupo_quimico', 'grupo'])
@@ -1152,15 +1165,29 @@ export function Importar() {
           return
         }
 
+        // Preserva valores longos em dados_extras e prepara valores com truncamento defensivo
+        const dadosExtrasObj: Record<string, unknown> = { ...row }
+        if (titular && titular.length > 500) {
+          dadosExtrasObj['Titular do Registro (texto completo da planilha)'] = titular
+        }
+        if (fab && fab.length > 500) {
+          dadosExtrasObj['Fabricante/Formulador (texto completo da planilha)'] = fab
+        }
+
+        const titularTrunc =
+          titular && titular.length > 1950 ? titular.slice(0, 1950) + '...' : titular
+        const fabTrunc = fab && fab.length > 1950 ? fab.slice(0, 1950) + '...' : fab
+        const paTrunc = pa && pa.length > 950 ? pa.slice(0, 950) + '...' : pa
+
         validos.push({
           originalLine: originalLineNum,
           data: {
             registro_mapa: sanitizarRegistroMapa(mapa),
             nome_comercial: nome,
             marca_padronizada: sanitizarMarcaComercial(nome),
-            titular_registro: titular,
-            fabricante_formulador: fab,
-            principio_ativo: pa,
+            titular_registro: titularTrunc,
+            fabricante_formulador: fabTrunc,
+            principio_ativo: paTrunc,
             classe_agronomica: classe,
             grupo_quimico: grupoQ,
             classificacao_toxicologica: tox,
@@ -1170,7 +1197,7 @@ export function Importar() {
             ncm_padrao: cleanNcm(ncmRaw) ? formatarNcmMascara(cleanNcm(ncmRaw)) : ncmRaw,
             tipo_produto: tipoProd || 'Produto Formulado Comercial',
             status_registro: statusReg || 'Ativo',
-            dados_extras: row,
+            dados_extras: dadosExtrasObj,
           },
         })
       }
