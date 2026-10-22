@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-10-22T18:43:38.150Z",
+  "generatedAt": "2026-10-22T19:03:34.932Z",
   "collections": [
     {
       "name": "users",
@@ -1054,10 +1054,11 @@
         }
       ],
       "indexes": [
-        "CREATE UNIQUE INDEX idx_bula_regmapa ON bula_produtos (registro_mapa)",
-        "CREATE INDEX idx_bula_nomecomercial ON bula_produtos (nome_comercial)",
-        "CREATE INDEX idx_bula_classe ON bula_produtos (classe_agronomica)",
-        "CREATE INDEX idx_bula_pa ON bula_produtos (principio_ativo)"
+        "CREATE INDEX IF NOT EXISTS idx_bula_regmapa_lookup ON bula_produtos (registro_mapa)",
+        "CREATE INDEX IF NOT EXISTS idx_bula_regmapa_codigo ON bula_produtos (registro_mapa, codigo)",
+        "CREATE INDEX IF NOT EXISTS idx_bula_nomecomercial ON bula_produtos (nome_comercial)",
+        "CREATE INDEX IF NOT EXISTS idx_bula_classe ON bula_produtos (classe_agronomica)",
+        "CREATE INDEX IF NOT EXISTS idx_bula_pa ON bula_produtos (principio_ativo)"
       ]
     },
     {

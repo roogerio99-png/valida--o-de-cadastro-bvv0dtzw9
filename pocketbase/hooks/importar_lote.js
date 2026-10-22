@@ -959,7 +959,9 @@ routerAdd('POST', '/backend/v1/importar-lote', (e) => {
       // =======================================================================
       // CASO 4: bula_produtos (Sheet 1: Cadastro_Mestre_1a1)
       // Importação na íntegra SEM REGRAS DE RECUSA/DESCARTES.
-      // Atualiza e enriquece registros com o mesmo registro_mapa (contando como atualizados).
+      // Chave de idempotência por produto/SKU: (registro_mapa + codigo / ID Produto),
+      // com fallback para (registro_mapa + nome_comercial) quando o código vier vazio.
+      // Garante que cada linha/SKU distinto seja INSERIDO sem fusão indevida.
       // =======================================================================
       else if (collectionName === 'bula_produtos') {
         for (let i = 0; i < records.length; i++) {
@@ -969,20 +971,28 @@ routerAdd('POST', '/backend/v1/importar-lote', (e) => {
 
           const regMapaRaw = String(data.registro_mapa || '').trim()
           const nomeComercial = String(data.nome_comercial || data.nome_produto || '').trim()
+          const codigoProd = String(data.codigo || '').trim()
 
           // Normalização tolerante do registro MAPA (sem recusa caso venha vazio)
           const regMapa = regMapaRaw ? sanitizarMapa(regMapaRaw) : `LINHA-${rowNum}`
           const escMapa = regMapa.replace(/'/g, "\\'")
+          const escCodigo = codigoProd.replace(/'/g, "\\'")
+          const escNome = nomeComercial.replace(/'/g, "\\'")
 
-          // Upsert idempotente por registro_mapa
+          // Upsert idempotente composto:
+          // 1. Prioridade: registro_mapa + codigo (ID Produto da planilha)
+          // 2. Fallback: registro_mapa + nome_comercial se código não foi informado
+          let filtroProd = ''
+          if (escCodigo) {
+            filtroProd = `registro_mapa = '${escMapa}' && codigo = '${escCodigo}'`
+          } else if (escNome) {
+            filtroProd = `registro_mapa = '${escMapa}' && nome_comercial = '${escNome}'`
+          } else {
+            filtroProd = `registro_mapa = '${escMapa}'`
+          }
+
           const existentes =
-            txApp.findRecordsByFilter(
-              'bula_produtos',
-              `registro_mapa = '${escMapa}'`,
-              '-created',
-              1,
-              0,
-            ) || []
+            txApp.findRecordsByFilter('bula_produtos', filtroProd, '-created', 1, 0) || []
 
           let rec = null
           let isUpdate = false

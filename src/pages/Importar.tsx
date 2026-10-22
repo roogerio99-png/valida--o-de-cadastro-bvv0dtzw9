@@ -1075,11 +1075,24 @@ export function Importar() {
       // ------------------------------------------------------------------
       // BULA 1: bula_produtos (Cadastro Mestre 1:1 da Bula)
       // Ingestão na íntegra: SEM NENHUM FILTRO DE VALIDAÇÃO OU RECUSA
+      // Cada linha/SKU vira um registro individual identificado por ID Produto / SKU + Registro MAPA
       // ------------------------------------------------------------------
       else if (targetCol === 'bula_produtos') {
-        const codigo = getFieldValue(row, ['codigo', 'cod', 'codigo_produto', 'id'])
+        const codigo = getFieldValue(row, [
+          'id_produto',
+          'id produto',
+          'id_prod',
+          'id',
+          'codigo',
+          'cod',
+          'codigo_produto',
+          'sku',
+        ])
         const mapa = getFieldValue(row, [
           'registro_mapa',
+          'numero_registro_mapa',
+          'no_registro_mapa',
+          'n_registro_mapa',
           'registro_no_mapa',
           'numero_mapa',
           'codigo_mapa',
@@ -1089,12 +1102,20 @@ export function Importar() {
           'mapa_oficial_limpo',
         ])
         const nome = getFieldValue(row, [
+          'nome_comercial_completo_sku_base',
+          'nome_comercial_completo',
           'nome_comercial',
           'marca_comercial',
           'nome_produto',
           'produto',
+          'sku_base',
           'descricao',
           'nome',
+        ])
+        const marcaPad = getFieldValue(row, [
+          'marca_comercial_padronizada',
+          'marca_padronizada',
+          'marca',
         ])
         const titular = getFieldValue(row, [
           'titular_registro',
@@ -1125,7 +1146,11 @@ export function Importar() {
         const embalagemVal = getFieldValue(row, ['embalagem', 'embalagem_detectada'])
         const ncmOficialExata = getFieldValue(row, ['ncm_oficial_exata', 'ncm_exata'])
         const urlOficialVal = getFieldValue(row, ['url_oficial', 'url', 'link'])
-        const macroGrupoVal = getFieldValue(row, ['macro_grupo', 'macro_grupo_subgrupo'])
+        const macroGrupoVal = getFieldValue(row, [
+          'macro_grupo_agronomico',
+          'macro_grupo',
+          'macro_grupo_subgrupo',
+        ])
         const subGrupoVal = getFieldValue(row, ['sub_grupo', 'subgrupo'])
         const notaSubpos2Val = getFieldValue(row, ['nota_subpos_2', 'nota_subpos2', 'subpos_2'])
         const regraTipiVal = getFieldValue(row, ['regra_tipi', 'regra_tipi_embalagem'])
@@ -1163,13 +1188,14 @@ export function Importar() {
 
         const mapaFinal = mapa ? sanitizarRegistroMapa(mapa) : `LINHA-${originalLineNum}`
         const nomeFinal = nome || mapaFinal || `Produto Linha ${originalLineNum}`
+        const marcaFinal = marcaPad || sanitizarMarcaComercial(nomeFinal)
 
         validos.push({
           originalLine: originalLineNum,
           data: {
             registro_mapa: mapaFinal,
             nome_comercial: nomeFinal,
-            marca_padronizada: sanitizarMarcaComercial(nomeFinal),
+            marca_padronizada: marcaFinal,
             titular_registro: titularDefensivo || '',
             fabricante_formulador: fabDefensivo || '',
             principio_ativo: paDefensivo || '',
@@ -1198,7 +1224,6 @@ export function Importar() {
           },
         })
       }
-
       // ------------------------------------------------------------------
       // BULA 2: bula_composicao (Composição em Linhas)
       // Ingestão na íntegra: SEM NENHUM FILTRO DE VALIDAÇÃO OU RECUSA
@@ -1206,12 +1231,20 @@ export function Importar() {
       else if (targetCol === 'bula_composicao') {
         const mapa = getFieldValue(row, [
           'registro_mapa',
+          'numero_registro_mapa',
+          'no_registro_mapa',
+          'n_registro_mapa',
           'mapa',
           'numero_mapa',
           'codigo_mapa',
           'registro',
         ])
-        const nomeProd = getFieldValue(row, ['nome_produto', 'nome_comercial', 'produto'])
+        const nomeProd = getFieldValue(row, [
+          'nome_produto',
+          'nome_comercial_completo_sku_base',
+          'nome_comercial',
+          'produto',
+        ])
         const ia = getFieldValue(row, [
           'ingrediente_ativo',
           'principio_ativo',
@@ -1260,12 +1293,20 @@ export function Importar() {
       else if (targetCol === 'bula_empresas') {
         const mapa = getFieldValue(row, [
           'registro_mapa',
+          'numero_registro_mapa',
+          'no_registro_mapa',
+          'n_registro_mapa',
           'mapa',
           'numero_mapa',
           'codigo_mapa',
           'registro',
         ])
-        const nomeProd = getFieldValue(row, ['nome_produto', 'nome_comercial', 'produto'])
+        const nomeProd = getFieldValue(row, [
+          'nome_produto',
+          'nome_comercial_completo_sku_base',
+          'nome_comercial',
+          'produto',
+        ])
         const tipoRel = getFieldValue(row, [
           'tipo_relacao',
           'tipo_empresa',
@@ -1323,12 +1364,20 @@ export function Importar() {
       else if (targetCol === 'bula_embalagens') {
         const mapa = getFieldValue(row, [
           'registro_mapa',
+          'numero_registro_mapa',
+          'no_registro_mapa',
+          'n_registro_mapa',
           'mapa',
           'numero_mapa',
           'codigo_mapa',
           'registro',
         ])
-        const nomeProd = getFieldValue(row, ['nome_produto', 'nome_comercial', 'produto'])
+        const nomeProd = getFieldValue(row, [
+          'nome_produto',
+          'nome_comercial_completo_sku_base',
+          'nome_comercial',
+          'produto',
+        ])
         const tipoEmb = getFieldValue(row, ['tipo_embalagem', 'embalagem', 'tipo', 'recipiente'])
         const mat = getFieldValue(row, ['material', 'tipo_material'])
         const cap = getFieldValue(row, ['capacidade', 'volume', 'peso', 'tamanho'])
@@ -1367,12 +1416,20 @@ export function Importar() {
       else if (targetCol === 'bula_culturas') {
         const mapa = getFieldValue(row, [
           'registro_mapa',
+          'numero_registro_mapa',
+          'no_registro_mapa',
+          'n_registro_mapa',
           'mapa',
           'numero_mapa',
           'codigo_mapa',
           'registro',
         ])
-        const nomeProd = getFieldValue(row, ['nome_produto', 'nome_comercial', 'produto'])
+        const nomeProd = getFieldValue(row, [
+          'nome_produto',
+          'nome_comercial_completo_sku_base',
+          'nome_comercial',
+          'produto',
+        ])
         const cult = getFieldValue(row, ['cultura', 'culturas', 'cultivo', 'planta'])
         const car = getFieldValue(row, [
           'intervalo_seguranca_dias',
@@ -1421,12 +1478,20 @@ export function Importar() {
       else if (targetCol === 'bula_alvos') {
         const mapa = getFieldValue(row, [
           'registro_mapa',
+          'numero_registro_mapa',
+          'no_registro_mapa',
+          'n_registro_mapa',
           'mapa',
           'numero_mapa',
           'codigo_mapa',
           'registro',
         ])
-        const nomeProd = getFieldValue(row, ['nome_produto', 'nome_comercial', 'produto'])
+        const nomeProd = getFieldValue(row, [
+          'nome_produto',
+          'nome_comercial_completo_sku_base',
+          'nome_comercial',
+          'produto',
+        ])
         const cult = getFieldValue(row, ['cultura', 'cultivo'])
         const alvo = getFieldValue(row, [
           'alvo_biologico',
@@ -1486,12 +1551,20 @@ export function Importar() {
       else if (targetCol === 'bula_aplicacao') {
         const mapa = getFieldValue(row, [
           'registro_mapa',
+          'numero_registro_mapa',
+          'no_registro_mapa',
+          'n_registro_mapa',
           'mapa',
           'numero_mapa',
           'codigo_mapa',
           'registro',
         ])
-        const nomeProd = getFieldValue(row, ['nome_produto', 'nome_comercial', 'produto'])
+        const nomeProd = getFieldValue(row, [
+          'nome_produto',
+          'nome_comercial_completo_sku_base',
+          'nome_comercial',
+          'produto',
+        ])
         const tipoApl = getFieldValue(row, ['tipo_aplicacao', 'modo_aplicacao', 'aplicacao'])
         const equip = getFieldValue(row, ['equipamento_recomendado', 'equipamento'])
         const clima = getFieldValue(row, [
@@ -1922,7 +1995,9 @@ export function Importar() {
                       {importSummary.inseridos}
                     </strong>
                     <span className="block text-[10px] text-emerald-600 mt-0.5">
-                      Gravados na base
+                      {activeZone.targetCollection === 'bula_produtos'
+                        ? 'Novos SKUs gravados (1:1 por linha)'
+                        : 'Gravados na base'}
                     </span>
                   </div>
                   <div className="p-3 rounded-xl bg-blue-50 text-blue-900 border border-blue-200">
@@ -1933,7 +2008,9 @@ export function Importar() {
                       {importSummary.atualizados ?? 0}
                     </strong>
                     <span className="block text-[10px] text-blue-600 mt-0.5">
-                      Dados complementados
+                      {activeZone.targetCollection === 'bula_produtos'
+                        ? 'Mesmo SKU/Código reimportado'
+                        : 'Dados complementados'}
                     </span>
                   </div>
                   <div className="p-3 rounded-xl bg-slate-50 text-slate-900 border border-slate-200">
