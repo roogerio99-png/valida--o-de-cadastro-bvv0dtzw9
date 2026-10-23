@@ -79,7 +79,7 @@ routerAdd('POST', '/backend/v1/bula/analisar-pdf', (e) => {
     }
 
     // =========================================================================
-    // NORMALIZADOR DE TEXTO PRÉ-PIPELINE (MOJIBAKE, ESPAÇOS, CARACTERES DE CONTROLE)
+    // NORMALIZADOR DE TEXTO PRÉ-PIPELINE (MOJIBAKE, ESPAÇOS, CARACTERES DE CONTROLE, MARKDOWN)
     // =========================================================================
     function normalizarTextoBula(raw) {
       if (raw === null || raw === undefined) return ''
@@ -129,6 +129,18 @@ routerAdd('POST', '/backend/v1/bula/analisar-pdf', (e) => {
 
       // 3. Normalizar quebras de linha preservando estrutura (\r\n -> \n)
       s = s.replace(/\r\n/g, '\n').replace(/\r/g, '\n')
+
+      // 4. Neutralização de marcações markdown de negrito/itálico/cabeçalhos/tabelas/ênfase
+      // O conversor de PDF insere sequências de ** ou * no meio de palavras e expressões,
+      // como "N **°** **01119**", "## REGISTRADO", "||COMPOSIÇÃO:|".
+      // Removemos asteriscos e hashes substituindo por espaços para nunca colar tokens vizinhos.
+      s = s.replace(/\*{1,}/g, ' ')
+      s = s.replace(/#{1,}/g, ' ')
+      s = s.replace(/\|{1,}/g, ' ')
+      s = s.replace(/_{2,}/g, ' ')
+
+      // 5. Colapsar espaços horizontais múltiplos mantendo quebras de linha
+      s = s.replace(/[^\S\r\n]+/g, ' ')
 
       return s
     }
@@ -321,7 +333,11 @@ routerAdd('POST', '/backend/v1/bula/analisar-pdf', (e) => {
     for (let c = 0; c < candidatosRegistro.length; c++) {
       const cand = candidatosRegistro[c]
       if (isNumeroProdutoTecnico(cand.num)) {
-        candidatosDescartados.push({ ...cand, motivo: 'produto técnico' })
+        candidatosDescartados.push({
+          fonte: cand.fonte,
+          num: cand.num,
+          motivo: 'produto técnico',
+        })
       } else {
         if (!candidatoAceito) {
           candidatoAceito = cand
@@ -765,35 +781,45 @@ routerAdd('POST', '/backend/v1/bula/analisar-pdf', (e) => {
       /TITULAR\s+DO\s+REGISTRO/i,
       /(?:FABRICANTE|FORMULADOR|MANIPULADOR|IMPORTADOR)/i,
     )
-    empresas.push(...titulares)
+    for (let t = 0; t < titulares.length; t++) {
+      empresas.push(titulares[t])
+    }
 
     const fabricantes = extrairEmpresasSecaoDinamica(
       'Fabricante',
       /FABRICANTE\s+DO\s+PRODUTO/i,
       /(?:FORMULADOR|MANIPULADOR|IMPORTADOR|GRUPO\s+[A-Z])/i,
     )
-    empresas.push(...fabricantes)
+    for (let f = 0; f < fabricantes.length; f++) {
+      empresas.push(fabricantes[f])
+    }
 
     const formuladores = extrairEmpresasSecaoDinamica(
       'Formulador',
       /FORMULADOR\s*:/i,
       /(?:MANIPULADOR|IMPORTADOR|GRUPO\s+[A-Z]|N°\s+do\s+lote)/i,
     )
-    empresas.push(...formuladores)
+    for (let fo = 0; fo < formuladores.length; fo++) {
+      empresas.push(formuladores[fo])
+    }
 
     const manipuladores = extrairEmpresasSecaoDinamica(
       'Manipulador',
       /MANIPULADOR\s*:/i,
       /(?:IMPORTADOR|GRUPO\s+[A-Z]|N°\s+do\s+lote|ANTES\s+DE\s+USAR)/i,
     )
-    empresas.push(...manipuladores)
+    for (let m = 0; m < manipuladores.length; m++) {
+      empresas.push(manipuladores[m])
+    }
 
     const importadores = extrairEmpresasSecaoDinamica(
       'Importador',
       /IMPORTADOR\s*:/i,
       /(?:N°\s+do\s+lote|Marca\s+registrada|ANTES\s+DE\s+USAR|CLASSIFICA[ÇC][ÃA]O|FABRICANTE)/i,
     )
-    empresas.push(...importadores)
+    for (let imp = 0; imp < importadores.length; imp++) {
+      empresas.push(importadores[imp])
+    }
 
     // Se o titular não foi capturado na seção, tenta buscar Tagros ou Monsanto no texto
     if (empresas.length === 0) {

@@ -51,6 +51,15 @@ export function normalizarTextoBula(raw: unknown): string {
   // Normalizar quebras de linha preservando estrutura
   s = s.replace(/\r\n/g, '\n').replace(/\r/g, '\n')
 
+  // Neutralização de marcações markdown de negrito/itálico/cabeçalhos/tabelas/ênfase
+  s = s.replace(/\*{1,}/g, ' ')
+  s = s.replace(/#{1,}/g, ' ')
+  s = s.replace(/\|{1,}/g, ' ')
+  s = s.replace(/_{2,}/g, ' ')
+
+  // Colapsar espaços horizontais múltiplos mantendo quebras de linha
+  s = s.replace(/[^\S\r\n]+/g, ' ')
+
   return s
 }
 
@@ -640,36 +649,45 @@ export function parsearTextoBula(markdown: string, pdfFileName?: string, _trunca
     /TITULAR\s+DO\s+REGISTRO/i,
     /(?:FABRICANTE|FORMULADOR|MANIPULADOR|IMPORTADOR)/i,
   )
-  empresas.push(...titulares)
+  for (let t = 0; t < titulares.length; t++) {
+    empresas.push(titulares[t])
+  }
 
   const fabricantes = extrairEmpresasSecaoDinamica(
     'Fabricante',
     /FABRICANTE\s+DO\s+PRODUTO/i,
     /(?:FORMULADOR|MANIPULADOR|IMPORTADOR|GRUPO\s+[A-Z])/i,
   )
-  empresas.push(...fabricantes)
+  for (let f = 0; f < fabricantes.length; f++) {
+    empresas.push(fabricantes[f])
+  }
 
   const formuladores = extrairEmpresasSecaoDinamica(
     'Formulador',
     /FORMULADOR\s*:/i,
     /(?:MANIPULADOR|IMPORTADOR|GRUPO\s+[A-Z]|N°\s+do\s+lote)/i,
   )
-  empresas.push(...formuladores)
+  for (let fo = 0; fo < formuladores.length; fo++) {
+    empresas.push(formuladores[fo])
+  }
 
   const manipuladores = extrairEmpresasSecaoDinamica(
     'Manipulador',
     /MANIPULADOR\s*:/i,
     /(?:IMPORTADOR|GRUPO\s+[A-Z]|N°\s+do\s+lote|ANTES\s+DE\s+USAR)/i,
   )
-  empresas.push(...manipuladores)
+  for (let m = 0; m < manipuladores.length; m++) {
+    empresas.push(manipuladores[m])
+  }
 
   const importadores = extrairEmpresasSecaoDinamica(
     'Importador',
     /IMPORTADOR\s*:/i,
     /(?:N°\s+do\s+lote|Marca\s+registrada|ANTES\s+DE\s+USAR|CLASSIFICA[ÇC][ÃA]O|FABRICANTE)/i,
   )
-  empresas.push(...importadores)
-
+  for (let imp = 0; imp < importadores.length; imp++) {
+    empresas.push(importadores[imp])
+  }
   // 7. Culturas e Alvos
   const culturas: any[] = []
   const alvos: any[] = []
@@ -920,6 +938,28 @@ Produto comercial: ROUNDUP ORIGINAL® MAIS
     const res = parsearTextoBula(textoComEspacos)
     expect(res.produto.registro_mapa).toBe('Nº 01119')
     expect(res.produto.nome_comercial).toBe('ROUNDUP ORIGINAL MAIS')
+  })
+
+  it('11. Deve extrair registro 01119 e NUNCA 01998 com texto real degradado por markdown do log (N **°** **01119** e hashes)', () => {
+    const textoRealDoLog = `## REGISTRADO NO MINISTÉRIO DA AGRICULTURA E PECUÁRIA ## MAPA SOB N **°** **01119** ## COMPOSIÇÃO: Sal de Di-amônio de N-(phosphonomethyl)glycine (GLIFOSATO)..................577,0 g/L (57,7% m/v)
+Equivalente ácido de N-(phosphonomethyl)glycine (GLIFOSATO).................480,0 g/L (48,0% m/v)
+Dietilenoglicol.......................................................................................................20,0 g/L (2,0% m/v)
+Outros Ingredientes..........................................................................................658,0 g/L (65,8% m/v)
+CLASSE: Herbicida seletivo condicional, de ação sistêmica, do grupo químico glicina substituída.
+TIPO DE FORMULAÇÃO: Concentrado solúvel (SL).
+TITULAR DO REGISTRO:
+MONSANTO DO BRASIL LTDA.
+Rua Domingos Jorge, 1.100 - CEP: 04779-900 - São Paulo/SP
+FABRICANTE DO PRODUTO TÉCNICO:
+Glifosate Técnico Monsanto registrado no Ministério da Agricultura e Pecuária MAPA - sob Nº 01998
+MONSANTO DO BRASIL LTDA.
+Produto comercial: ROUNDUP ORIGINAL® MAIS corresponde a 577 g/L do sal de di-amônio de glifosato`
+
+    const res = parsearTextoBula(textoRealDoLog)
+    expect(res.produto.registro_mapa).toBe('Nº 01119')
+    expect(res.produto.registro_mapa).not.toBe('Nº 01998')
+    expect(res.produto.nome_comercial).toBe('ROUNDUP ORIGINAL MAIS')
+    expect(res.produto.titular_registro).toContain('MONSANTO')
   })
 })
 
