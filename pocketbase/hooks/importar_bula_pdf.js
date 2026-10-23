@@ -1369,6 +1369,7 @@ routerAdd('POST', '/backend/v1/bula/gravar-pdf', (e) => {
       bula_culturas: { inseridos: 0, atualizados: 0 },
       bula_alvos: { inseridos: 0, atualizados: 0 },
       bula_aplicacao: { inseridos: 0, atualizados: 0 },
+      base_mestre: { inseridos: 0, atualizados: 0 },
     }
 
     $app.runInTransaction((txApp) => {
@@ -1701,6 +1702,165 @@ routerAdd('POST', '/backend/v1/bula/gravar-pdf', (e) => {
         txApp.save(recApl)
         if (isUp) contadores.bula_aplicacao.atualizados++
         else contadores.bula_aplicacao.inseridos++
+      }
+
+      // 8. Espelho Seletivo de Fins Tributários na BASE MESTRE (base_mestre)
+      // Grava apenas os campos que definem a tributação do produto:
+      // Identificação mínima + NCM, faixa TIPI, alíquotas temporalidade, CST, status PIS/COFINS, etc.
+      // SEM carregar detalhes analíticos de culturas, doses, empresas ou composição.
+      try {
+        const colBaseMestre = txApp.findCollectionByNameOrId('base_mestre')
+
+        function formatarNcmMascaraLocal(raw) {
+          const digits = String(raw || '').replace(/\D/g, '')
+          if (digits.length === 8) {
+            return `${digits.slice(0, 4)}.${digits.slice(4, 6)}.${digits.slice(6, 8)}`
+          }
+          if (digits.length > 0 && digits.length < 8) {
+            const padded = digits.padStart(8, '0')
+            return `${padded.slice(0, 4)}.${padded.slice(4, 6)}.${padded.slice(6, 8)}`
+          }
+          return raw ? String(raw).trim() : ''
+        }
+
+        const MOLECULAS_NOTA_2 = [
+          'BIFENTRINA',
+          'LAMBDA-CIALOTRINA',
+          'LAMBDA CIALOTRINA',
+          'CLORFENAPIR',
+          'CHLORFENAPYR',
+          'MALATIONA',
+          'MALATHION',
+          'FENITROTIONA',
+          'BETA-CIFLUTRINA',
+          'BETA CIFLUTRINA',
+          'CIFLUTRINA',
+          'ALFA-CIPERMETRINA',
+          'ALFA CIPERMETRINA',
+          'ALPHA-CYPERMETHRIN',
+          'DELTAMETRINA',
+          'PERMETRINA',
+          'PROPOXUR',
+          'BENDIOCARBE',
+          'BENDIOCARB',
+        ]
+
+        const paTexto = String(produto.principio_ativo || 'GLIFOSATO').toUpperCase()
+        const isNota2 = MOLECULAS_NOTA_2.some((mol) => paTexto.includes(mol))
+        const nota2Val = isNota2 ? 'SIM' : 'NÃO'
+
+        let ncmBase = String(produto.ncm_padrao || produto.ncm || '').trim()
+        if (!ncmBase && embalagens.length > 0) {
+          ncmBase = String(embalagens[0].ncm || '').trim()
+        }
+        if (!ncmBase) {
+          ncmBase = isNota2 ? '3808.62.90' : '3808.93.24'
+        }
+        const ncmLimpo = ncmBase.replace(/\D/g, '')
+        const ncmMascara = formatarNcmMascaraLocal(ncmLimpo || ncmBase)
+
+        const marcaPad = String(produto.marca_padronizada || nomeComercial).trim()
+        const escMarcaPad = marcaPad.replace(/'/g, "\\'")
+
+        // Upsert idempotente na Base Mestre:
+        // Prioridade 1: registro_mapa
+        // Prioridade 2: marca_padronizada + ncm
+        let filtroMestre = regMapa
+          ? `registro_mapa = '${escMapa}'`
+          : `marca_padronizada = '${escMarcaPad}'`
+        const mestreExistentes =
+          txApp.findRecordsByFilter('base_mestre', filtroMestre, '-created', 1, 0) || []
+
+        let recMestre = null
+        let isUpdateMestre = false
+
+        if (mestreExistentes.length > 0) {
+          recMestre = mestreExistentes[0]
+          isUpdateMestre = true
+        } else {
+          recMestre = new Record(colBaseMestre)
+        }
+
+        // Identificação mínima
+        recMestre.set('registro_mapa', regMapa || recMestre.getString('registro_mapa'))
+        recMestre.set('nome_completo', nomeComercial)
+        recMestre.set('nome_produto', marcaPad)
+        recMestre.set('marca_padronizada', marcaPad)
+        recMestre.set(
+          'principio_ativo',
+          String(produto.principio_ativo || 'GLIFOSATO').slice(0, 500),
+        )
+        recMestre.set(
+          'titular_fabricante',
+          String(produto.titular_registro || titularPrincipal).slice(0, 500),
+        )
+        recMestre.set(
+          'fabricante',
+          String(produto.fabricante_formulador || titularPrincipal).slice(0, 500),
+        )
+        recMestre.set('tipo_produto', 'Produto Formulado Comercial')
+        recMestre.set(
+          'embalagem',
+          String(
+            produto.embalagem ||
+              (embalagens[0]
+                ? `${embalagens[0].capacidade} ${embalagens[0].unidade_medida || 'L'}`
+                : '1X20L (20 L)'),
+          ).slice(0, 255),
+        )
+        recMestre.set('unidade', 'L')
+        recMestre.set('origem_base', 'BULA_PDF_ESPELHO_TRIBUTARIO')
+
+        // Campos tributários essenciais
+        recMestre.set('ncm', ncmLimpo || '38089324')
+        recMestre.set('ncm_padrao', ncmMascara || '3808.93.24')
+        recMestre.set('nota_subpos_2', nota2Val)
+
+        // Faixas de Embalagem TIPI
+        if (isNota2) {
+          recMestre.set('ncm_faixa1_ate_300g', '3808.61.00')
+          recMestre.set('ncm_faixa2_300g_a_7_5kg', '3808.62.90')
+          recMestre.set('ncm_faixa3_7_5kg_a_10kg', '3808.69.90')
+          recMestre.set('ncm_faixa4_acima_10kg', '3808.69.90')
+          recMestre.set('regra_tipi', 'Nota de Subposições 2 Cap. 38 TIPI (SC COSIT 98.042/2022)')
+        } else {
+          recMestre.set('ncm_faixa1_ate_300g', ncmMascara)
+          recMestre.set('ncm_faixa2_300g_a_7_5kg', ncmMascara)
+          recMestre.set('ncm_faixa3_7_5kg_a_10kg', ncmMascara)
+          recMestre.set('ncm_faixa4_acima_10kg', ncmMascara)
+          recMestre.set(
+            'regra_tipi',
+            'Posição 38.08 TIPI: Embalagem comercial agrícola com subitens .2x/.9x',
+          )
+        }
+
+        recMestre.set('macro_grupo', 'Defensivos')
+        recMestre.set('sub_grupo', String(classeAgronomica || 'Herbicida').slice(0, 100))
+        recMestre.set(
+          'status_pis_cofins',
+          'Beneficiado (Lei 10.925/04): 0% até Mar/26 | 0,925% Real / 0,365% Pres. pós-Abr/26 (LC 224/25)',
+        )
+        recMestre.set('aliquota_ate_mar2026', '0,00% (Lei nº 10.925/2004)')
+        recMestre.set('aliquota_pos_abr2026_real', '0,925% (LC nº 224/2025)')
+        recMestre.set('aliquota_pos_abr2026_presumido', '0,365% (LC nº 224/2025)')
+        recMestre.set('cst_saida', 'CST 06')
+        recMestre.set('cst_entrada', 'CST 73')
+        recMestre.set(
+          'ibs_cbs_2027',
+          'Redução de 60% + Diferimento (Art. 138 e Anexo IX LC 214/2025)',
+        )
+        recMestre.set('sistema_norma_mapa', 'AGROFIT/MAPA — Produto Formulado (Lei nº 14.785/2023)')
+        recMestre.set('status_validacao', 'aprovado')
+        recMestre.set('url_oficial', 'https://dados.agricultura.gov.br')
+
+        txApp.save(recMestre)
+        if (isUpdateMestre) contadores.base_mestre.atualizados++
+        else contadores.base_mestre.inseridos++
+      } catch (errMestre) {
+        console.log(
+          'Aviso: falha ao atualizar espelho tributário na base_mestre (não impeditivo):',
+          errMestre.message || errMestre,
+        )
       }
     })
 
