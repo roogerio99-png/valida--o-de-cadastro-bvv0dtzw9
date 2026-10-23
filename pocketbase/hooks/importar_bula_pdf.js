@@ -25,6 +25,7 @@
 
 // -----------------------------------------------------------------------------
 // ROTA 1: POST /backend/v1/bula/analisar-pdf
+// Regra fixa: NCM correta do ROUNDUP WG (MAPA 002094) é 38089324 (uso agrícola, conforme bula)
 // -----------------------------------------------------------------------------
 routerAdd('POST', '/backend/v1/bula/analisar-pdf', (e) => {
   try {
