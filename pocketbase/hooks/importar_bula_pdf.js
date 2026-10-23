@@ -610,28 +610,6 @@ routerAdd('POST', '/backend/v1/bula/analisar-pdf', (e) => {
       }
     }
 
-    // Alinhamento dinâmico do registro_mapa nas coleções acessórias extraídas
-    composicoes.forEach((c) => {
-      c.registro_mapa = registroMapa
-      c.nome_produto = nomeComercial
-    })
-    empresas.forEach((emp) => {
-      emp.registro_mapa = registroMapa
-      emp.nome_produto = nomeComercial
-    })
-    aplicacoes.forEach((ap) => {
-      ap.registro_mapa = registroMapa
-      ap.nome_produto = nomeComercial
-    })
-    culturas.forEach((cu) => {
-      cu.registro_mapa = registroMapa
-      cu.nome_produto = nomeComercial
-    })
-    alvos.forEach((al) => {
-      al.registro_mapa = registroMapa
-      al.nome_produto = nomeComercial
-    })
-
     // 6. CADEIA DE EMPRESAS DINÂMICA
     const empresas = []
     function extrairEmpresasSecaoDinamica(tipoRelacao, regexInicio, regexFim) {
@@ -1338,6 +1316,32 @@ routerAdd('POST', '/backend/v1/bula/analisar-pdf', (e) => {
         dados_extras: { informacoes_rotulo: conteudoEmbalagem },
       },
     ]
+
+    // Alinhamento dinâmico do registro_mapa nas coleções acessórias extraídas
+    composicoes.forEach((c) => {
+      c.registro_mapa = registroMapa
+      c.nome_produto = nomeComercial
+    })
+    empresas.forEach((emp) => {
+      emp.registro_mapa = registroMapa
+      emp.nome_produto = nomeComercial
+    })
+    aplicacoes.forEach((ap) => {
+      ap.registro_mapa = registroMapa
+      ap.nome_produto = nomeComercial
+    })
+    culturas.forEach((cu) => {
+      cu.registro_mapa = registroMapa
+      cu.nome_produto = nomeComercial
+    })
+    alvos.forEach((al) => {
+      al.registro_mapa = registroMapa
+      al.nome_produto = nomeComercial
+    })
+    embalagens.forEach((emb) => {
+      emb.registro_mapa = registroMapa
+      emb.nome_produto = nomeComercial
+    })
 
     // 11. PRODUTO PRINCIPAL CONSOLIDADO
     const titularPrincipal =
