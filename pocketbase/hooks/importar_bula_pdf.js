@@ -1512,9 +1512,13 @@ routerAdd('POST', '/backend/v1/bula/gravar-pdf', (e) => {
         recEmp.set('uf', String(emp.uf || '').trim())
         recEmp.set('pais', String(emp.pais || 'Brasil').trim())
         recEmp.set('cep', String(emp.cep || '').trim())
-        recEmp.set('inscricao_estadual', String(emp.inscricao_estadual || '').trim())
+        recEmp.set(
+          'inscricao_estadual',
+          String(emp.inscricao_estadual || '')
+            .trim()
+            .slice(0, 95),
+        )
         if (emp.dados_extras) recEmp.set('dados_extras', JSON.stringify(emp.dados_extras))
-
         txApp.save(recEmp)
         if (isUp) contadores.bula_empresas.atualizados++
         else contadores.bula_empresas.inseridos++
@@ -1856,14 +1860,11 @@ routerAdd('POST', '/backend/v1/bula/gravar-pdf', (e) => {
           }
 
           // (d) NCM específica da embalagem comercial
+          // EXCEÇÃO EXCLUSIVA DO ROUNDUP WG (MAPA 002094): NCM 3808.93.24
           const isRoundupWg =
             regMapa.includes('002094') ||
-            marcaPad.toUpperCase().includes('ROUNDUP WG') ||
-            nomeComercial.toUpperCase().includes('ROUNDUP WG') ||
-            (String(produto.principio_ativo || '')
-              .toUpperCase()
-              .includes('GLIFOSATO') &&
-              marcaPad.toUpperCase().includes('ROUNDUP'))
+            marcaPad.toUpperCase() === 'ROUNDUP WG' ||
+            nomeComercial.toUpperCase() === 'ROUNDUP WG'
 
           let ncmEsp = embItem.ncm || produto.ncm_padrao || produto.ncm
           if (isRoundupWg) {
@@ -1872,8 +1873,14 @@ routerAdd('POST', '/backend/v1/bula/gravar-pdf', (e) => {
             if (qtdPrinc <= 0.3) ncmEsp = '3808.61.00'
             else if (qtdPrinc <= 7.5) ncmEsp = '3808.62.90'
             else ncmEsp = '3808.69.90'
+          } else if (
+            regMapa.includes('-') ||
+            String(produto.tipo_produto || '').includes('Fertilizante')
+          ) {
+            if (qtdPrinc <= 10 && unPrinc === 'KG') ncmEsp = '3105.10.00'
+            else ncmEsp = ncmEsp || '3105.90.90'
           } else if (!ncmEsp) {
-            ncmEsp = produto.ncm_padrao || produto.ncm || ''
+            ncmEsp = produto.ncm_padrao || produto.ncm || '3808.93.29'
           }
           const ncmMascara = formatarNcmMascaraLocal(ncmEsp)
           const ncmLimpo = ncmMascara.replace(/\D/g, '')
@@ -1909,13 +1916,16 @@ routerAdd('POST', '/backend/v1/bula/gravar-pdf', (e) => {
             'principio_ativo',
             String(produto.principio_ativo || 'GLIFOSATO').slice(0, 500),
           )
-          recMestre.set(
-            'titular_fabricante',
-            String(produto.titular_registro || titularPrincipal).slice(0, 500),
-          )
+          const titularBula = String(
+            produto.titular_registro ||
+              produto.fabricante_formulador ||
+              (empresas.length > 0 ? empresas[0].razao_social : '') ||
+              'Titular Credenciado AGROFIT/MAPA',
+          ).slice(0, 500)
+          recMestre.set('titular_fabricante', titularBula)
           recMestre.set(
             'fabricante',
-            String(produto.fabricante_formulador || titularPrincipal).slice(0, 500),
+            String(produto.fabricante_formulador || titularBula).slice(0, 500),
           )
           recMestre.set(
             'tipo_produto',
@@ -1957,7 +1967,7 @@ routerAdd('POST', '/backend/v1/bula/gravar-pdf', (e) => {
           }
 
           recMestre.set('macro_grupo', 'Defensivos')
-          recMestre.set('sub_grupo', String(classeAgronomica || 'Herbicida').slice(0, 100))
+          recMestre.set('sub_grupo', String(produto.classe_agronomica || 'Herbicida').slice(0, 100))
           recMestre.set(
             'status_pis_cofins',
             'Beneficiado (Lei 10.925/04): 0% até Mar/26 | 0,925% Real / 0,365% Pres. pós-Abr/26 (LC 224/25)',

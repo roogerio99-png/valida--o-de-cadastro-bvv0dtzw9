@@ -153,4 +153,25 @@ describe('Testes de Conformidade do Motor Canônico (Especificação v2.4.0)', (
     })
     expect(def.ncm_especifica).toBe('3808.93.22')
   })
+
+  it('T7: Parser de Embalagem Comercial ("4x5L" -> 5L Bombona, "20KG" -> 20kg Saco)', () => {
+    const resMultiplo = executarMotorCanonicoFrontend({
+      nome_completo: 'HERBICIDA TESTE 4X5L',
+      embalagem: '4X5L (5 L)',
+      principio_ativo: 'CLETODIM',
+      registro_mapa: 'Nº 1234',
+    })
+    expect(resMultiplo.quantidade_embalagem_principal).toBe(5)
+    expect(resMultiplo.unidade_medida_principal).toBe('L')
+
+    const resKilo = executarMotorCanonicoFrontend({
+      nome_completo: 'HERBICIDA TESTE 20KG',
+      embalagem: '20KG SACO',
+      principio_ativo: 'GLUFOSINATO',
+      registro_mapa: 'Nº 5678',
+    })
+    expect(resKilo.quantidade_embalagem_principal).toBe(20)
+    expect(resKilo.unidade_medida_principal).toBe('KG')
+    expect(resKilo.forma_acondicionamento).toBe('Saco')
+  })
 })

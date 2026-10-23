@@ -156,14 +156,17 @@ export function parsearEmbalagemComercial(embalagem?: string): EmbalagemParseada
   let quantidade = 0
   let unidade: 'L' | 'KG' = 'L'
 
-  // 1. Formato "N x Q un" (4x5L, 4 x 5 L, 12X1L) — embalagem principal = Q
+  // 1. Formato "N x Q un" (4x5L, 4 x 5 L, 12X1L) — embalagem principal = Q (ignora multiplicador de caixas)
   const mMultiplo = upper.match(
-    /(\d+)\s*[xX×]\s*(\d+(?:[.,]\d+)?)\s*(KG|KGS|KILOS?|QUILOS?|L\b|LT|LITROS?|ML)/,
+    /(\d+)\s*[xX×]\s*(\d+(?:[.,]\d+)?)\s*(KG|KGS|KILOS?|QUILOS?|G\b|L\b|LT|LITROS?|ML)/,
   )
   if (mMultiplo) {
-    quantidade = parseFloat(mMultiplo[2].replace(',', '.'))
+    let q = parseFloat(mMultiplo[2].replace(',', '.'))
     const u = mMultiplo[3]
-    unidade = u.startsWith('KG') || u.startsWith('QUILO') || u.startsWith('KILO') ? 'KG' : 'L'
+    if (u === 'G' || u === 'ML') q = q * 0.001
+    quantidade = q
+    unidade =
+      u.startsWith('KG') || u.startsWith('QUILO') || u.startsWith('KILO') || u === 'G' ? 'KG' : 'L'
   } else {
     // 2. Formato direto "Q un" (20KG, 200L, 0.240 KG, 5L)
     const mDireto = upper.match(
@@ -173,8 +176,7 @@ export function parsearEmbalagemComercial(embalagem?: string): EmbalagemParseada
       let qtd = parseFloat(mDireto[1].replace(',', '.'))
       const u = mDireto[2]
       let fator = 1
-      if (u === 'G') fator = 0.001
-      else if (u === 'ML') fator = 0.001
+      if (u === 'G' || u === 'ML') fator = 0.001
       quantidade = qtd * fator
       unidade =
         u.startsWith('KG') || u.startsWith('KILO') || u.startsWith('QUILO') || u === 'G'
@@ -719,11 +721,14 @@ export function executarMotorCanonicoFrontend(
       } else if (paUpper.includes('ATRAZINA') || paUpper.includes('DIURON')) {
         ncmPadrao = '3808.93.23'
       } else if (
-        paUpper.includes('GLIFOSATO') ||
-        paUpper.includes('GLYPHOSATE') ||
-        nomeUpper.includes('ROUNDUP')
+        registroMapaFormatado.includes('002094') ||
+        marcaUpper === 'ROUNDUP WG' ||
+        nomeUpper === 'ROUNDUP WG'
       ) {
-        // Glifosato / ROUNDUP WG formulado agrícola: NCM 3808.93.24 conforme bula oficial do MAPA (Herbicida agrícola formulado)
+        // Exceção exclusiva do ROUNDUP WG (MAPA 002094, glifosato formulado): NCM 3808.93.24 conforme bula oficial do MAPA
+        ncmPadrao = '3808.93.24'
+      } else if (paUpper.includes('GLIFOSATO') || paUpper.includes('GLYPHOSATE')) {
+        // Glifosato formulado agrícola geral (fora da exceção ROUNDUP WG 002094): NCM 3808.93.24
         ncmPadrao = '3808.93.24'
       } else if (
         paUpper.includes('IMAZETAPIR') ||
@@ -802,8 +807,8 @@ export function executarMotorCanonicoFrontend(
   // Regra crítica do ROUNDUP WG (MAPA 002094): NCM 3808.93.24 (uso agrícola)
   if (
     registroMapaFormatado.includes('002094') ||
-    marcaUpper.includes('ROUNDUP WG') ||
-    nomeUpper.includes('ROUNDUP WG')
+    marcaUpper === 'ROUNDUP WG' ||
+    nomeUpper === 'ROUNDUP WG'
   ) {
     ncmEspecifica = '3808.93.24'
   } else if (pertenceNotaSubpos2) {

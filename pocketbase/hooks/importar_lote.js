@@ -1869,14 +1869,11 @@ routerAdd('POST', '/backend/v1/importar-lote', (e) => {
             const isNota2 = MOLECULAS_NOTA_2.some((mol) => paTexto.includes(mol))
 
             // (d) NCM específica da embalagem comercial
+            // EXCEÇÃO EXCLUSIVA DO ROUNDUP WG (MAPA 002094): NCM 3808.93.24
             const isRoundupWg =
               regMapa.includes('002094') ||
-              marcaPad.toUpperCase().includes('ROUNDUP WG') ||
-              nomeProdFinal.toUpperCase().includes('ROUNDUP WG') ||
-              (String(paFinal || '')
-                .toUpperCase()
-                .includes('GLIFOSATO') &&
-                marcaPad.toUpperCase().includes('ROUNDUP'))
+              marcaPad.toUpperCase() === 'ROUNDUP WG' ||
+              nomeProdFinal.toUpperCase() === 'ROUNDUP WG'
 
             let ncmEsp = data.ncm || (prodRef ? prodRef.getString('ncm_padrao') : '')
             if (isRoundupWg) {
@@ -1885,8 +1882,15 @@ routerAdd('POST', '/backend/v1/importar-lote', (e) => {
               if (qtdPrinc <= 0.3) ncmEsp = '3808.61.00'
               else if (qtdPrinc <= 7.5) ncmEsp = '3808.62.90'
               else ncmEsp = '3808.69.90'
+            } else if (
+              regMapa.includes('-') ||
+              macroGrupo === 'Fertilizantes' ||
+              String(tipoFormulacao || '').includes('Fertilizante')
+            ) {
+              if (qtdPrinc <= 10 && unPrinc === 'KG') ncmEsp = '3105.10.00'
+              else ncmEsp = ncmEsp || '3105.90.90'
             } else if (!ncmEsp) {
-              ncmEsp = (prodRef ? prodRef.getString('ncm_padrao') : '') || data.ncm || ''
+              ncmEsp = (prodRef ? prodRef.getString('ncm_padrao') : '') || data.ncm || '3808.93.29'
             }
             const ncmMascara = fmtNcmMascara(ncmEsp)
             const ncmLimpo = ncmMascara.replace(/\D/g, '')
