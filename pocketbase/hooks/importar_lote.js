@@ -1006,8 +1006,73 @@ routerAdd('POST', '/backend/v1/importar-lote', (e) => {
           // Truncamento defensivo e preservação integral em dados_extras
           const titularBruto = String(data.titular_registro || data.fabricante || '').trim()
           const fabricanteBruto = String(data.fabricante_formulador || '').trim()
-          const paBruto = String(data.principio_ativo || '').trim()
+          let paBruto = String(data.principio_ativo || '').trim()
           const modoAcaoBruto = String(data.modo_acao || '').trim()
+
+          // Preenchimento automático de principio_ativo caso venha vazio na linha da planilha:
+          // 1. Tenta buscar em bula_composicao pelo mesmo registro_mapa e/ou codigo (ID Produto Base)
+          // 2. Se não encontrar, tenta buscar em base_mestre pelo registro_mapa ou marca
+          if (!paBruto) {
+            try {
+              let composicoesMatch = []
+              if (escCodigo) {
+                composicoesMatch =
+                  txApp.findRecordsByFilter(
+                    'bula_composicao',
+                    `registro_mapa = '${escMapa}' && codigo = '${escCodigo}'`,
+                    'id',
+                    50,
+                    0,
+                  ) || []
+              }
+              if (composicoesMatch.length === 0) {
+                composicoesMatch =
+                  txApp.findRecordsByFilter(
+                    'bula_composicao',
+                    `registro_mapa = '${escMapa}'`,
+                    'id',
+                    50,
+                    0,
+                  ) || []
+              }
+
+              const pasComposicao = []
+              for (let ci = 0; ci < composicoesMatch.length; ci++) {
+                const cRec = composicoesMatch[ci]
+                const iaNome = String(cRec.getString('ingrediente_ativo') || '').trim()
+                const func = String(cRec.getString('funcao_ingrediente') || '').toUpperCase()
+                if (
+                  iaNome &&
+                  !func.includes('INERTE') &&
+                  !func.includes('EXCIPIENTE') &&
+                  !func.includes('OUTROS INGREDIENTES') &&
+                  !pasComposicao.includes(iaNome)
+                ) {
+                  pasComposicao.push(iaNome)
+                }
+              }
+
+              if (pasComposicao.length > 0) {
+                paBruto = pasComposicao.join(' + ')
+              } else {
+                // Tentar base_mestre
+                const mestreMatch =
+                  txApp.findRecordsByFilter(
+                    'base_mestre',
+                    `registro_mapa = '${escMapa}'`,
+                    '-created',
+                    1,
+                    0,
+                  ) || []
+                if (mestreMatch.length > 0) {
+                  const mPa = String(mestreMatch[0].getString('principio_ativo') || '').trim()
+                  if (mPa) paBruto = mPa
+                }
+              }
+            } catch (_) {
+              // Silencioso em caso de erro na busca correlacionada
+            }
+          }
 
           // Preserva valores integrais no JSON de dados_extras
           let extrasObj = {}

@@ -167,6 +167,7 @@ routerAdd('POST', '/backend/v1/bula/recalcular-principios-ativos', (e) => {
     let resolvidosPorBaseMestre = 0
     let resolvidosPorExtras = 0
     let mantidosPreenchidos = 0
+    let semFonte = 0
     const erros = []
     const exemplos = []
 
@@ -245,6 +246,10 @@ routerAdd('POST', '/backend/v1/bula/recalcular-principios-ativos', (e) => {
             fontePa = 'dados_extras'
             resolvidosPorExtras++
           }
+        }
+
+        if (!novoPa) {
+          semFonte++
         }
 
         // Buscar dados irmãos de Base Mestre para enriquecimento (quando vazios no registro de bula)
@@ -347,6 +352,7 @@ routerAdd('POST', '/backend/v1/bula/recalcular-principios-ativos', (e) => {
       totalAnalisados: totalAnalisados,
       totalAtualizados: totalAtualizados,
       mantidosPreenchidos: mantidosPreenchidos,
+      semFonte: semFonte,
       detalhesFontes: {
         resolvidosPorComposicao: resolvidosPorComposicao,
         resolvidosPorBaseMestre: resolvidosPorBaseMestre,

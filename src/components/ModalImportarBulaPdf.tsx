@@ -122,10 +122,9 @@ export function ModalImportarBulaPdf({
       }
     } catch (err: any) {
       console.error('Erro na análise da bula PDF:', err)
-      const motivo = getErrorMessage(
-        err,
-        'Erro ao processar o arquivo PDF no servidor. Por favor, tente novamente.',
-      )
+      const motivo =
+        getErrorMessage(err) ||
+        'Erro ao processar o arquivo PDF no servidor. Por favor, tente novamente.'
       toast({
         title: 'Falha na leitura do PDF',
         description: `Erro ao analisar bula: ${motivo}`,
@@ -161,10 +160,9 @@ export function ModalImportarBulaPdf({
       }
     } catch (err: any) {
       console.error('Erro na gravação atômica da bula:', err)
-      const motivo = getErrorMessage(
-        err,
-        'Falha de comunicação com o servidor ao persistir a bula. Por favor, tente novamente.',
-      )
+      const motivo =
+        getErrorMessage(err) ||
+        'Falha de comunicação com o servidor ao persistir a bula. Por favor, tente novamente.'
       toast({
         title: 'Erro ao gravar bula',
         description: `Erro ao gravar bula: ${motivo}`,

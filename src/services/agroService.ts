@@ -727,6 +727,46 @@ export interface RespostaGravacaoBulaPdf {
   }
 }
 
+export interface RespostaRecalculoBulaPa {
+  sucesso: boolean
+  mensagem?: string
+  error?: string
+  totalAnalisados: number
+  totalAtualizados: number
+  mantidosPreenchidos: number
+  semFonte?: number
+  detalhesFontes: {
+    resolvidosPorComposicao: number
+    resolvidosPorBaseMestre: number
+    resolvidosPorExtras: number
+  }
+  exemplos?: Array<{
+    nome_comercial: string
+    registro_mapa: string
+    principio_ativo: string
+    ncm_padrao?: string
+    fonte: string
+  }>
+  totalErros?: number
+  erros?: Array<any>
+}
+
+export async function recalcularPrincipiosAtivosBula(): Promise<RespostaRecalculoBulaPa> {
+  try {
+    return await pb.send<RespostaRecalculoBulaPa>('/backend/v1/bula/recalcular-principios-ativos', {
+      method: 'POST',
+    })
+  } catch (err: any) {
+    const errorMsg =
+      err?.response?.data?.error ||
+      err?.data?.error ||
+      err?.response?.data?.message ||
+      (err?.message && !/^Something went wrong/i.test(err.message) ? err.message : '') ||
+      'Falha ao recalcular princípios ativos no servidor. Tente novamente.'
+    throw new Error(errorMsg)
+  }
+}
+
 export async function analisarBulaPdf(arquivoPdf: File): Promise<RespostaAnaliseBulaPdf> {
   const formData = new FormData()
   formData.append('arquivo', arquivoPdf)

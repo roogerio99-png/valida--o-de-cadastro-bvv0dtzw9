@@ -1144,6 +1144,8 @@ export function Importar() {
           'substancia_ativa',
           'ativo',
           'molecula',
+          'substancia_principio_ativo',
+          'substancia_principio_ativo_garantia',
           'pa_oficial_correto',
           'pa_oficial',
         ])

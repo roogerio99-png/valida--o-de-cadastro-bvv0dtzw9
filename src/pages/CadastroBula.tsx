@@ -50,6 +50,8 @@ import {
   listarBulaAlvos,
   listarBulaAplicacao,
   limparCadastroBula,
+  recalcularPrincipiosAtivosBula,
+  RespostaRecalculoBulaPa,
 } from '@/services/agroService'
 import { Label } from '@/components/ui/label'
 import { DialogFooter } from '@/components/ui/dialog'
@@ -88,6 +90,11 @@ export function CadastroBula() {
 
   // Modal Importar Bula (PDF)
   const [modalImportarPdfOpen, setModalImportarPdfOpen] = useState(false)
+
+  // Recálculo de Princípios Ativos
+  const [executandoRecalculo, setExecutandoRecalculo] = useState(false)
+  const [modalRecalculoOpen, setModalRecalculoOpen] = useState(false)
+  const [resultadoRecalculo, setResultadoRecalculo] = useState<RespostaRecalculoBulaPa | null>(null)
 
   // Rolagem e paginação
   const [totalCount, setTotalCount] = useState(0)
@@ -282,6 +289,49 @@ export function CadastroBula() {
     URL.revokeObjectURL(url)
   }
 
+  const handleRecalcularPrincipiosAtivos = async () => {
+    if (!isAdmin) {
+      toast({
+        variant: 'destructive',
+        title: 'Ação não permitida',
+        description: 'Apenas administradores podem recalcular os princípios ativos.',
+      })
+      return
+    }
+
+    setExecutandoRecalculo(true)
+    setResultadoRecalculo(null)
+    setModalRecalculoOpen(true)
+
+    try {
+      const res = await recalcularPrincipiosAtivosBula()
+      setResultadoRecalculo(res)
+      if (res.sucesso) {
+        toast({
+          title: 'Princípios Ativos Atualizados!',
+          description: `${res.totalAtualizados} registros atualizados com sucesso (${res.mantidosPreenchidos} já estavam preenchidos).`,
+        })
+        await carregarProdutos()
+      } else {
+        toast({
+          variant: 'destructive',
+          title: 'Erro no recálculo',
+          description: res.error || 'Falha ao processar os registros de bula.',
+        })
+      }
+    } catch (err: unknown) {
+      const msg =
+        err instanceof Error ? err.message : 'Falha ao executar o recálculo de princípios ativos.'
+      toast({
+        variant: 'destructive',
+        title: 'Erro na atualização',
+        description: msg,
+      })
+    } finally {
+      setExecutandoRecalculo(false)
+    }
+  }
+
   const handleLimparBase = async () => {
     if (!isAdmin) {
       toast({
@@ -363,6 +413,22 @@ export function CadastroBula() {
             <Download className="w-3.5 h-3.5 mr-1.5" />
             <span>Exportar CSV</span>
           </Button>
+
+          {isAdmin && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleRecalcularPrincipiosAtivos}
+              disabled={executandoRecalculo}
+              className="text-xs h-9 rounded-xl border-emerald-300 text-emerald-800 bg-emerald-50/60 hover:bg-emerald-100 hover:text-emerald-900 flex items-center gap-1.5 transition-colors shadow-sm"
+              title="Preenche o campo Princípio Ativo a partir da Composição da Bula ou Base Mestre"
+            >
+              <FlaskConical
+                className={`w-3.5 h-3.5 ${executandoRecalculo ? 'animate-spin' : ''}`}
+              />
+              <span>{executandoRecalculo ? 'Atualizando...' : 'Atualizar Princípios Ativos'}</span>
+            </Button>
+          )}
 
           <Button
             variant="outline"
@@ -847,6 +913,167 @@ export function CadastroBula() {
                     Confirmar Limpeza Total
                   </>
                 )}
+              </Button>
+            )}
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* ------------------------------------------------------------------ */}
+      {/* MODAL RECÁLCULO / ENRIQUECIMENTO DE PRINCÍPIOS ATIVOS */}
+      {/* ------------------------------------------------------------------ */}
+      <Dialog open={modalRecalculoOpen} onOpenChange={setModalRecalculoOpen}>
+        <DialogContent className="max-w-xl rounded-2xl border-emerald-200">
+          <DialogHeader className="space-y-2">
+            <div className="w-11 h-11 rounded-2xl bg-emerald-100 text-[#1B5E20] flex items-center justify-center mx-auto sm:mx-0">
+              <FlaskConical className="w-6 h-6" />
+            </div>
+            <DialogTitle className="text-base font-bold text-[#1C2B1C]">
+              Atualização de Princípios Ativos da Bula
+            </DialogTitle>
+            <DialogDescription className="text-xs text-[#5A6D5A] leading-relaxed">
+              Preenchimento automatizado e rastreável do campo <strong>principio_ativo</strong> a
+              partir da correlação oficial por Registro MAPA / ID Produto com a Composição da Bula e
+              com a Base Mestre.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-3.5 py-2 text-xs">
+            {executandoRecalculo && (
+              <div className="p-6 bg-emerald-50/60 rounded-xl border border-emerald-200 flex flex-col items-center justify-center gap-2 text-center">
+                <Loader2 className="w-8 h-8 text-[#1B5E20] animate-spin" />
+                <span className="font-semibold text-xs text-[#1C2B1C]">
+                  Correlacionando e atualizando registros de bula...
+                </span>
+                <span className="text-[11px] text-[#5A6D5A]">
+                  Cruzando dados com a aba de Composição e Base Mestre em transação atômica.
+                </span>
+              </div>
+            )}
+
+            {!executandoRecalculo && resultadoRecalculo && (
+              <div className="space-y-3">
+                <div className="p-3 bg-emerald-50 rounded-xl border border-emerald-200 text-emerald-950 flex items-start gap-2.5">
+                  <CheckCircle2 className="w-5 h-5 text-emerald-600 shrink-0 mt-0.5" />
+                  <div className="text-xs leading-relaxed">
+                    <strong className="block font-semibold">
+                      {resultadoRecalculo.sucesso
+                        ? 'Processamento Finalizado com Sucesso'
+                        : 'Atenção ao Processar'}
+                    </strong>
+                    <span>
+                      {resultadoRecalculo.mensagem ||
+                        'Rotina de sincronização de princípios ativos concluída.'}
+                    </span>
+                  </div>
+                </div>
+
+                {/* Métricas do Recálculo */}
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-center">
+                  <div className="bg-[#F5F7F1] p-2.5 rounded-xl border border-[#DCE5DC]">
+                    <span className="text-[#5A6D5A] block text-[11px]">Total Analisados</span>
+                    <strong className="text-sm text-[#1C2B1C]">
+                      {resultadoRecalculo.totalAnalisados}
+                    </strong>
+                  </div>
+                  <div className="bg-emerald-50 p-2.5 rounded-xl border border-emerald-200">
+                    <span className="text-emerald-800 block text-[11px]">Atualizados</span>
+                    <strong className="text-sm text-emerald-900 font-bold">
+                      {resultadoRecalculo.totalAtualizados}
+                    </strong>
+                  </div>
+                  <div className="bg-white p-2.5 rounded-xl border border-[#DCE5DC]">
+                    <span className="text-[#5A6D5A] block text-[11px]">Já Preenchidos</span>
+                    <strong className="text-sm text-[#1C2B1C]">
+                      {resultadoRecalculo.mantidosPreenchidos}
+                    </strong>
+                  </div>
+                  <div className="bg-amber-50 p-2.5 rounded-xl border border-amber-200">
+                    <span className="text-amber-800 block text-[11px]">Sem Fonte</span>
+                    <strong className="text-sm text-amber-900 font-bold">
+                      {resultadoRecalculo.semFonte || 0}
+                    </strong>
+                  </div>
+                </div>
+
+                {/* Detalhamento das Fontes Utilizadas */}
+                <div className="p-3 bg-white rounded-xl border border-[#DCE5DC] space-y-1.5">
+                  <span className="font-semibold text-[11px] text-[#1C2B1C] block">
+                    Origem das Resoluções:
+                  </span>
+                  <div className="grid grid-cols-3 gap-2 text-xs">
+                    <div className="p-2 bg-[#F5F7F1] rounded-lg">
+                      <span className="text-[#5A6D5A] text-[10px] block">Via Composição Bula</span>
+                      <strong className="text-[#1C2B1C]">
+                        {resultadoRecalculo.detalhesFontes?.resolvidosPorComposicao ?? 0}
+                      </strong>
+                    </div>
+                    <div className="p-2 bg-[#F5F7F1] rounded-lg">
+                      <span className="text-[#5A6D5A] text-[10px] block">Via Base Mestre</span>
+                      <strong className="text-[#1C2B1C]">
+                        {resultadoRecalculo.detalhesFontes?.resolvidosPorBaseMestre ?? 0}
+                      </strong>
+                    </div>
+                    <div className="p-2 bg-[#F5F7F1] rounded-lg">
+                      <span className="text-[#5A6D5A] text-[10px] block">Via Dados Extras</span>
+                      <strong className="text-[#1C2B1C]">
+                        {resultadoRecalculo.detalhesFontes?.resolvidosPorExtras ?? 0}
+                      </strong>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Amostra dos registros resolvidos */}
+                {resultadoRecalculo.exemplos && resultadoRecalculo.exemplos.length > 0 && (
+                  <div className="space-y-1.5">
+                    <span className="font-semibold text-[11px] text-[#1C2B1C] block">
+                      Amostra de Produtos Preenchidos:
+                    </span>
+                    <div className="max-h-40 overflow-y-auto space-y-1 pr-1 border border-[#DCE5DC] rounded-xl p-2 bg-[#FAFBF9]">
+                      {resultadoRecalculo.exemplos.map((ex, i) => (
+                        <div
+                          key={i}
+                          className="flex items-center justify-between text-[11px] p-1.5 bg-white rounded border border-[#E8EEE8]"
+                        >
+                          <div className="truncate max-w-[280px]">
+                            <strong className="text-[#1C2B1C]">{ex.nome_comercial}</strong>
+                            <span className="text-[#5A6D5A] ml-1.5">({ex.registro_mapa})</span>
+                          </div>
+                          <Badge
+                            variant="outline"
+                            className="text-[10px] bg-emerald-50 text-emerald-900 border-emerald-200"
+                          >
+                            {ex.principio_ativo}
+                          </Badge>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+
+          <DialogFooter className="pt-2">
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => setModalRecalculoOpen(false)}
+              disabled={executandoRecalculo}
+              className="text-xs h-9"
+            >
+              Fechar
+            </Button>
+            {!executandoRecalculo && (
+              <Button
+                type="button"
+                size="sm"
+                onClick={handleRecalcularPrincipiosAtivos}
+                className="bg-[#1B5E20] hover:bg-[#2E7D32] text-white text-xs h-9 flex items-center gap-1.5"
+              >
+                <RefreshCw className="w-3.5 h-3.5" />
+                <span>Executar Novamente</span>
               </Button>
             )}
           </DialogFooter>
