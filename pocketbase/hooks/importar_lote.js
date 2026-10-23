@@ -1303,15 +1303,24 @@ routerAdd('POST', '/backend/v1/importar-lote', (e) => {
             }
 
             // Resolução fiel da NCM específica da embalagem comercial
+            const isRoundupWg =
+              regMapa.includes('002094') ||
+              marcaPad.toUpperCase().includes('ROUNDUP WG') ||
+              nomeFinal.toUpperCase().includes('ROUNDUP WG') ||
+              (String(paFinal || '')
+                .toUpperCase()
+                .includes('GLIFOSATO') &&
+                marcaPad.toUpperCase().includes('ROUNDUP'))
+
             let ncmEsp = data.ncm_especifica || data.ncm_padrao || data.ncm
-            if (regMapa.includes('002094') || marcaPad.toUpperCase().includes('ROUNDUP WG')) {
+            if (isRoundupWg) {
               ncmEsp = '3808.93.24'
             } else if (isNota2) {
               if (qtdPrinc <= 0.3) ncmEsp = '3808.61.00'
               else if (qtdPrinc <= 7.5) ncmEsp = '3808.62.90'
               else ncmEsp = '3808.69.90'
             } else if (!ncmEsp) {
-              ncmEsp = '3808.93.24'
+              ncmEsp = data.ncm_padrao || data.ncm || ''
             }
 
             const ncmMascara = fmtNcmMascara(ncmEsp)
@@ -1860,15 +1869,24 @@ routerAdd('POST', '/backend/v1/importar-lote', (e) => {
             const isNota2 = MOLECULAS_NOTA_2.some((mol) => paTexto.includes(mol))
 
             // (d) NCM específica da embalagem comercial
+            const isRoundupWg =
+              regMapa.includes('002094') ||
+              marcaPad.toUpperCase().includes('ROUNDUP WG') ||
+              nomeProdFinal.toUpperCase().includes('ROUNDUP WG') ||
+              (String(paFinal || '')
+                .toUpperCase()
+                .includes('GLIFOSATO') &&
+                marcaPad.toUpperCase().includes('ROUNDUP'))
+
             let ncmEsp = data.ncm || (prodRef ? prodRef.getString('ncm_padrao') : '')
-            if (regMapa.includes('002094') || marcaPad.toUpperCase().includes('ROUNDUP WG')) {
+            if (isRoundupWg) {
               ncmEsp = '3808.93.24'
             } else if (isNota2) {
               if (qtdPrinc <= 0.3) ncmEsp = '3808.61.00'
               else if (qtdPrinc <= 7.5) ncmEsp = '3808.62.90'
               else ncmEsp = '3808.69.90'
             } else if (!ncmEsp) {
-              ncmEsp = '3808.93.24'
+              ncmEsp = (prodRef ? prodRef.getString('ncm_padrao') : '') || data.ncm || ''
             }
             const ncmMascara = fmtNcmMascara(ncmEsp)
             const ncmLimpo = ncmMascara.replace(/\D/g, '')

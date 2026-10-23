@@ -1856,15 +1856,24 @@ routerAdd('POST', '/backend/v1/bula/gravar-pdf', (e) => {
           }
 
           // (d) NCM específica da embalagem comercial
+          const isRoundupWg =
+            regMapa.includes('002094') ||
+            marcaPad.toUpperCase().includes('ROUNDUP WG') ||
+            nomeComercial.toUpperCase().includes('ROUNDUP WG') ||
+            (String(produto.principio_ativo || '')
+              .toUpperCase()
+              .includes('GLIFOSATO') &&
+              marcaPad.toUpperCase().includes('ROUNDUP'))
+
           let ncmEsp = embItem.ncm || produto.ncm_padrao || produto.ncm
-          if (regMapa.includes('002094') || marcaPad.toUpperCase().includes('ROUNDUP WG')) {
+          if (isRoundupWg) {
             ncmEsp = '3808.93.24'
           } else if (isNota2) {
             if (qtdPrinc <= 0.3) ncmEsp = '3808.61.00'
             else if (qtdPrinc <= 7.5) ncmEsp = '3808.62.90'
             else ncmEsp = '3808.69.90'
           } else if (!ncmEsp) {
-            ncmEsp = '3808.93.24'
+            ncmEsp = produto.ncm_padrao || produto.ncm || ''
           }
           const ncmMascara = formatarNcmMascaraLocal(ncmEsp)
           const ncmLimpo = ncmMascara.replace(/\D/g, '')
@@ -1927,7 +1936,7 @@ routerAdd('POST', '/backend/v1/bula/gravar-pdf', (e) => {
           // NCM específica
           recMestre.set('ncm_especifica', ncmMascara)
           recMestre.set('ncm_padrao', ncmMascara)
-          recMestre.set('ncm', ncmLimpo || '38089324')
+          recMestre.set('ncm', ncmLimpo || (isRoundupWg ? '38089324' : ''))
           recMestre.set('nota_subpos_2', nota2Val)
 
           if (isNota2) {

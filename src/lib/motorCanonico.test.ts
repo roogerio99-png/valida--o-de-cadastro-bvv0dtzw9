@@ -119,5 +119,38 @@ describe('Testes de Conformidade do Motor Canônico (Especificação v2.4.0)', (
     expect(res.ncm_faixa2_300g_a_7_5kg).toBe('3808.93.24')
     expect(res.ncm_faixa3_7_5kg_a_10kg).toBe('3808.93.24')
     expect(res.ncm_faixa4_acima_10kg).toBe('3808.93.24')
+    expect(res.ncm_especifica).toBe('3808.93.24')
+  })
+
+  it('T6: Não aplica 3808.93.24 a produtos que não são ROUNDUP WG (ex: fertilizantes ou outros defensivos)', () => {
+    // Fertilizante 20 kg
+    const fert20 = executarMotorCanonicoFrontend({
+      nome_completo: 'Protioconazol Técnico Ouro Fino',
+      principio_ativo: 'PROTIOCONAZOL',
+      embalagem: 'Saco 20 kg',
+      ncm: '3105.90.90',
+      tipo_produto: 'Fertilizante Mineral / Organomineral',
+    })
+    expect(fert20.ncm_especifica).toBe('3105.90.90')
+
+    // Fertilizante <= 10 kg
+    const fert5 = executarMotorCanonicoFrontend({
+      nome_completo: 'Adubo Especial',
+      principio_ativo: 'NPK',
+      embalagem: 'Saco 5 kg',
+      ncm: '3105.90.90',
+      tipo_produto: 'Fertilizante Mineral / Organomineral',
+    })
+    expect(fert5.ncm_especifica).toBe('3105.10.00')
+
+    // Defensivo comum não-glifosato
+    const def = executarMotorCanonicoFrontend({
+      nome_completo: 'CARAVANA 806 SL',
+      principio_ativo: '2,4-D',
+      embalagem: 'Bombona 20 L',
+      ncm: '3808.93.22',
+      registro_mapa: 'Nº 19524',
+    })
+    expect(def.ncm_especifica).toBe('3808.93.22')
   })
 })
