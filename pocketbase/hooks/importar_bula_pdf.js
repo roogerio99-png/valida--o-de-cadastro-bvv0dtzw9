@@ -136,80 +136,110 @@ routerAdd('POST', '/backend/v1/bula/analisar-pdf', (e) => {
     // Qualquer número citado em contexto de produto técnico DEVE ser categoricamente ignorado.
     let registroMapa = ''
 
-    // Procuramos primeiro antes de qualquer menção a FABRICANTE DO PRODUTO TÉCNICO ou COMPOSIÇÃO
-    let cabecalhoTexto = textoCompleto.slice(0, 4000)
+    // Procuramos primeiro no cabeçalho antes de qualquer menção a FABRICANTE DO PRODUTO TÉCNICO ou COMPOSIÇÃO
+    let cabecalhoTexto = textoCompleto.slice(0, 6000)
     const idxTecnico = cabecalhoTexto.search(/FABRICANTE\s+DO\s+PRODUTO\s+T[ÉE]CNICO/i)
     if (idxTecnico !== -1) {
       cabecalhoTexto = cabecalhoTexto.slice(0, idxTecnico)
     }
 
-    // Regex 1: "REGISTRADO NO MINISTÉRIO DA AGRICULTURA ... MAPA SOB N° 01119" (quebra de linha e markdown flexíveis)
-    const mCabecalhoCompleto = cabecalhoTexto.match(
-      /REGISTRADO\s+NO\s+MINIST[ÉE]RIO\s+DA\s+AGRICULTURA[^\n\r.;]*?[\r\n\s]+(?:#*\s*)*(?:MAPA\s+)?SOB\s+N[°ºoO\?]?\s*[:.]?\s*([0-9]{3,7})/i,
-    )
-
-    // Regex 2: "MAPA SOB N° 01119" no cabeçalho antes de qualquer produto técnico
-    const mCabecalhoMapa = cabecalhoTexto.match(
-      /(?:^|[\r\n\s])MAPA\s+SOB\s+N[°ºoO\?]?\s*[:.]?\s*([0-9]{3,7})/i,
-    )
-
-    // Regex 3: Frase em linha única "REGISTRADO NO MINISTÉRIO... MAPA SOB Nº 01119"
-    const mCabecalhoLinha = cabecalhoTexto.match(
-      /REGISTRADO\s+NO\s+MINIST[ÉE]RIO\s+DA\s+AGRICULTURA[^\n\r]*?(?:MAPA\s+)?SOB\s+N[°ºoO\?]?\s*[:.]?\s*([0-9]{3,7})/i,
-    )
-
-    // Regex 4: Registrado no MAPA sob nº no cabeçalho
-    const mCabecalhoGenerico = cabecalhoTexto.match(
-      /REGISTRO\s+(?:NO\s+)?MAPA\s*(?:SOB\s+)?N?[°ºoO\?]?\s*[:.]?\s*([0-9]{3,7})/i,
-    )
-
-    // Regex 5: "sob nº 01119" ou "sob n° 01119" nas primeiras 50 linhas se estiver logo após MINISTÉRIO
-    const mCabecalhoSobNo = cabecalhoTexto.match(
-      /MINIST[ÉE]RIO\s+DA\s+AGRICULTURA[\s\S]{1,120}?SOB\s+N[°ºoO\?]?\s*[:.]?\s*([0-9]{3,7})/i,
-    )
-
-    if (mCabecalhoCompleto && mCabecalhoCompleto[1]) {
-      registroMapa = sanitizarRegistroMapa(mCabecalhoCompleto[1])
-    } else if (mCabecalhoMapa && mCabecalhoMapa[1]) {
-      registroMapa = sanitizarRegistroMapa(mCabecalhoMapa[1])
-    } else if (mCabecalhoLinha && mCabecalhoLinha[1]) {
-      registroMapa = sanitizarRegistroMapa(mCabecalhoLinha[1])
-    } else if (mCabecalhoGenerico && mCabecalhoGenerico[1]) {
-      registroMapa = sanitizarRegistroMapa(mCabecalhoGenerico[1])
-    } else if (mCabecalhoSobNo && mCabecalhoSobNo[1]) {
-      registroMapa = sanitizarRegistroMapa(mCabecalhoSobNo[1])
+    // Helper para verificar se um número capturado é de produto técnico
+    function isNumeroProdutoTecnico(numStr) {
+      if (!numStr) return true
+      const numLimpo = String(numStr).replace(/^0+/, '')
+      // Se o número citado for exatamente associado a "produto técnico" no texto
+      // Ex: "Glifosato Técnico Monsanto sob nº 01998", "produto técnico... sob nº 01998"
+      const regexGlifTec = new RegExp(
+        `(?:t[ée]cnico|glifosato\\s+t[ée]cnico)[\\s\\S]{1,100}?(?:sob\\s+n[°ºoO\\?]?\\s*[:.]?\\s*|n[°ºoO\\?]?\\s*[:.]?\\s*)0*${numLimpo}\\b`,
+        'i',
+      )
+      if (regexGlifTec.test(textoCompleto)) return true
+      const regexGlifTecAntes = new RegExp(`0*${numLimpo}\\b[\\s\\S]{1,60}?t[ée]cnico`, 'i')
+      if (regexGlifTecAntes.test(textoCompleto)) {
+        // Se a ocorrência foi dentro de FABRICANTE DO PRODUTO TÉCNICO
+        const idxSecaoTecnica = textoCompleto.search(/FABRICANTE\s+DO\s+PRODUTO\s+T[ÉE]CNICO/i)
+        const idxOcorr = textoCompleto.search(new RegExp(`0*${numLimpo}\\b`))
+        if (idxSecaoTecnica !== -1 && idxOcorr >= idxSecaoTecnica) return true
+      }
+      return false
     }
 
-    // Se ainda não encontrou no cabeçalho, procura no texto inteiro com exclusão estrita de produto técnico
+    // Regex 1: Cabeçalho canônico completo com Ministério da Agricultura e Pecuária/Abastecimento + quebras + MAPA sob nº
+    // Ex: "REGISTRADO NO MINISTÉRIO DA AGRICULTURA E PECUÁRIA\nMAPA SOB N° 01119"
+    // Ex: "Registrado no Ministério da Agricultura, Pecuária e Abastecimento – MAPA sob nº 03820"
+    // Ex: "Registrado no Ministério da Agricultura e Pecuária – MAPA sob nº 01119"
+    const mCab1 = cabecalhoTexto.match(
+      /REGISTRAD[OA]\s+NO\s+MINIST[ÉE]RIO\s+DA\s+AGRICULTURA[\s\S]{0,180}?(?:MAPA\s*)?SOB\s+(?:O\s+)?N[°ºoO\?]?\s*[:.]?\s*([0-9]{3,7})/i,
+    )
+
+    // Regex 2: "MAPA SOB N° 01119" ou "MAPA SOB O Nº 01119" no cabeçalho
+    const mCab2 = cabecalhoTexto.match(
+      /(?:^|[\r\n\s|#*])MAPA\s+(?:SOB\s+(?:O\s+)?)?N[°ºoO\?]?\s*[:.]?\s*([0-9]{3,7})/i,
+    )
+
+    // Regex 3: "REGISTRO MAPA Nº 01119" ou "REGISTRO NO MAPA SOB Nº 01119"
+    const mCab3 = cabecalhoTexto.match(
+      /REGISTRO\s+(?:NO\s+)?MAPA\s*(?:SOB\s+(?:O\s+)?)?N?[°ºoO\?]?\s*[:.]?\s*([0-9]{3,7})/i,
+    )
+
+    // Regex 4: "REGISTRADO NO ... SOB N° 01119"
+    const mCab4 = cabecalhoTexto.match(
+      /REGISTRAD[OA][\s\S]{1,120}?(?:MAPA\s*)?SOB\s+(?:O\s+)?N[°ºoO\?]?\s*[:.]?\s*([0-9]{3,7})/i,
+    )
+
+    // Regex 5: "MINISTÉRIO DA AGRICULTURA ... Nº 01119"
+    const mCab5 = cabecalhoTexto.match(
+      /MINIST[ÉE]RIO\s+DA\s+AGRICULTURA[\s\S]{1,150}?(?:N[°ºoO\?]?|NÚMERO)\s*[:.]?\s*([0-9]{3,7})/i,
+    )
+
+    // Regex 6: Frase simples "sob o nº 01119" ou "sob nº 01119" no cabeçalho inicial
+    const mCab6 = cabecalhoTexto.match(
+      /(?:^|[\r\n\s|#*])(?:SOB\s+(?:O\s+)?)N[°ºoO\?]?\s*[:.]?\s*([0-9]{3,7})/i,
+    )
+
+    if (mCab1 && mCab1[1] && !isNumeroProdutoTecnico(mCab1[1])) {
+      registroMapa = sanitizarRegistroMapa(mCab1[1])
+    } else if (mCab2 && mCab2[1] && !isNumeroProdutoTecnico(mCab2[1])) {
+      registroMapa = sanitizarRegistroMapa(mCab2[1])
+    } else if (mCab3 && mCab3[1] && !isNumeroProdutoTecnico(mCab3[1])) {
+      registroMapa = sanitizarRegistroMapa(mCab3[1])
+    } else if (mCab4 && mCab4[1] && !isNumeroProdutoTecnico(mCab4[1])) {
+      registroMapa = sanitizarRegistroMapa(mCab4[1])
+    } else if (mCab5 && mCab5[1] && !isNumeroProdutoTecnico(mCab5[1])) {
+      registroMapa = sanitizarRegistroMapa(mCab5[1])
+    } else if (mCab6 && mCab6[1] && !isNumeroProdutoTecnico(mCab6[1])) {
+      registroMapa = sanitizarRegistroMapa(mCab6[1])
+    }
+
+    // Se ainda não encontrou no cabeçalho cortado, busca no texto completo aplicando exclusão seletiva
     if (!registroMapa) {
-      // Remove da busca trechos de produto técnico
-      const textoSemProdutoTecnico = textoCompleto
-        .replace(
-          /FABRICANTE\s+DO\s+PRODUTO\s+T[ÉE]CNICO[\s\S]*?(?=FORMULADOR|MANIPULADOR|IMPORTADOR|TITULAR|$)/gi,
-          '',
-        )
-        .replace(/[^\n\r]*t[ée]cnico[^\n\r]*sob\s+n[°ºoO\?]?\s*[:.]?\s*[0-9]{3,7}/gi, '')
-        .replace(/[^\n\r]*t[ée]cnico[^\n\r]*mapa[^\n\r]*[0-9]{3,7}/gi, '')
-
-      const m1 = textoSemProdutoTecnico.match(
-        /REGISTRADO\s+NO\s+MINIST[ÉE]RIO\s+DA\s+AGRICULTURA[^\n\r]*?[\r\n\s]+(?:#*\s*)*(?:MAPA\s+)?SOB\s+N[°ºoO\?]?\s*[:.]?\s*([0-9]{3,7})/i,
-      )
-      const m2 = textoSemProdutoTecnico.match(/MAPA\s+SOB\s+N[°ºoO\?]?\s*[:.]?\s*([0-9]{3,7})/i)
-      const m3 = textoSemProdutoTecnico.match(
-        /REGISTRO\s+(?:NO\s+)?MAPA\s*(?:SOB\s+)?N?[°ºoO\?]?\s*[:.]?\s*([0-9]{3,7})/i,
-      )
-      const m4 = textoSemProdutoTecnico.match(
-        /MINIST[ÉE]RIO\s+DA\s+AGRICULTURA[^\n\r]*N[°ºoO\?]?\s*[:.]?\s*([0-9]{3,7})/i,
+      // Remove da busca apenas a seção estrita de FABRICANTE DO PRODUTO TÉCNICO
+      const textoSemSecaoTecnica = textoCompleto.replace(
+        /FABRICANTE\s+DO\s+PRODUTO\s+T[ÉE]CNICO[\s\S]*?(?=FORMULADOR|MANIPULADOR|IMPORTADOR|TITULAR\s+DO\s+REGISTRO|CONTE[ÚU]DO|CLASSE|INSTRU[ÇC][ÕO]ES|$)/gi,
+        '\n\n',
       )
 
-      if (m1 && m1[1]) {
-        registroMapa = sanitizarRegistroMapa(m1[1])
-      } else if (m2 && m2[1]) {
-        registroMapa = sanitizarRegistroMapa(m2[1])
-      } else if (m3 && m3[1]) {
-        registroMapa = sanitizarRegistroMapa(m3[1])
-      } else if (m4 && m4[1]) {
-        registroMapa = sanitizarRegistroMapa(m4[1])
+      const mFall1 = textoSemSecaoTecnica.match(
+        /REGISTRAD[OA]\s+NO\s+MINIST[ÉE]RIO\s+DA\s+AGRICULTURA[\s\S]{0,180}?(?:MAPA\s*)?SOB\s+(?:O\s+)?N[°ºoO\?]?\s*[:.]?\s*([0-9]{3,7})/i,
+      )
+      const mFall2 = textoSemSecaoTecnica.match(
+        /(?:^|[\r\n\s|#*])MAPA\s+(?:SOB\s+(?:O\s+)?)?N[°ºoO\?]?\s*[:.]?\s*([0-9]{3,7})/i,
+      )
+      const mFall3 = textoSemSecaoTecnica.match(
+        /REGISTRO\s+(?:NO\s+)?MAPA\s*(?:SOB\s+(?:O\s+)?)?N?[°ºoO\?]?\s*[:.]?\s*([0-9]{3,7})/i,
+      )
+      const mFall4 = textoSemSecaoTecnica.match(
+        /MINIST[ÉE]RIO\s+DA\s+AGRICULTURA[\s\S]{1,150}?(?:N[°ºoO\?]?|NÚMERO)\s*[:.]?\s*([0-9]{3,7})/i,
+      )
+
+      if (mFall1 && mFall1[1] && !isNumeroProdutoTecnico(mFall1[1])) {
+        registroMapa = sanitizarRegistroMapa(mFall1[1])
+      } else if (mFall2 && mFall2[1] && !isNumeroProdutoTecnico(mFall2[1])) {
+        registroMapa = sanitizarRegistroMapa(mFall2[1])
+      } else if (mFall3 && mFall3[1] && !isNumeroProdutoTecnico(mFall3[1])) {
+        registroMapa = sanitizarRegistroMapa(mFall3[1])
+      } else if (mFall4 && mFall4[1] && !isNumeroProdutoTecnico(mFall4[1])) {
+        registroMapa = sanitizarRegistroMapa(mFall4[1])
       }
     }
 
@@ -217,7 +247,10 @@ routerAdd('POST', '/backend/v1/bula/analisar-pdf', (e) => {
     let nomeComercial = ''
     // O nome correto pode estar na linha:
     // "Produto comercial: ROUNDUP ORIGINAL® MAIS corresponde a 577 g/L do sal de di-amônio..."
-    const prodComMatch = textoCompleto.match(/Produto\s+comercial\s*:\s*([^\n\r]+)/i)
+    // "Marca Comercial: ROUNDUP ORIGINAL® MAIS"
+    const prodComMatch = textoCompleto.match(
+      /(?:Produto\s+comercial|Marca\s+comercial)\s*:\s*([^\n\r]+)/i,
+    )
     if (prodComMatch && prodComMatch[1]) {
       const rawProd = prodComMatch[1]
       const cleaned = sanitizarNomeComercial(rawProd)
@@ -255,7 +288,9 @@ routerAdd('POST', '/backend/v1/bula/analisar-pdf', (e) => {
             cleaned.length >= 3 &&
             !/^[°º\d\s\-\.\/]+$/.test(cleaned) &&
             !cleaned.toUpperCase().includes('MAPA') &&
-            !cleaned.toUpperCase().includes('MINISTÉRIO')
+            !cleaned.toUpperCase().includes('MINISTÉRIO') &&
+            !cleaned.toUpperCase().includes('INSTRUÇÕES') &&
+            !cleaned.toUpperCase().includes('RECEITUÁRIO')
           ) {
             nomeComercial = cleaned
             break

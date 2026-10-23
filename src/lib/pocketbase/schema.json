@@ -29,29 +29,21 @@
           "type": "autodate",
           "required": false,
           "system": false,
-          "autodateTriggers": [
-            "onCreate"
-          ]
+          "autodateTriggers": ["onCreate"]
         },
         {
           "name": "updated",
           "type": "autodate",
           "required": false,
           "system": false,
-          "autodateTriggers": [
-            "onCreate",
-            "onUpdate"
-          ]
+          "autodateTriggers": ["onCreate", "onUpdate"]
         },
         {
           "name": "role",
           "type": "select",
           "required": false,
           "system": false,
-          "selectValues": [
-            "admin",
-            "analista"
-          ]
+          "selectValues": ["admin", "analista"]
         }
       ],
       "indexes": [
@@ -99,24 +91,17 @@
           "type": "autodate",
           "required": false,
           "system": false,
-          "autodateTriggers": [
-            "onCreate"
-          ]
+          "autodateTriggers": ["onCreate"]
         },
         {
           "name": "updated",
           "type": "autodate",
           "required": false,
           "system": false,
-          "autodateTriggers": [
-            "onCreate",
-            "onUpdate"
-          ]
+          "autodateTriggers": ["onCreate", "onUpdate"]
         }
       ],
-      "indexes": [
-        "CREATE INDEX idx_regras_ncm ON regras_ncm_embalagem (ncm)"
-      ]
+      "indexes": ["CREATE INDEX idx_regras_ncm ON regras_ncm_embalagem (ncm)"]
     },
     {
       "name": "dicionario_principios_ativos",
@@ -176,19 +161,14 @@
           "type": "autodate",
           "required": false,
           "system": false,
-          "autodateTriggers": [
-            "onCreate"
-          ]
+          "autodateTriggers": ["onCreate"]
         },
         {
           "name": "updated",
           "type": "autodate",
           "required": false,
           "system": false,
-          "autodateTriggers": [
-            "onCreate",
-            "onUpdate"
-          ]
+          "autodateTriggers": ["onCreate", "onUpdate"]
         },
         {
           "name": "principio_ativo_chave",
@@ -207,10 +187,7 @@
           "type": "select",
           "required": false,
           "system": false,
-          "selectValues": [
-            "SIM",
-            "NÃO"
-          ]
+          "selectValues": ["SIM", "NÃO"]
         },
         {
           "name": "ncm_padrao_referencia",
@@ -342,39 +319,28 @@
           "type": "select",
           "required": false,
           "system": false,
-          "selectValues": [
-            "aprovado",
-            "reprovado",
-            "pendente"
-          ]
+          "selectValues": ["aprovado", "reprovado", "pendente"]
         },
         {
           "name": "data_inclusao",
           "type": "autodate",
           "required": false,
           "system": false,
-          "autodateTriggers": [
-            "onCreate"
-          ]
+          "autodateTriggers": ["onCreate"]
         },
         {
           "name": "created",
           "type": "autodate",
           "required": false,
           "system": false,
-          "autodateTriggers": [
-            "onCreate"
-          ]
+          "autodateTriggers": ["onCreate"]
         },
         {
           "name": "updated",
           "type": "autodate",
           "required": false,
           "system": false,
-          "autodateTriggers": [
-            "onCreate",
-            "onUpdate"
-          ]
+          "autodateTriggers": ["onCreate", "onUpdate"]
         },
         {
           "name": "origem_base",
@@ -446,13 +412,7 @@
           "type": "select",
           "required": false,
           "system": false,
-          "selectValues": [
-            "L",
-            "KG",
-            "SC",
-            "UN",
-            "DOSES"
-          ]
+          "selectValues": ["L", "KG", "SC", "UN", "DOSES"]
         },
         {
           "name": "macro_grupo",
@@ -471,10 +431,7 @@
           "type": "select",
           "required": false,
           "system": false,
-          "selectValues": [
-            "SIM",
-            "NÃO"
-          ]
+          "selectValues": ["SIM", "NÃO"]
         },
         {
           "name": "ncm_padrao",
@@ -647,10 +604,7 @@
           "type": "select",
           "required": false,
           "system": false,
-          "selectValues": [
-            "cumulativo",
-            "nao_cumulativo"
-          ]
+          "selectValues": ["cumulativo", "nao_cumulativo"]
         },
         {
           "name": "aliquota_ibs",
@@ -681,24 +635,17 @@
           "type": "autodate",
           "required": false,
           "system": false,
-          "autodateTriggers": [
-            "onCreate"
-          ]
+          "autodateTriggers": ["onCreate"]
         },
         {
           "name": "updated",
           "type": "autodate",
           "required": false,
           "system": false,
-          "autodateTriggers": [
-            "onCreate",
-            "onUpdate"
-          ]
+          "autodateTriggers": ["onCreate", "onUpdate"]
         }
       ],
-      "indexes": [
-        "CREATE UNIQUE INDEX idx_param_fiscal_ncm ON parametrizacao_fiscal (ncm)"
-      ]
+      "indexes": ["CREATE UNIQUE INDEX idx_param_fiscal_ncm ON parametrizacao_fiscal (ncm)"]
     },
     {
       "name": "log_validacoes",
@@ -764,33 +711,24 @@
           "type": "autodate",
           "required": false,
           "system": false,
-          "autodateTriggers": [
-            "onCreate"
-          ]
+          "autodateTriggers": ["onCreate"]
         },
         {
           "name": "created",
           "type": "autodate",
           "required": false,
           "system": false,
-          "autodateTriggers": [
-            "onCreate"
-          ]
+          "autodateTriggers": ["onCreate"]
         },
         {
           "name": "updated",
           "type": "autodate",
           "required": false,
           "system": false,
-          "autodateTriggers": [
-            "onCreate",
-            "onUpdate"
-          ]
+          "autodateTriggers": ["onCreate", "onUpdate"]
         }
       ],
-      "indexes": [
-        "CREATE INDEX idx_log_validacoes_data ON log_validacoes (data_validacao DESC)"
-      ]
+      "indexes": ["CREATE INDEX idx_log_validacoes_data ON log_validacoes (data_validacao DESC)"]
     },
     {
       "name": "sincronizacao_historico",
@@ -862,19 +800,14 @@
           "type": "autodate",
           "required": false,
           "system": false,
-          "autodateTriggers": [
-            "onCreate"
-          ]
+          "autodateTriggers": ["onCreate"]
         },
         {
           "name": "updated",
           "type": "autodate",
           "required": false,
           "system": false,
-          "autodateTriggers": [
-            "onCreate",
-            "onUpdate"
-          ]
+          "autodateTriggers": ["onCreate", "onUpdate"]
         },
         {
           "name": "itens_relatorio",
@@ -921,21 +854,14 @@
           "type": "select",
           "required": true,
           "system": false,
-          "selectValues": [
-            "admin",
-            "analista"
-          ]
+          "selectValues": ["admin", "analista"]
         },
         {
           "name": "status",
           "type": "select",
           "required": true,
           "system": false,
-          "selectValues": [
-            "pendente",
-            "aceito",
-            "cancelado"
-          ]
+          "selectValues": ["pendente", "aceito", "cancelado"]
         },
         {
           "name": "token_convite",
@@ -960,19 +886,14 @@
           "type": "autodate",
           "required": false,
           "system": false,
-          "autodateTriggers": [
-            "onCreate"
-          ]
+          "autodateTriggers": ["onCreate"]
         },
         {
           "name": "updated",
           "type": "autodate",
           "required": false,
           "system": false,
-          "autodateTriggers": [
-            "onCreate",
-            "onUpdate"
-          ]
+          "autodateTriggers": ["onCreate", "onUpdate"]
         }
       ],
       "indexes": [
@@ -1093,19 +1014,14 @@
           "type": "autodate",
           "required": false,
           "system": false,
-          "autodateTriggers": [
-            "onCreate"
-          ]
+          "autodateTriggers": ["onCreate"]
         },
         {
           "name": "updated",
           "type": "autodate",
           "required": false,
           "system": false,
-          "autodateTriggers": [
-            "onCreate",
-            "onUpdate"
-          ]
+          "autodateTriggers": ["onCreate", "onUpdate"]
         },
         {
           "name": "codigo",
@@ -1252,19 +1168,14 @@
           "type": "autodate",
           "required": false,
           "system": false,
-          "autodateTriggers": [
-            "onCreate"
-          ]
+          "autodateTriggers": ["onCreate"]
         },
         {
           "name": "updated",
           "type": "autodate",
           "required": false,
           "system": false,
-          "autodateTriggers": [
-            "onCreate",
-            "onUpdate"
-          ]
+          "autodateTriggers": ["onCreate", "onUpdate"]
         },
         {
           "name": "codigo",
@@ -1374,19 +1285,14 @@
           "type": "autodate",
           "required": false,
           "system": false,
-          "autodateTriggers": [
-            "onCreate"
-          ]
+          "autodateTriggers": ["onCreate"]
         },
         {
           "name": "updated",
           "type": "autodate",
           "required": false,
           "system": false,
-          "autodateTriggers": [
-            "onCreate",
-            "onUpdate"
-          ]
+          "autodateTriggers": ["onCreate", "onUpdate"]
         },
         {
           "name": "codigo",
@@ -1491,19 +1397,14 @@
           "type": "autodate",
           "required": false,
           "system": false,
-          "autodateTriggers": [
-            "onCreate"
-          ]
+          "autodateTriggers": ["onCreate"]
         },
         {
           "name": "updated",
           "type": "autodate",
           "required": false,
           "system": false,
-          "autodateTriggers": [
-            "onCreate",
-            "onUpdate"
-          ]
+          "autodateTriggers": ["onCreate", "onUpdate"]
         },
         {
           "name": "codigo",
@@ -1601,19 +1502,14 @@
           "type": "autodate",
           "required": false,
           "system": false,
-          "autodateTriggers": [
-            "onCreate"
-          ]
+          "autodateTriggers": ["onCreate"]
         },
         {
           "name": "updated",
           "type": "autodate",
           "required": false,
           "system": false,
-          "autodateTriggers": [
-            "onCreate",
-            "onUpdate"
-          ]
+          "autodateTriggers": ["onCreate", "onUpdate"]
         },
         {
           "name": "codigo",
@@ -1728,19 +1624,14 @@
           "type": "autodate",
           "required": false,
           "system": false,
-          "autodateTriggers": [
-            "onCreate"
-          ]
+          "autodateTriggers": ["onCreate"]
         },
         {
           "name": "updated",
           "type": "autodate",
           "required": false,
           "system": false,
-          "autodateTriggers": [
-            "onCreate",
-            "onUpdate"
-          ]
+          "autodateTriggers": ["onCreate", "onUpdate"]
         },
         {
           "name": "codigo",
@@ -1844,19 +1735,14 @@
           "type": "autodate",
           "required": false,
           "system": false,
-          "autodateTriggers": [
-            "onCreate"
-          ]
+          "autodateTriggers": ["onCreate"]
         },
         {
           "name": "updated",
           "type": "autodate",
           "required": false,
           "system": false,
-          "autodateTriggers": [
-            "onCreate",
-            "onUpdate"
-          ]
+          "autodateTriggers": ["onCreate", "onUpdate"]
         },
         {
           "name": "codigo",
