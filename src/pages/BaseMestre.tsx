@@ -72,6 +72,7 @@ export function BaseMestre() {
   const [produtos, setProdutos] = useState<BaseMestreProduto[]>([])
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState(initialQuery)
+  const [acondicionamentoFilter, setAcondicionamentoFilter] = useState<string>('todos')
   const [macroGrupoFilter, setMacroGrupoFilter] = useState<string>('todos')
   const [tipoProdutoFilter, setTipoProdutoFilter] = useState<string>('todos')
   const [nota2Filter, setNota2Filter] = useState<string>('todos')
@@ -137,8 +138,11 @@ export function BaseMestre() {
     if (search.trim()) {
       const clean = search.trim().replace(/'/g, "\\'")
       filters.push(
-        `(nome_completo ~ '${clean}' || marca_padronizada ~ '${clean}' || registro_mapa ~ '${clean}' || ncm_padrao ~ '${clean}' || titular_fabricante ~ '${clean}' || principio_ativo ~ '${clean}')`,
+        `(nome_completo ~ '${clean}' || marca_padronizada ~ '${clean}' || registro_mapa ~ '${clean}' || ncm_especifica ~ '${clean}' || ncm_padrao ~ '${clean}' || titular_fabricante ~ '${clean}' || principio_ativo ~ '${clean}' || forma_acondicionamento ~ '${clean}' || embalagem_original ~ '${clean}')`,
       )
+    }
+    if (acondicionamentoFilter !== 'todos') {
+      filters.push(`forma_acondicionamento = '${acondicionamentoFilter.replace(/'/g, "\\'")}'`)
     }
     if (macroGrupoFilter !== 'todos') {
       filters.push(`macro_grupo = '${macroGrupoFilter.replace(/'/g, "\\'")}'`)
@@ -159,7 +163,15 @@ export function BaseMestre() {
       }
     }
     return filters.join(' && ')
-  }, [paIdFilter, search, macroGrupoFilter, tipoProdutoFilter, nota2Filter, statusPisFilter])
+  }, [
+    paIdFilter,
+    search,
+    acondicionamentoFilter,
+    macroGrupoFilter,
+    tipoProdutoFilter,
+    nota2Filter,
+    statusPisFilter,
+  ])
 
   // Carrega o primeiro lote (reset da lista ao mudar filtros ou busca)
   const carregarProdutos = useCallback(async () => {
@@ -432,25 +444,19 @@ export function BaseMestre() {
 
     const headers = [
       'id',
-      'nome_completo',
+      'produto',
       'marca_padronizada',
-      'tipo_produto',
-      'embalagem',
-      'unidade',
-      'principio_ativo',
-      'macro_grupo',
-      'sub_grupo',
-      'nota_subpos_2',
-      'ncm_padrao',
-      'ncm_faixa1_ate_300g',
-      'ncm_faixa2_300g_a_7_5kg',
-      'ncm_faixa3_7_5kg_a_10kg',
-      'ncm_faixa4_acima_10kg',
-      'regra_tipi',
       'registro_mapa',
-      'sistema_norma_mapa',
-      'titular_fabricante',
-      'origem_base',
+      'principio_ativo',
+      'fabricante',
+      'tipo_formulacao',
+      'quantidade_embalagem_principal',
+      'unidade_medida_principal',
+      'forma_acondicionamento',
+      'embalagem_original',
+      'ncm_especifica',
+      'ncm_padrao',
+      'nota_subpos_2',
       'status_pis_cofins',
       'aliquota_ate_mar2026',
       'aliquota_pos_abr2026_real',
@@ -458,31 +464,33 @@ export function BaseMestre() {
       'cst_saida',
       'cst_entrada',
       'ibs_cbs_2027',
+      'macro_grupo',
+      'sub_grupo',
+      'origem_base',
       'url_oficial',
     ]
 
     const rows = listToExport.map((p) => {
+      const qtdEmb = p.quantidade_embalagem_principal ?? ''
+      const unEmb = p.unidade_medida_principal || p.unidade || 'L'
+      const acond = p.forma_acondicionamento || ''
+      const ncmEsp = formatarNcmMascara(p.ncm_especifica || p.ncm_padrao || p.ncm)
+
       return [
         `"${p.id}"`,
         `"${(p.nome_completo || p.nome_produto || '').replace(/"/g, '""')}"`,
         `"${(p.marca_padronizada || p.nome_produto || '').replace(/"/g, '""')}"`,
-        `"${(p.tipo_produto || 'Produto Formulado Comercial').replace(/"/g, '""')}"`,
-        `"${(p.embalagem || '').replace(/"/g, '""')}"`,
-        `"${p.unidade || 'L'}"`,
-        `"${(p.principio_ativo || '').replace(/"/g, '""')}"`,
-        `"${(p.macro_grupo || 'Defensivos').replace(/"/g, '""')}"`,
-        `"${(p.sub_grupo || '').replace(/"/g, '""')}"`,
-        `"${p.nota_subpos_2 || 'NÃO'}"`,
-        `"${formatarNcmMascara(p.ncm_padrao || p.ncm)}"`,
-        `"${formatarNcmMascara(p.ncm_faixa1_ate_300g || p.ncm_padrao || p.ncm)}"`,
-        `"${formatarNcmMascara(p.ncm_faixa2_300g_a_7_5kg || p.ncm_padrao || p.ncm)}"`,
-        `"${formatarNcmMascara(p.ncm_faixa3_7_5kg_a_10kg || p.ncm_padrao || p.ncm)}"`,
-        `"${formatarNcmMascara(p.ncm_faixa4_acima_10kg || p.ncm_padrao || p.ncm)}"`,
-        `"${(p.regra_tipi || '').replace(/"/g, '""')}"`,
         `"${sanitizarRegistroMapa(p.registro_mapa)}"`,
-        `"${(p.sistema_norma_mapa || '').replace(/"/g, '""')}"`,
+        `"${(p.principio_ativo || '').replace(/"/g, '""')}"`,
         `"${(p.titular_fabricante || p.fabricante || '').replace(/"/g, '""')}"`,
-        `"${(p.origem_base || '').replace(/"/g, '""')}"`,
+        `"${(p.tipo_produto || 'Produto Formulado Comercial').replace(/"/g, '""')}"`,
+        `"${qtdEmb}"`,
+        `"${unEmb}"`,
+        `"${acond.replace(/"/g, '""')}"`,
+        `"${(p.embalagem_original || p.embalagem || '').replace(/"/g, '""')}"`,
+        `"${ncmEsp}"`,
+        `"${formatarNcmMascara(p.ncm_padrao || p.ncm)}"`,
+        `"${p.nota_subpos_2 || 'NÃO'}"`,
         `"${(p.status_pis_cofins || '').replace(/"/g, '""')}"`,
         `"${(p.aliquota_ate_mar2026 || '').replace(/"/g, '""')}"`,
         `"${(p.aliquota_pos_abr2026_real || '').replace(/"/g, '""')}"`,
@@ -490,6 +498,9 @@ export function BaseMestre() {
         `"${(p.cst_saida || 'CST 06').replace(/"/g, '""')}"`,
         `"${(p.cst_entrada || 'CST 73').replace(/"/g, '""')}"`,
         `"${(p.ibs_cbs_2027 || '').replace(/"/g, '""')}"`,
+        `"${(p.macro_grupo || 'Defensivos').replace(/"/g, '""')}"`,
+        `"${(p.sub_grupo || '').replace(/"/g, '""')}"`,
+        `"${(p.origem_base || '').replace(/"/g, '""')}"`,
         `"${(p.url_oficial || '').replace(/"/g, '""')}"`,
       ].join(';')
     })
@@ -530,19 +541,29 @@ export function BaseMestre() {
     if (!editingItem) return
     setSavingEdit(true)
     try {
-      // Re-executa motor canônico se necessário para manter integridade dos 28 campos
+      // Re-executa motor canônico se necessário para manter integridade dos campos
+      const ncmEspFmt = formatarNcmMascara(
+        editingItem.ncm_especifica || editingItem.ncm_padrao || editingItem.ncm,
+      )
+      const ncmEspLimpo = ncmEspFmt.replace(/\D/g, '')
+
       const reprocessado = executarMotorCanonicoFrontend({
         nome_completo: editingItem.nome_completo || editingItem.nome_produto,
         marca_padronizada: editingItem.marca_padronizada,
         tipo_produto: editingItem.tipo_produto,
-        embalagem: editingItem.embalagem,
-        unidade: editingItem.unidade,
+        embalagem:
+          editingItem.embalagem ||
+          `${editingItem.quantidade_embalagem_principal || ''} ${editingItem.unidade_medida_principal || editingItem.unidade || 'L'} (${editingItem.forma_acondicionamento || ''})`.trim(),
+        unidade:
+          (editingItem.unidade_medida_principal as UnidadeFisicaCanonica) ||
+          editingItem.unidade ||
+          'L',
         principio_ativo: editingItem.principio_ativo,
         macro_grupo: editingItem.macro_grupo,
         sub_grupo: editingItem.sub_grupo,
         registro_mapa: editingItem.registro_mapa,
         titular_fabricante: editingItem.titular_fabricante || editingItem.fabricante,
-        ncm_padrao: editingItem.ncm_padrao || editingItem.ncm,
+        ncm_padrao: ncmEspFmt,
         origem_base: editingItem.origem_base,
         url_oficial: editingItem.url_oficial,
       })
@@ -550,8 +571,19 @@ export function BaseMestre() {
       await atualizarProdutoBaseMestre(editingItem.id, {
         ...editingItem,
         ...reprocessado,
+        quantidade_embalagem_principal: editingItem.quantidade_embalagem_principal,
+        unidade_medida_principal:
+          editingItem.unidade_medida_principal || editingItem.unidade || 'L',
+        forma_acondicionamento: editingItem.forma_acondicionamento,
+        embalagem_original: editingItem.embalagem_original || editingItem.embalagem,
+        ncm_especifica: ncmEspFmt,
+        ncm_padrao: ncmEspFmt,
+        ncm: ncmEspLimpo,
       })
-      toast({ title: 'Produto Atualizado', description: 'Alterações gravadas no padrão canônico.' })
+      toast({
+        title: 'Produto Atualizado',
+        description: 'Alterações gravadas na Base Tributária por Embalagem Final.',
+      })
       setIsEditModalOpen(false)
       carregarProdutos()
     } catch (err: unknown) {
@@ -592,17 +624,17 @@ export function BaseMestre() {
           <div className="flex items-center gap-2 flex-wrap">
             <h2 className="text-xl font-bold text-[#1C2B1C] flex items-center gap-2">
               <Database className="w-6 h-6 text-[#1B5E20]" />
-              <span>Base Mestre de Produtos (Fins Tributários)</span>
+              <span>Base Tributária por Embalagem Final</span>
             </h2>
             <Badge className="bg-emerald-100 text-emerald-900 border border-emerald-300 font-medium text-[11px] py-0.5 px-2">
-              Espelho Tributário Oficial
+              1 Cadastro por Embalagem Comercial
             </Badge>
           </div>
           <p className="text-xs text-[#5A6D5A] mt-1">
-            Espelho cadastral com os parâmetros determinantes da tributação dos produtos (NCM padrão
-            e por faixas de embalagem, princípio ativo, fabricante, alíquotas PIS/COFINS temporais
-            LC 224/2025, CSTs e reforma IBS/CBS LC 214/2025) — alimentado automaticamente pelas
-            importações de bula e pela base consolidada ({totalCount} produtos cadastrados).
+            Cadastro mestre tributário detalhado por embalagem final comercializada: quantidade,
+            unidade, forma de acondicionamento, NCM específica da embalagem, princípio ativo,
+            fabricante, perfil PIS/COFINS (LC 224/2025), CST saída/entrada e reforma IBS/CBS (
+            {totalCount} embalagens cadastradas).
           </p>
         </div>
 
@@ -927,7 +959,32 @@ export function BaseMestre() {
             />
           </div>
 
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 w-full md:w-auto">
+          <div className="grid grid-cols-2 sm:grid-cols-5 gap-2 w-full md:w-auto">
+            {/* Filtro por Forma de Acondicionamento */}
+            <Select
+              value={acondicionamentoFilter}
+              onValueChange={(val) => {
+                setAcondicionamentoFilter(val)
+              }}
+            >
+              <SelectTrigger className="h-10 text-xs border-[#DCE5DC]">
+                <SelectValue placeholder="Acondicionamento" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="todos">Todos Acondicionamentos</SelectItem>
+                <SelectItem value="Bombona">Bombona</SelectItem>
+                <SelectItem value="Saco">Saco</SelectItem>
+                <SelectItem value="Tambor">Tambor</SelectItem>
+                <SelectItem value="Big Bag">Big Bag</SelectItem>
+                <SelectItem value="Frasco">Frasco</SelectItem>
+                <SelectItem value="Balde">Balde</SelectItem>
+                <SelectItem value="Galão">Galão</SelectItem>
+                <SelectItem value="Container / IBC">Container / IBC</SelectItem>
+                <SelectItem value="Caixa">Caixa</SelectItem>
+                <SelectItem value="Sache">Sache</SelectItem>
+              </SelectContent>
+            </Select>
+
             {/* Macro Grupo */}
             <Select
               value={macroGrupoFilter}
@@ -1035,39 +1092,37 @@ export function BaseMestre() {
                     />
                   </div>
                 </th>
-                <th className="py-3 px-3 font-semibold">Nome Comercial Completo</th>
-                <th className="py-3 px-3 font-semibold">Marca Padronizada</th>
-                <th className="py-3 px-3 font-semibold">Tipo Produto</th>
-                <th className="py-3 px-3 font-semibold">Embalagem</th>
-                <th className="py-3 px-3 font-semibold">Princípio Ativo</th>
-                <th className="py-3 px-3 font-semibold">Macro / Sub-Grupo</th>
-                <th className="py-3 px-3 font-semibold text-center">Nota 2</th>
-                <th className="py-3 px-3 font-semibold">NCM Padrão</th>
+                <th className="py-3 px-3 font-semibold">Produto</th>
                 <th className="py-3 px-3 font-semibold">Registro MAPA</th>
-                <th className="py-3 px-3 font-semibold">Titular / Fabricante</th>
+                <th className="py-3 px-3 font-semibold">Princípio Ativo</th>
+                <th className="py-3 px-3 font-semibold">Fabricante</th>
+                <th className="py-3 px-3 font-semibold">Formulação</th>
+                <th className="py-3 px-3 font-semibold">Quantidade</th>
+                <th className="py-3 px-3 font-semibold">Acondicionamento</th>
+                <th className="py-3 px-3 font-semibold">NCM Específica</th>
                 <th className="py-3 px-3 font-semibold">Status PIS/COFINS</th>
+                <th className="py-3 px-3 font-semibold">CST Saída/Entrada</th>
                 <th className="py-3 px-3 font-semibold text-right">Ação</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-[#F0F4F0]">
               {loading ? (
                 <tr>
-                  <td colSpan={13} className="py-12 text-center text-xs text-[#5A6D5A]">
+                  <td colSpan={12} className="py-12 text-center text-xs text-[#5A6D5A]">
                     <Loader2 className="w-6 h-6 animate-spin mx-auto text-[#1B5E20] mb-2" />
-                    Carregando produtos da Base Mestre Canônica...
+                    Carregando produtos da Base Tributária por Embalagem Final...
                   </td>
                 </tr>
               ) : produtos.length === 0 ? (
                 <tr>
-                  <td colSpan={13} className="py-12 text-center text-xs text-[#5A6D5A]">
-                    Nenhum produto cadastrado na Base Mestre com os critérios atuais.
+                  <td colSpan={12} className="py-12 text-center text-xs text-[#5A6D5A]">
+                    Nenhuma embalagem cadastrada na Base Tributária com os critérios atuais.
                   </td>
                 </tr>
               ) : (
                 produtos.map((p) => {
                   const isSelected = selectedIds.includes(p.id)
                   const isExpanded = Boolean(expandedRowIds[p.id])
-                  const isNota2 = p.nota_subpos_2 === 'SIM'
 
                   const isTributadoIntegral =
                     p.status_pis_cofins?.includes('Tributado Integralmente') ||
@@ -1075,6 +1130,22 @@ export function BaseMestre() {
                   const isCondicional =
                     p.status_pis_cofins?.includes('Condicional') ||
                     p.status_pis_cofins?.includes('5.630')
+
+                  // Quantidade e unidade da embalagem
+                  const qtdExibida =
+                    p.quantidade_embalagem_principal != null &&
+                    p.quantidade_embalagem_principal !== 0
+                      ? p.quantidade_embalagem_principal
+                      : p.embalagem || '—'
+                  const unExibida = p.unidade_medida_principal || p.unidade || 'L'
+
+                  // Forma de acondicionamento
+                  const acondExibido = p.forma_acondicionamento || 'Geral'
+
+                  // NCM específica com badge destacada
+                  const ncmEspecificaExibida = formatarNcmMascara(
+                    p.ncm_especifica || p.ncm_padrao || p.ncm,
+                  )
 
                   return (
                     <React.Fragment key={p.id}>
@@ -1098,7 +1169,7 @@ export function BaseMestre() {
                           </div>
                         </td>
 
-                        {/* Nome Comercial Completo */}
+                        {/* 1. Produto (Nome Comercial / Marca) */}
                         <td className="py-3 px-3 font-bold text-[#1C2B1C] max-w-[220px] truncate">
                           <div className="flex items-center gap-1.5">
                             <button
@@ -1109,7 +1180,7 @@ export function BaseMestre() {
                               }}
                               className="p-0.5 -ml-1 text-[#5A6D5A] hover:text-[#1B5E20] rounded hover:bg-emerald-50"
                               title={
-                                isExpanded ? 'Recolher detalhes' : 'Expandir detalhes dos 28 campos'
+                                isExpanded ? 'Recolher detalhes' : 'Expandir detalhes da embalagem'
                               }
                               aria-label={isExpanded ? 'Recolher detalhes' : 'Expandir detalhes'}
                             >
@@ -1119,78 +1190,79 @@ export function BaseMestre() {
                                 <ChevronDown className="w-3.5 h-3.5 flex-shrink-0" />
                               )}
                             </button>
-                            <span title={p.nome_completo || p.nome_produto} className="truncate">
-                              {p.nome_completo || p.nome_produto}
-                            </span>
+                            <div className="truncate">
+                              <span
+                                title={p.marca_padronizada || p.nome_produto || p.nome_completo}
+                                className="font-bold text-[#1C2B1C] block"
+                              >
+                                {p.marca_padronizada || p.nome_produto || p.nome_completo}
+                              </span>
+                              {p.nome_completo && p.nome_completo !== p.marca_padronizada && (
+                                <span className="text-[10px] text-[#5A6D5A] font-normal truncate block">
+                                  {p.nome_completo}
+                                </span>
+                              )}
+                            </div>
                           </div>
                         </td>
 
-                        {/* Marca Comercial Padronizada */}
-                        <td className="py-3 px-3 font-semibold text-emerald-950 whitespace-nowrap">
-                          {p.marca_padronizada || p.nome_produto || '—'}
+                        {/* 2. Registro MAPA */}
+                        <td className="py-3 px-3 font-mono text-[#1C2B1C] font-semibold whitespace-nowrap">
+                          {sanitizarRegistroMapa(p.registro_mapa)}
                         </td>
 
-                        {/* Tipo de Produto */}
+                        {/* 3. Princípio Ativo */}
+                        <td
+                          className="py-3 px-3 text-[#1C2B1C] max-w-[170px] truncate font-medium"
+                          title={p.principio_ativo}
+                        >
+                          {p.principio_ativo || '—'}
+                        </td>
+
+                        {/* 4. Fabricante */}
+                        <td
+                          className="py-3 px-3 text-[#5A6D5A] max-w-[160px] truncate"
+                          title={p.titular_fabricante || p.fabricante}
+                        >
+                          {p.titular_fabricante || p.fabricante || 'Não Informado'}
+                        </td>
+
+                        {/* 5. Formulação */}
                         <td className="py-3 px-3 text-[#1C2B1C] whitespace-nowrap">
                           <span className="text-[11px] text-[#5A6D5A] bg-[#F5F7F1] px-2 py-0.5 rounded-md">
                             {p.tipo_produto || 'Produto Formulado'}
                           </span>
                         </td>
 
-                        {/* Embalagem + Unidade */}
-                        <td className="py-3 px-3 text-[#1C2B1C] whitespace-nowrap">
-                          {p.embalagem || '—'}{' '}
-                          <span className="text-[10px] text-[#5A6D5A]">({p.unidade || 'L'})</span>
-                        </td>
-
-                        {/* Princípio Ativo */}
-                        <td
-                          className="py-3 px-3 text-[#1C2B1C] max-w-[180px] truncate font-medium"
-                          title={p.principio_ativo}
-                        >
-                          {p.principio_ativo || '—'}
-                        </td>
-
-                        {/* Macro-Grupo / Sub-Grupo */}
-                        <td className="py-3 px-3 text-[#5A6D5A] whitespace-nowrap">
-                          <span className="font-semibold text-[#1C2B1C]">
-                            {p.macro_grupo || 'Defensivos'}
-                          </span>
-                          {p.sub_grupo && (
-                            <span className="text-[10px] block text-[#5A6D5A]">{p.sub_grupo}</span>
-                          )}
-                        </td>
-
-                        {/* Nota Subpos. 2? */}
-                        <td className="py-3 px-3 text-center whitespace-nowrap">
-                          {isNota2 ? (
-                            <Badge className="bg-purple-100 text-purple-900 border border-purple-300 font-bold text-[10px] py-0 px-2">
-                              SIM (TIPI)
-                            </Badge>
+                        {/* 6. Quantidade (número + unidade) */}
+                        <td className="py-3 px-3 font-bold text-[#1C2B1C] whitespace-nowrap">
+                          {typeof qtdExibida === 'number' ? (
+                            <span>
+                              {qtdExibida}{' '}
+                              <span className="text-xs font-semibold text-[#5A6D5A]">
+                                {unExibida}
+                              </span>
+                            </span>
                           ) : (
-                            <span className="text-[#8A9A86] text-[11px]">NÃO</span>
+                            <span>{qtdExibida}</span>
                           )}
                         </td>
 
-                        {/* NCM Padrão Formatado 0000.00.00 */}
-                        <td className="py-3 px-3 font-mono font-bold text-[#1B5E20] whitespace-nowrap">
-                          {formatarNcmMascara(p.ncm_padrao || p.ncm)}
+                        {/* 7. Acondicionamento (badge) */}
+                        <td className="py-3 px-3 whitespace-nowrap">
+                          <Badge className="bg-sky-50 text-sky-900 border border-sky-300 font-semibold text-[11px] py-0.5 px-2">
+                            {acondExibido}
+                          </Badge>
                         </td>
 
-                        {/* Registro MAPA Formatado */}
-                        <td className="py-3 px-3 font-mono text-[#1C2B1C] font-semibold whitespace-nowrap">
-                          {sanitizarRegistroMapa(p.registro_mapa)}
+                        {/* 8. NCM Específica (badge destacada) */}
+                        <td className="py-3 px-3 whitespace-nowrap">
+                          <Badge className="bg-emerald-700 text-white border-0 shadow-sm font-mono font-bold text-[11px] py-0.5 px-2.5 tracking-wide">
+                            {ncmEspecificaExibida}
+                          </Badge>
                         </td>
 
-                        {/* Titular / Fabricante */}
-                        <td
-                          className="py-3 px-3 text-[#5A6D5A] max-w-[170px] truncate"
-                          title={p.titular_fabricante || p.fabricante}
-                        >
-                          {p.titular_fabricante || p.fabricante || 'Não Informado'}
-                        </td>
-
-                        {/* Status PIS/COFINS */}
+                        {/* 9. Status PIS/COFINS */}
                         <td className="py-3 px-3 whitespace-nowrap">
                           {isTributadoIntegral ? (
                             <Badge className="bg-amber-100 text-amber-900 border border-amber-300 text-[10px] py-0 px-1.5 font-medium">
@@ -1207,6 +1279,17 @@ export function BaseMestre() {
                           )}
                         </td>
 
+                        {/* 10. CST Saída/Entrada */}
+                        <td className="py-3 px-3 font-mono text-[11px] whitespace-nowrap text-[#1C2B1C]">
+                          <span className="font-semibold text-emerald-900">
+                            {p.cst_saida || 'CST 06'}
+                          </span>
+                          <span className="text-[#8A9A86] mx-1">/</span>
+                          <span className="text-blue-900 font-semibold">
+                            {p.cst_entrada || 'CST 73'}
+                          </span>
+                        </td>
+
                         {/* Ações */}
                         <td
                           className="py-3 px-3 text-right whitespace-nowrap"
@@ -1218,7 +1301,7 @@ export function BaseMestre() {
                               size="icon"
                               onClick={() => handleOpenEdit(p)}
                               className="h-7 w-7 text-[#5A6D5A] hover:text-[#1B5E20] hover:bg-emerald-50"
-                              title="Editar especificações do produto"
+                              title="Editar quantidade, unidade, acondicionamento e NCM da embalagem"
                             >
                               <Edit2 className="w-3.5 h-3.5" />
                             </Button>
@@ -1240,7 +1323,7 @@ export function BaseMestre() {
                               <div className="flex items-center justify-between border-b border-[#DCE5DC] pb-2">
                                 <span className="font-bold text-sm text-[#1C2B1C] flex items-center gap-2">
                                   <Scale className="w-4 h-4 text-[#1B5E20]" />
-                                  Espelho Tributário Canônico do Produto (Parâmetros Fiscais)
+                                  Espelho Tributário Detalhado da Embalagem Comercial
                                 </span>
                                 <div className="flex items-center gap-2">
                                   {p.url_oficial && (
@@ -1261,56 +1344,48 @@ export function BaseMestre() {
                               </div>
 
                               <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-4 gap-4">
-                                {/* Grupo 1: Classificação Aduaneira das 4 Faixas de Embalagem */}
+                                {/* Grupo 1: Embalagem Comercial e NCM Específica */}
                                 <div className="p-3 rounded-xl bg-white border border-[#DCE5DC] shadow-xs space-y-2">
                                   <div className="flex items-center gap-1.5 font-bold text-[#1B5E20] border-b border-emerald-100 pb-1">
                                     <Scale className="w-3.5 h-3.5" />
-                                    <span>Matriz das 4 Faixas de NCM (TIPI)</span>
+                                    <span>Embalagem Comercial & NCM</span>
                                   </div>
-                                  <div className="space-y-1 font-mono text-[11px]">
+                                  <div className="space-y-1 text-[11px]">
                                     <div className="flex justify-between">
-                                      <span className="text-[#5A6D5A]">Faixa 1 (≤300g/mL):</span>
+                                      <span className="text-[#5A6D5A]">Qtd Principal:</span>
                                       <span className="font-bold text-[#1C2B1C]">
-                                        {formatarNcmMascara(
-                                          p.ncm_faixa1_ate_300g || p.ncm_padrao || p.ncm,
-                                        )}
+                                        {p.quantidade_embalagem_principal ?? '—'}{' '}
+                                        {p.unidade_medida_principal || p.unidade || 'L'}
                                       </span>
                                     </div>
                                     <div className="flex justify-between">
-                                      <span className="text-[#5A6D5A]">
-                                        Faixa 2 (300g a 7,5kg):
-                                      </span>
-                                      <span className="font-bold text-[#1C2B1C]">
-                                        {formatarNcmMascara(
-                                          p.ncm_faixa2_300g_a_7_5kg || p.ncm_padrao || p.ncm,
-                                        )}
+                                      <span className="text-[#5A6D5A]">Acondicionamento:</span>
+                                      <span className="font-bold text-sky-900">
+                                        {p.forma_acondicionamento || '—'}
                                       </span>
                                     </div>
                                     <div className="flex justify-between">
-                                      <span className="text-[#5A6D5A]">Faixa 3 (7,5 a 10kg):</span>
-                                      <span className="font-bold text-[#1C2B1C]">
+                                      <span className="text-[#5A6D5A]">NCM Específica:</span>
+                                      <span className="font-mono font-bold text-[#1B5E20]">
                                         {formatarNcmMascara(
-                                          p.ncm_faixa3_7_5kg_a_10kg || p.ncm_padrao || p.ncm,
+                                          p.ncm_especifica || p.ncm_padrao || p.ncm,
                                         )}
                                       </span>
                                     </div>
-                                    <div className="flex justify-between">
-                                      <span className="text-[#5A6D5A]">
-                                        Faixa 4 (&gt;10kg/Granel):
+                                    <div className="pt-1 border-t border-emerald-50">
+                                      <span className="text-[#5A6D5A] block text-[10px]">
+                                        Texto Original da Embalagem:
                                       </span>
-                                      <span className="font-bold text-[#1C2B1C]">
-                                        {formatarNcmMascara(
-                                          p.ncm_faixa4_acima_10kg || p.ncm_padrao || p.ncm,
-                                        )}
+                                      <span className="text-[#1C2B1C] italic text-[11px] block break-words">
+                                        {p.embalagem_original || p.embalagem || '—'}
                                       </span>
                                     </div>
                                   </div>
                                   <p className="text-[10px] text-[#5A6D5A] pt-1 border-t border-emerald-50 italic">
                                     {p.regra_tipi ||
-                                      'Classificação aduaneira escalonada conforme normas da Receita Federal / TIPI.'}
+                                      'Classificação aduaneira por embalagem conforme normas da Receita Federal / TIPI.'}
                                   </p>
                                 </div>
-
                                 {/* Grupo 2: Motor Tributário PIS/COFINS (Transição LC 224/2025) */}
                                 <div className="p-3 rounded-xl bg-white border border-[#DCE5DC] shadow-xs space-y-2">
                                   <div className="flex items-center gap-1.5 font-bold text-amber-900 border-b border-amber-100 pb-1">
@@ -1484,26 +1559,31 @@ export function BaseMestre() {
             <DialogHeader>
               <DialogTitle className="text-base font-bold text-[#1C2B1C] flex items-center gap-2">
                 <Database className="w-5 h-5 text-[#1B5E20]" />
-                <span>Editar Produto no Padrão Canônico (28 Campos)</span>
+                <span>Editar Embalagem na Base Tributária</span>
               </DialogTitle>
               <DialogDescription className="text-xs text-[#5A6D5A]">
-                Atualize as especificações e o motor reclassificará deterministicamente as 4 faixas
-                de NCM e o regime tributário.
+                Ajuste os parâmetros da embalagem comercial: quantidade, unidade, forma de
+                acondicionamento e NCM específica.
               </DialogDescription>
             </DialogHeader>
 
             <form onSubmit={handleSaveEdit} className="space-y-4 py-2 text-xs">
               <div className="space-y-1">
                 <Label className="text-xs font-semibold text-[#1C2B1C]">
-                  Nome Comercial Completo (com embalagem) *
+                  Nome do Produto / Marca *
                 </Label>
                 <Input
                   required
-                  value={editingItem.nome_completo || editingItem.nome_produto || ''}
+                  value={
+                    editingItem.marca_padronizada ||
+                    editingItem.nome_produto ||
+                    editingItem.nome_completo ||
+                    ''
+                  }
                   onChange={(e) =>
                     setEditingItem({
                       ...editingItem,
-                      nome_completo: e.target.value,
+                      marca_padronizada: e.target.value,
                       nome_produto: e.target.value,
                     })
                   }
@@ -1511,119 +1591,100 @@ export function BaseMestre() {
                 />
               </div>
 
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              {/* Parâmetros da Embalagem: Quantidade, Unidade, Forma de Acondicionamento */}
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 p-3 bg-[#F5F7F1]/80 rounded-xl border border-[#DCE5DC]">
                 <div className="space-y-1">
                   <Label className="text-xs font-semibold text-[#1C2B1C]">
-                    Marca Padronizada (sem sufixos) *
+                    Quantidade Principal *
                   </Label>
                   <Input
+                    type="number"
+                    step="any"
                     required
-                    value={editingItem.marca_padronizada || ''}
-                    onChange={(e) =>
-                      setEditingItem({ ...editingItem, marca_padronizada: e.target.value })
-                    }
-                    className="h-9 text-xs border-[#DCE5DC]"
+                    value={editingItem.quantidade_embalagem_principal ?? ''}
+                    onChange={(e) => {
+                      const val = parseFloat(e.target.value)
+                      setEditingItem({
+                        ...editingItem,
+                        quantidade_embalagem_principal: isNaN(val) ? 0 : val,
+                      })
+                    }}
+                    placeholder="Ex: 5, 20, 1000"
+                    className="h-9 text-xs border-[#DCE5DC] bg-white font-bold"
                   />
                 </div>
                 <div className="space-y-1">
-                  <Label className="text-xs font-semibold text-[#1C2B1C]">Tipo de Produto *</Label>
+                  <Label className="text-xs font-semibold text-[#1C2B1C]">
+                    Unidade Principal *
+                  </Label>
                   <Select
-                    value={editingItem.tipo_produto || 'Produto Formulado Comercial'}
-                    onValueChange={(val: TipoProdutoCanonico) =>
-                      setEditingItem({ ...editingItem, tipo_produto: val })
+                    value={editingItem.unidade_medida_principal || editingItem.unidade || 'L'}
+                    onValueChange={(val: string) =>
+                      setEditingItem({
+                        ...editingItem,
+                        unidade_medida_principal: val,
+                        unidade: (val as UnidadeFisicaCanonica) || 'L',
+                      })
                     }
                   >
-                    <SelectTrigger className="h-9 text-xs border-[#DCE5DC]">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="Produto Formulado Comercial">
-                        Produto Formulado Comercial
-                      </SelectItem>
-                      <SelectItem value="Produto Técnico Industrial">
-                        Produto Técnico Industrial
-                      </SelectItem>
-                      <SelectItem value="Pré-Mistura Industrial">Pré-Mistura Industrial</SelectItem>
-                      <SelectItem value="Fertilizante Mineral / Organomineral">
-                        Fertilizante Mineral / Organomineral
-                      </SelectItem>
-                      <SelectItem value="Inoculante / Biológico">Inoculante / Biológico</SelectItem>
-                      <SelectItem value="Corretivo / Condicionador de Solo">
-                        Corretivo / Condicionador de Solo
-                      </SelectItem>
-                      <SelectItem value="Semente Certificada">Semente Certificada</SelectItem>
-                      <SelectItem value="Adjuvante / Espalhante Adesivo">
-                        Adjuvante / Espalhante Adesivo
-                      </SelectItem>
-                      <SelectItem value="Outros Insumos Químicos e Reagentes">
-                        Outros Insumos Químicos e Reagentes
-                      </SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-              </div>
-
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                <div className="space-y-1 sm:col-span-2">
-                  <Label className="text-xs font-semibold text-[#1C2B1C]">Embalagem *</Label>
-                  <Input
-                    required
-                    value={editingItem.embalagem || ''}
-                    onChange={(e) => setEditingItem({ ...editingItem, embalagem: e.target.value })}
-                    className="h-9 text-xs border-[#DCE5DC]"
-                  />
-                </div>
-                <div className="space-y-1">
-                  <Label className="text-xs font-semibold text-[#1C2B1C]">Unidade *</Label>
-                  <Select
-                    value={editingItem.unidade || 'L'}
-                    onValueChange={(val: UnidadeFisicaCanonica) =>
-                      setEditingItem({ ...editingItem, unidade: val })
-                    }
-                  >
-                    <SelectTrigger className="h-9 text-xs border-[#DCE5DC]">
+                    <SelectTrigger className="h-9 text-xs border-[#DCE5DC] bg-white font-bold">
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
                       <SelectItem value="L">L (Litros)</SelectItem>
                       <SelectItem value="KG">KG (Quilos)</SelectItem>
-                      <SelectItem value="SC">SC (Sacos)</SelectItem>
-                      <SelectItem value="UN">UN (Unidade)</SelectItem>
-                      <SelectItem value="DOSES">DOSES</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-1">
+                  <Label className="text-xs font-semibold text-[#1C2B1C]">
+                    Forma Acondicionamento *
+                  </Label>
+                  <Select
+                    value={editingItem.forma_acondicionamento || 'Bombona'}
+                    onValueChange={(val: string) =>
+                      setEditingItem({ ...editingItem, forma_acondicionamento: val })
+                    }
+                  >
+                    <SelectTrigger className="h-9 text-xs border-[#DCE5DC] bg-white font-semibold">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="Bombona">Bombona</SelectItem>
+                      <SelectItem value="Saco">Saco</SelectItem>
+                      <SelectItem value="Tambor">Tambor</SelectItem>
+                      <SelectItem value="Big Bag">Big Bag</SelectItem>
+                      <SelectItem value="Frasco">Frasco</SelectItem>
+                      <SelectItem value="Balde">Balde</SelectItem>
+                      <SelectItem value="Galão">Galão</SelectItem>
+                      <SelectItem value="Container / IBC">Container / IBC</SelectItem>
+                      <SelectItem value="Caixa">Caixa</SelectItem>
+                      <SelectItem value="Sache">Sache</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
               </div>
 
-              <div className="space-y-1">
-                <Label className="text-xs font-semibold text-[#1C2B1C]">
-                  Princípio Ativo / Garantias *
-                </Label>
-                <Input
-                  required
-                  value={editingItem.principio_ativo || ''}
-                  onChange={(e) =>
-                    setEditingItem({ ...editingItem, principio_ativo: e.target.value })
-                  }
-                  className="h-9 text-xs border-[#DCE5DC]"
-                />
-              </div>
-
+              {/* NCM Específica da Embalagem e Registro MAPA */}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div className="space-y-1">
                   <Label className="text-xs font-semibold text-[#1C2B1C]">
-                    NCM Padrão (0000.00.00) *
+                    NCM Específica da Embalagem (0000.00.00) *
                   </Label>
                   <Input
                     required
-                    value={editingItem.ncm_padrao || editingItem.ncm || ''}
+                    value={
+                      editingItem.ncm_especifica || editingItem.ncm_padrao || editingItem.ncm || ''
+                    }
                     onChange={(e) =>
                       setEditingItem({
                         ...editingItem,
+                        ncm_especifica: e.target.value,
                         ncm_padrao: e.target.value,
                         ncm: e.target.value.replace(/\D/g, ''),
                       })
                     }
+                    placeholder="Ex: 3808.93.24"
                     className="h-9 text-xs font-mono font-bold text-[#1B5E20] border-[#DCE5DC]"
                   />
                 </div>
@@ -1643,13 +1704,41 @@ export function BaseMestre() {
                 </div>
               </div>
 
+              <div className="space-y-1">
+                <Label className="text-xs font-semibold text-[#1C2B1C]">
+                  Texto Original da Embalagem (Bula / Rótulo)
+                </Label>
+                <Input
+                  value={editingItem.embalagem_original || editingItem.embalagem || ''}
+                  onChange={(e) =>
+                    setEditingItem({
+                      ...editingItem,
+                      embalagem_original: e.target.value,
+                      embalagem: e.target.value,
+                    })
+                  }
+                  placeholder="Ex: 4x5 L bombona plástica homologada"
+                  className="h-9 text-xs border-[#DCE5DC]"
+                />
+              </div>
+
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div className="space-y-1">
-                  <Label className="text-xs font-semibold text-[#1C2B1C]">
-                    Titular / Fabricante *
-                  </Label>
+                  <Label className="text-xs font-semibold text-[#1C2B1C]">Princípio Ativo *</Label>
                   <Input
                     required
+                    value={editingItem.principio_ativo || ''}
+                    onChange={(e) =>
+                      setEditingItem({ ...editingItem, principio_ativo: e.target.value })
+                    }
+                    className="h-9 text-xs border-[#DCE5DC]"
+                  />
+                </div>
+                <div className="space-y-1">
+                  <Label className="text-xs font-semibold text-[#1C2B1C]">
+                    Fabricante / Titular
+                  </Label>
+                  <Input
                     value={editingItem.titular_fabricante || editingItem.fabricante || ''}
                     onChange={(e) =>
                       setEditingItem({
@@ -1659,16 +1748,6 @@ export function BaseMestre() {
                       })
                     }
                     className="h-9 text-xs border-[#DCE5DC]"
-                  />
-                </div>
-                <div className="space-y-1">
-                  <Label className="text-xs font-semibold text-[#1C2B1C]">Origem na Base</Label>
-                  <Input
-                    value={editingItem.origem_base || 'PRE_CADASTRO_PORTAL'}
-                    onChange={(e) =>
-                      setEditingItem({ ...editingItem, origem_base: e.target.value })
-                    }
-                    className="h-9 text-xs font-mono border-[#DCE5DC]"
                   />
                 </div>
               </div>
@@ -1690,7 +1769,7 @@ export function BaseMestre() {
                   className="text-xs bg-[#1B5E20] hover:bg-[#2E7D32] text-white"
                 >
                   {savingEdit ? <Loader2 className="w-3.5 h-3.5 animate-spin mr-1" /> : null}
-                  Salvar e Recalcular Motor
+                  Salvar Alterações
                 </Button>
               </DialogFooter>
             </form>

@@ -1706,9 +1706,8 @@ routerAdd('POST', '/backend/v1/bula/gravar-pdf', (e) => {
       }
 
       // 8. Espelho Seletivo de Fins Tributários na BASE MESTRE (base_mestre)
-      // Grava apenas os campos que definem a tributação do produto:
-      // Identificação mínima + NCM, faixa TIPI, alíquotas temporalidade, CST, status PIS/COFINS, etc.
-      // SEM carregar detalhes analíticos de culturas, doses, empresas ou composição.
+      // UM cadastro por EMBALAGEM comercial do produto extraída do PDF da bula.
+      // Idempotência: chave natural = registro_mapa sanitizado + quantidade + unidade + acondicionamento.
       try {
         const colBaseMestre = txApp.findCollectionByNameOrId('base_mestre')
 
@@ -1750,113 +1749,230 @@ routerAdd('POST', '/backend/v1/bula/gravar-pdf', (e) => {
         const isNota2 = MOLECULAS_NOTA_2.some((mol) => paTexto.includes(mol))
         const nota2Val = isNota2 ? 'SIM' : 'NÃO'
 
-        let ncmBase = String(produto.ncm_padrao || produto.ncm || '').trim()
-        if (!ncmBase && embalagens.length > 0) {
-          ncmBase = String(embalagens[0].ncm || '').trim()
-        }
-        if (!ncmBase) {
-          ncmBase = isNota2 ? '3808.62.90' : '3808.93.24'
-        }
-        const ncmLimpo = ncmBase.replace(/\D/g, '')
-        const ncmMascara = formatarNcmMascaraLocal(ncmLimpo || ncmBase)
-
         const marcaPad = String(produto.marca_padronizada || nomeComercial).trim()
         const escMarcaPad = marcaPad.replace(/'/g, "\\'")
 
-        // Upsert idempotente na Base Mestre:
-        // Prioridade 1: registro_mapa
-        // Prioridade 2: marca_padronizada + ncm
-        let filtroMestre = regMapa
-          ? `registro_mapa = '${escMapa}'`
-          : `marca_padronizada = '${escMarcaPad}'`
-        const mestreExistentes =
-          txApp.findRecordsByFilter('base_mestre', filtroMestre, '-created', 1, 0) || []
+        // Lista de embalagens a gravar: se extraiu seções de embalagem do PDF, usa cada uma;
+        // senão fallback para a embalagem informada no cabeçalho do produto.
+        const listaEmbalagensPdf =
+          embalagens.length > 0
+            ? embalagens
+            : [
+                {
+                  tipo_embalagem: 'Bombona',
+                  capacidade: '20',
+                  unidade_medida: 'L',
+                  descricao_embalagem: String(produto.embalagem || '1X20L (20 L)'),
+                  ncm: produto.ncm_padrao || produto.ncm || '3808.93.24',
+                },
+              ]
 
-        let recMestre = null
-        let isUpdateMestre = false
+        for (let ei = 0; ei < listaEmbalagensPdf.length; ei++) {
+          const embItem = listaEmbalagensPdf[ei]
+          const te = String(embItem.tipo_embalagem || embItem.embalagem || '').trim()
+          const cap = String(embItem.capacidade || '').trim()
+          const desc = String(embItem.descricao_embalagem || '').trim()
+          const textoOriginal =
+            desc ||
+            (cap ? `${cap} ${embItem.unidade_medida || 'L'} (${te})` : produto.embalagem || '20 L')
 
-        if (mestreExistentes.length > 0) {
-          recMestre = mestreExistentes[0]
-          isUpdateMestre = true
-        } else {
-          recMestre = new Record(colBaseMestre)
-        }
+          // (a) Extrair quantidade principal e unidade (ignorar multiplicador, sempre kg ou L)
+          let qtdPrinc = 0
+          let unPrinc = 'L'
+          const capUpper =
+            `${cap} ${String(embItem.unidade_medida || '')} ${textoOriginal}`.toUpperCase()
 
-        // Identificação mínima
-        recMestre.set('registro_mapa', regMapa || recMestre.getString('registro_mapa'))
-        recMestre.set('nome_completo', nomeComercial)
-        recMestre.set('nome_produto', marcaPad)
-        recMestre.set('marca_padronizada', marcaPad)
-        recMestre.set(
-          'principio_ativo',
-          String(produto.principio_ativo || 'GLIFOSATO').slice(0, 500),
-        )
-        recMestre.set(
-          'titular_fabricante',
-          String(produto.titular_registro || titularPrincipal).slice(0, 500),
-        )
-        recMestre.set(
-          'fabricante',
-          String(produto.fabricante_formulador || titularPrincipal).slice(0, 500),
-        )
-        recMestre.set('tipo_produto', 'Produto Formulado Comercial')
-        recMestre.set(
-          'embalagem',
-          String(
-            produto.embalagem ||
-              (embalagens[0]
-                ? `${embalagens[0].capacidade} ${embalagens[0].unidade_medida || 'L'}`
-                : '1X20L (20 L)'),
-          ).slice(0, 255),
-        )
-        recMestre.set('unidade', 'L')
-        recMestre.set('origem_base', 'BULA_PDF_ESPELHO_TRIBUTARIO')
-
-        // Campos tributários essenciais
-        recMestre.set('ncm', ncmLimpo || '38089324')
-        recMestre.set('ncm_padrao', ncmMascara || '3808.93.24')
-        recMestre.set('nota_subpos_2', nota2Val)
-
-        // Faixas de Embalagem TIPI
-        if (isNota2) {
-          recMestre.set('ncm_faixa1_ate_300g', '3808.61.00')
-          recMestre.set('ncm_faixa2_300g_a_7_5kg', '3808.62.90')
-          recMestre.set('ncm_faixa3_7_5kg_a_10kg', '3808.69.90')
-          recMestre.set('ncm_faixa4_acima_10kg', '3808.69.90')
-          recMestre.set('regra_tipi', 'Nota de Subposições 2 Cap. 38 TIPI (SC COSIT 98.042/2022)')
-        } else {
-          recMestre.set('ncm_faixa1_ate_300g', ncmMascara)
-          recMestre.set('ncm_faixa2_300g_a_7_5kg', ncmMascara)
-          recMestre.set('ncm_faixa3_7_5kg_a_10kg', ncmMascara)
-          recMestre.set('ncm_faixa4_acima_10kg', ncmMascara)
-          recMestre.set(
-            'regra_tipi',
-            'Posição 38.08 TIPI: Embalagem comercial agrícola com subitens .2x/.9x',
+          const mMultiplo = capUpper.match(
+            /(\d+)\s*[xX×]\s*(\d+(?:[.,]\d+)?)\s*(KG|KGS|KILOS?|QUILOS?|G\b|L\b|LT|LITROS?|ML)/,
           )
+          if (mMultiplo) {
+            let q = parseFloat(mMultiplo[2].replace(',', '.'))
+            const u = mMultiplo[3]
+            if (u === 'G' || u === 'ML') q = q * 0.001
+            qtdPrinc = q
+            unPrinc =
+              u.startsWith('KG') || u.startsWith('QUILO') || u.startsWith('KILO') || u === 'G'
+                ? 'KG'
+                : 'L'
+          } else {
+            const mDireto = capUpper.match(
+              /(\d+(?:[.,]\d+)?)\s*(KG|KGS|KILOS?|QUILOS?|G\b|L\b|LT|LITROS?|ML)\b/,
+            )
+            if (mDireto) {
+              let q = parseFloat(mDireto[1].replace(',', '.'))
+              const u = mDireto[2]
+              if (u === 'G' || u === 'ML') q = q * 0.001
+              qtdPrinc = q
+              unPrinc =
+                u.startsWith('KG') || u.startsWith('QUILO') || u.startsWith('KILO') || u === 'G'
+                  ? 'KG'
+                  : 'L'
+            } else {
+              const numCap = parseFloat(String(cap).replace(',', '.'))
+              if (!isNaN(numCap) && numCap > 0) {
+                qtdPrinc = numCap
+                const uInf = String(embItem.unidade_medida || '').toUpperCase()
+                unPrinc =
+                  uInf.startsWith('KG') || uInf.startsWith('QUILO') || uInf === 'G' ? 'KG' : 'L'
+              } else {
+                qtdPrinc = 20
+                unPrinc = 'L'
+              }
+            }
+          }
+
+          // (b) Normalizar forma de acondicionamento (bombona, saco, tambor, big bag, frasco, balde, etc.)
+          let acond = ''
+          const formaTexto = `${te} ${textoOriginal}`.toUpperCase()
+          if (formaTexto.includes('BIG BAG') || formaTexto.includes('BIG-BAG')) acond = 'Big Bag'
+          else if (formaTexto.includes('BOMBONA')) acond = 'Bombona'
+          else if (formaTexto.includes('TAMBOR')) acond = 'Tambor'
+          else if (
+            formaTexto.includes('SACARIA') ||
+            formaTexto.includes('SACO') ||
+            formaTexto.includes('SACA')
+          )
+            acond = 'Saco'
+          else if (formaTexto.includes('BALDE')) acond = 'Balde'
+          else if (formaTexto.includes('FRASCO') || formaTexto.includes('AMPOULA')) acond = 'Frasco'
+          else if (formaTexto.includes('GALÃO') || formaTexto.includes('GALAO')) acond = 'Galão'
+          else if (
+            formaTexto.includes('CONTAINER') ||
+            formaTexto.includes('CONTÊINER') ||
+            formaTexto.includes('IBC')
+          )
+            acond = 'Container / IBC'
+          else if (formaTexto.includes('CAIXA') || formaTexto.includes('CARTUCHO')) acond = 'Caixa'
+          else if (formaTexto.includes('SACHE') || formaTexto.includes('SACHET')) acond = 'Sache'
+          else {
+            if (unPrinc === 'KG') acond = qtdPrinc > 25 ? 'Big Bag' : 'Saco'
+            else {
+              if (qtdPrinc <= 1) acond = 'Frasco'
+              else if (qtdPrinc <= 5) acond = 'Galão'
+              else if (qtdPrinc <= 50) acond = 'Bombona'
+              else if (qtdPrinc <= 250) acond = 'Tambor'
+              else acond = 'Container / IBC'
+            }
+          }
+
+          // (d) NCM específica da embalagem comercial
+          let ncmEsp = embItem.ncm || produto.ncm_padrao || produto.ncm
+          if (regMapa.includes('002094') || marcaPad.toUpperCase().includes('ROUNDUP WG')) {
+            ncmEsp = '3808.93.24'
+          } else if (isNota2) {
+            if (qtdPrinc <= 0.3) ncmEsp = '3808.61.00'
+            else if (qtdPrinc <= 7.5) ncmEsp = '3808.62.90'
+            else ncmEsp = '3808.69.90'
+          } else if (!ncmEsp) {
+            ncmEsp = '3808.93.24'
+          }
+          const ncmMascara = formatarNcmMascaraLocal(ncmEsp)
+          const ncmLimpo = ncmMascara.replace(/\D/g, '')
+
+          // IDEMPOTÊNCIA: chave natural = registro_mapa sanitizado + quantidade + unidade + acondicionamento
+          const escAcond = acond.replace(/'/g, "\\'")
+          const escUnPrinc = unPrinc.replace(/'/g, "\\'")
+          let filtroMestre = ''
+          if (regMapa) {
+            filtroMestre = `registro_mapa = '${escMapa}' && quantidade_embalagem_principal = ${qtdPrinc} && unidade_medida_principal = '${escUnPrinc}' && forma_acondicionamento = '${escAcond}'`
+          } else {
+            filtroMestre = `marca_padronizada = '${escMarcaPad}' && quantidade_embalagem_principal = ${qtdPrinc} && unidade_medida_principal = '${escUnPrinc}' && forma_acondicionamento = '${escAcond}'`
+          }
+
+          const mestreExistentes =
+            txApp.findRecordsByFilter('base_mestre', filtroMestre, '-created', 1, 0) || []
+
+          let recMestre = null
+          let isUpdateMestre = false
+
+          if (mestreExistentes.length > 0) {
+            recMestre = mestreExistentes[0]
+            isUpdateMestre = true
+          } else {
+            recMestre = new Record(colBaseMestre)
+          }
+
+          recMestre.set('registro_mapa', regMapa || recMestre.getString('registro_mapa'))
+          recMestre.set('nome_completo', nomeComercial)
+          recMestre.set('nome_produto', marcaPad)
+          recMestre.set('marca_padronizada', marcaPad)
+          recMestre.set(
+            'principio_ativo',
+            String(produto.principio_ativo || 'GLIFOSATO').slice(0, 500),
+          )
+          recMestre.set(
+            'titular_fabricante',
+            String(produto.titular_registro || titularPrincipal).slice(0, 500),
+          )
+          recMestre.set(
+            'fabricante',
+            String(produto.fabricante_formulador || titularPrincipal).slice(0, 500),
+          )
+          recMestre.set(
+            'tipo_produto',
+            produto.tipo_formulacao
+              ? `Produto Formulado (${produto.tipo_formulacao})`.slice(0, 100)
+              : 'Produto Formulado Comercial',
+          )
+
+          // Campos de embalagem comercial
+          recMestre.set('quantidade_embalagem_principal', qtdPrinc)
+          recMestre.set('unidade_medida_principal', unPrinc)
+          recMestre.set('forma_acondicionamento', acond)
+          recMestre.set('embalagem_original', String(textoOriginal).slice(0, 255))
+          recMestre.set('embalagem', `${qtdPrinc} ${unPrinc} (${acond})`)
+          recMestre.set('unidade', unPrinc)
+          recMestre.set('origem_base', 'BULA_PDF_ESPELHO_TRIBUTARIO')
+
+          // NCM específica
+          recMestre.set('ncm_especifica', ncmMascara)
+          recMestre.set('ncm_padrao', ncmMascara)
+          recMestre.set('ncm', ncmLimpo || '38089324')
+          recMestre.set('nota_subpos_2', nota2Val)
+
+          if (isNota2) {
+            recMestre.set('ncm_faixa1_ate_300g', '3808.61.00')
+            recMestre.set('ncm_faixa2_300g_a_7_5kg', '3808.62.90')
+            recMestre.set('ncm_faixa3_7_5kg_a_10kg', '3808.69.90')
+            recMestre.set('ncm_faixa4_acima_10kg', '3808.69.90')
+            recMestre.set('regra_tipi', 'Nota de Subposições 2 Cap. 38 TIPI (SC COSIT 98.042/2022)')
+          } else {
+            recMestre.set('ncm_faixa1_ate_300g', ncmMascara)
+            recMestre.set('ncm_faixa2_300g_a_7_5kg', ncmMascara)
+            recMestre.set('ncm_faixa3_7_5kg_a_10kg', ncmMascara)
+            recMestre.set('ncm_faixa4_acima_10kg', ncmMascara)
+            recMestre.set(
+              'regra_tipi',
+              'Posição 38.08 TIPI: Embalagem comercial agrícola com subitens .2x/.9x',
+            )
+          }
+
+          recMestre.set('macro_grupo', 'Defensivos')
+          recMestre.set('sub_grupo', String(classeAgronomica || 'Herbicida').slice(0, 100))
+          recMestre.set(
+            'status_pis_cofins',
+            'Beneficiado (Lei 10.925/04): 0% até Mar/26 | 0,925% Real / 0,365% Pres. pós-Abr/26 (LC 224/25)',
+          )
+          recMestre.set('aliquota_ate_mar2026', '0,00% (Lei nº 10.925/2004)')
+          recMestre.set('aliquota_pos_abr2026_real', '0,925% (LC nº 224/2025)')
+          recMestre.set('aliquota_pos_abr2026_presumido', '0,365% (LC nº 224/2025)')
+          recMestre.set('cst_saida', 'CST 06')
+          recMestre.set('cst_entrada', 'CST 73')
+          recMestre.set(
+            'ibs_cbs_2027',
+            'Redução de 60% + Diferimento (Art. 138 e Anexo IX LC 214/2025)',
+          )
+          recMestre.set(
+            'sistema_norma_mapa',
+            'AGROFIT/MAPA — Produto Formulado (Lei nº 14.785/2023)',
+          )
+          recMestre.set('status_validacao', 'aprovado')
+          recMestre.set('url_oficial', 'https://dados.agricultura.gov.br')
+
+          txApp.save(recMestre)
+          if (isUpdateMestre) contadores.base_mestre.atualizados++
+          else contadores.base_mestre.inseridos++
         }
-
-        recMestre.set('macro_grupo', 'Defensivos')
-        recMestre.set('sub_grupo', String(classeAgronomica || 'Herbicida').slice(0, 100))
-        recMestre.set(
-          'status_pis_cofins',
-          'Beneficiado (Lei 10.925/04): 0% até Mar/26 | 0,925% Real / 0,365% Pres. pós-Abr/26 (LC 224/25)',
-        )
-        recMestre.set('aliquota_ate_mar2026', '0,00% (Lei nº 10.925/2004)')
-        recMestre.set('aliquota_pos_abr2026_real', '0,925% (LC nº 224/2025)')
-        recMestre.set('aliquota_pos_abr2026_presumido', '0,365% (LC nº 224/2025)')
-        recMestre.set('cst_saida', 'CST 06')
-        recMestre.set('cst_entrada', 'CST 73')
-        recMestre.set(
-          'ibs_cbs_2027',
-          'Redução de 60% + Diferimento (Art. 138 e Anexo IX LC 214/2025)',
-        )
-        recMestre.set('sistema_norma_mapa', 'AGROFIT/MAPA — Produto Formulado (Lei nº 14.785/2023)')
-        recMestre.set('status_validacao', 'aprovado')
-        recMestre.set('url_oficial', 'https://dados.agricultura.gov.br')
-
-        txApp.save(recMestre)
-        if (isUpdateMestre) contadores.base_mestre.atualizados++
-        else contadores.base_mestre.inseridos++
       } catch (errMestre) {
         console.log(
           'Aviso: falha ao atualizar espelho tributário na base_mestre (não impeditivo):',
