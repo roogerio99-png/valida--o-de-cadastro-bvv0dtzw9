@@ -491,7 +491,114 @@ export function parsearTextoBula(markdown: string, pdfFileName?: string, _trunca
     }
   }
 
-  // 6. Empresas
+  // 6. Empresas (com sanitização estrita, anti-endereço, split de linhas compostas e deduplicação)
+  function extrairCnpj(str: string): string {
+    if (!str) return ''
+    const mFormatado = str.match(/\d{2}\.\d{3}\.\d{3}\/\d{4}-\d{2}/)
+    if (mFormatado) return mFormatado[0]
+    const mQuebrado = str.match(
+      /(?:CNPJ|C\.N\.P\.J\.?)[\s.:]*(\d{2}[\s.]*\d{3}[\s.]*\d{3}[\s/]*\d{4}[\s-]*\d{2})/i,
+    )
+    if (mQuebrado && mQuebrado[1]) {
+      const digitos = mQuebrado[1].replace(/\D/g, '')
+      if (digitos.length === 14) {
+        return `${digitos.slice(0, 2)}.${digitos.slice(2, 5)}.${digitos.slice(5, 8)}/${digitos.slice(8, 12)}-${digitos.slice(12, 14)}`
+      }
+    }
+    return ''
+  }
+
+  function extrairCep(str: string): string {
+    if (!str) return ''
+    const m = str.match(/\b\d{5}-\d{3}\b/)
+    return m ? m[0] : ''
+  }
+
+  function isLinhaEndereco(str: string): boolean {
+    if (!str) return false
+    const s = str.trim()
+    if (
+      /^(?:Av\.?|Avenida|Rua|Rod\.?|Rodovia|Estrada|Alameda|Travessa|Pra[çc]a|Distrito|Bairro|Lote|Quadra|KM\b|km\b|CEP\b|C\.E\.P\.|Tel\.?|Telefone|Fone|Fax|C\.?N\.?P\.?J\.?|Inscri[çc][ãa]o|Registro\s+Estadual|Caixa\s+Postal|Plant\b|Zarate\s+Plant|Luling\s+Plant|Ruta\b)/i.test(
+        s,
+      )
+    ) {
+      return true
+    }
+    if (
+      /CEP\s*:?\s*\d{2}/i.test(s) ||
+      /Tel\.?\s*:?\s*[\d(]/i.test(s) ||
+      /CNPJ\s*:?\s*\d{2}/i.test(s)
+    ) {
+      return true
+    }
+    return false
+  }
+
+  const REGEX_SUFIXOS_EMPRESA =
+    /\b(?:LTDA|S\.A\.|S\/A|S\.R\.L\.|LIMITED|LTD\.?|L\.P\.|LP|B\.V\.|BV|INC\.?|CORP\.?|GMBH|S\.L\.|A\.G\.|PVT\.?\s+LTD\.?)\b/i
+
+  function extrairNomesEmpresaDeLinha(str: string) {
+    if (!str) return []
+    const s = str.trim()
+    const regexNomeCorp =
+      /([A-ZÁÉÍÓÚÂÊÔÃÕÇ][A-Za-zÁÉÍÓÚÂÊÔÃÕÇ0-9&.\-'\s]{2,60}\b(?:LTDA|S\.A\.|S\/A|S\.R\.L\.|LIMITED|LTD\.?|L\.P\.|LP|B\.V\.|BV|INC\.?|CORP\.?|GMBH|S\.L\.|A\.G\.|PVT\.?\s+LTD\.?)\.?)/gi
+    const matches: Array<{ nome: string; index: number }> = []
+    let m: RegExpExecArray | null
+    while ((m = regexNomeCorp.exec(s)) !== null) {
+      let nome = m[1].trim().replace(/^[-–—,;:.\s]+|[-–—,;:.\s]+$/g, '')
+      nome = nome
+        .replace(
+          /^(?:Av\.?|Avenida|Rua|Rod\.?|Rodovia|CEP\s*\d{5}-?\d{3}|SP\s*-\s*Tel[^\s]*|Tel[^\s]*)\s+/i,
+          '',
+        )
+        .trim()
+      if (nome.length >= 3 && !isLinhaEndereco(nome) && REGEX_SUFIXOS_EMPRESA.test(nome)) {
+        matches.push({
+          nome: nome,
+          index: m.index,
+        })
+      }
+    }
+    return matches
+  }
+
+  function sanitizarRazaoSocial(str: string): string {
+    if (!str) return ''
+    let s = str.trim().replace(/^[-–—,;:.\s]+|[-–—,;:.\s]+$/g, '')
+    s = s.replace(/\s*[-–—]\s*(?:Av\.?|Rua|CEP|CNPJ|Tel|Rod\.).*$/i, '')
+    s = s.replace(/^(?:Av\.?|Avenida|Rua|Rod\.?|Rodovia|Distrito|Bairro|CEP\b[^\s]*)\s+/i, '')
+    return s.trim()
+  }
+
+  function detectarPais(str: string): string {
+    if (!str) return 'Brasil'
+    if (/Índia|India|SIPCOT|Cuddalore/i.test(str)) return 'Índia'
+    if (/Uruguai|Uruguay|Canelones|Juanic[óo]/i.test(str)) return 'Uruguai'
+    if (/Argentina|Zarate/i.test(str)) return 'Argentina'
+    if (/E\.U\.A\.|USA|United States|Louisiana|Luling/i.test(str)) return 'E.U.A.'
+    if (/Bélgica|Belgium/i.test(str)) return 'Bélgica'
+    if (/China/i.test(str)) return 'China'
+    return 'Brasil'
+  }
+
+  function detectarMunicipioUf(str: string): { municipio: string; uf: string } {
+    if (!str) return { municipio: '', uf: '' }
+    if (/Cotia/i.test(str)) return { municipio: 'Cotia', uf: 'SP' }
+    if (/Maracana[úu]/i.test(str)) return { municipio: 'Maracanaú', uf: 'CE' }
+    if (/Uberaba/i.test(str)) return { municipio: 'Uberaba', uf: 'MG' }
+    if (/S[ãa]o\s+Jos[ée]\s+dos\s+Campos/i.test(str))
+      return { municipio: 'São José dos Campos', uf: 'SP' }
+    if (/S[ãa]o\s+Paulo/i.test(str)) return { municipio: 'São Paulo', uf: 'SP' }
+    if (/Paul[íi]nia/i.test(str)) return { municipio: 'Paulínia', uf: 'SP' }
+    if (/Campinas/i.test(str)) return { municipio: 'Campinas', uf: 'SP' }
+    if (/Cama[çc]ari/i.test(str)) return { municipio: 'Camaçari', uf: 'BA' }
+    if (/Zarate/i.test(str)) return { municipio: 'Zárate', uf: '' }
+    if (/Canelones/i.test(str)) return { municipio: 'Canelones', uf: '' }
+    if (/Luling/i.test(str)) return { municipio: 'Luling', uf: 'LA' }
+    if (/Cuddalore/i.test(str)) return { municipio: 'Cuddalore', uf: '' }
+    return { municipio: '', uf: '' }
+  }
+
   const empresas: any[] = []
   function extrairEmpresasSecaoDinamica(
     tipoRelacao: string,
@@ -528,52 +635,133 @@ export function parsearTextoBula(markdown: string, pdfFileName?: string, _trunca
         continue
       }
 
-      const isNovaEmpresa =
-        ln.toUpperCase().includes('LTDA') ||
-        ln.toUpperCase().includes('S.A.') ||
-        ln.toUpperCase().includes('S/A') ||
-        ln.toUpperCase().includes('S.R.L.') ||
-        ln.toUpperCase().includes('LIMITED') ||
-        ln.toUpperCase().includes('LTD') ||
-        ln.toUpperCase().includes('LP') ||
-        ln.toUpperCase().includes('BV') ||
-        ln.toUpperCase().includes('INC') ||
-        ln.toUpperCase().includes('CORP')
+      const linhaEhEndereco = isLinhaEndereco(ln)
+      const empresasNaLinha = extrairNomesEmpresaDeLinha(ln)
 
-      if (isNovaEmpresa) {
+      // Linha começa com endereço mas tem nome de empresa grudado
+      if (linhaEhEndereco && empresasNaLinha.length > 0) {
+        const primEmpIdx = empresasNaLinha[0].index
+        const pedacoEndereco = ln.slice(0, primEmpIdx).trim()
+        if (emp && pedacoEndereco) {
+          emp.dados_extras.texto_bruto.push(pedacoEndereco)
+          const cnp = extrairCnpj(pedacoEndereco)
+          if (cnp && !emp.cnpj) emp.cnpj = cnp
+          const cp = extrairCep(pedacoEndereco)
+          if (cp && !emp.cep) emp.cep = cp
+          emp.endereco = emp.endereco ? `${emp.endereco} - ${pedacoEndereco}` : pedacoEndereco
+          const loc = detectarMunicipioUf(pedacoEndereco)
+          if (loc.municipio && !emp.municipio) emp.municipio = loc.municipio
+          if (loc.uf && !emp.uf) emp.uf = loc.uf
+        }
+
+        for (let eIdx = 0; eIdx < empresasNaLinha.length; eIdx++) {
+          if (emp && emp.razao_social) {
+            lista.push(emp)
+          }
+          const empItem = empresasNaLinha[eIdx]
+          const rzLimpa = sanitizarRazaoSocial(empItem.nome)
+          emp = {
+            registro_mapa: registroMapa,
+            nome_produto: nomeComercial,
+            tipo_relacao: tipoRelacao,
+            razao_social: rzLimpa,
+            nome_fantasia: rzLimpa.split(' ')[0] || '',
+            cnpj: '',
+            endereco: '',
+            municipio: '',
+            uf: '',
+            cep: '',
+            inscricao_estadual: '',
+            pais: detectarPais(rzLimpa),
+            dados_extras: { texto_bruto: [empItem.nome] },
+          }
+        }
+        continue
+      }
+
+      if (linhaEhEndereco) {
+        if (emp) {
+          emp.dados_extras.texto_bruto.push(ln)
+          const cnp = extrairCnpj(ln)
+          if (cnp && !emp.cnpj) emp.cnpj = cnp
+          const cp = extrairCep(ln)
+          if (cp && !emp.cep) emp.cep = cp
+
+          if (
+            ln.toUpperCase().includes('REGISTRO DO ESTABELECIMENTO') ||
+            ln.toUpperCase().includes('REGISTRO ESTADUAL') ||
+            ln.toUpperCase().includes('CDA') ||
+            ln.toUpperCase().includes('SEMACE') ||
+            ln.toUpperCase().includes('IMA')
+          ) {
+            emp.inscricao_estadual = ln.slice(0, 95)
+          }
+
+          emp.endereco = emp.endereco ? `${emp.endereco} - ${ln}` : ln
+          const loc = detectarMunicipioUf(ln)
+          if (loc.municipio && !emp.municipio) emp.municipio = loc.municipio
+          if (loc.uf && !emp.uf) emp.uf = loc.uf
+          const p = detectarPais(ln)
+          if (p !== 'Brasil' || emp.pais === 'Brasil') emp.pais = p
+        }
+        continue
+      }
+
+      const temSufixoEmpresa = REGEX_SUFIXOS_EMPRESA.test(ln)
+      if (temSufixoEmpresa && empresasNaLinha.length > 0) {
         if (emp && emp.razao_social) {
           lista.push(emp)
         }
-        let paisDetectado = 'Brasil'
-        if (ln.includes('India') || ln.includes('INDIA')) paisDetectado = 'Índia'
-        else if (ln.includes('Uruguai') || ln.includes('Uruguay')) paisDetectado = 'Uruguai'
-        else if (ln.includes('Argentina')) paisDetectado = 'Argentina'
-        else if (ln.includes('E.U.A.') || ln.includes('USA')) paisDetectado = 'E.U.A.'
-        else if (ln.includes('Bélgica') || ln.includes('Belgium')) paisDetectado = 'Bélgica'
+
+        const rzLimpa = sanitizarRazaoSocial(empresasNaLinha[0].nome)
+        const pDetect = detectarPais(ln)
+        const loc = detectarMunicipioUf(ln)
 
         emp = {
           registro_mapa: registroMapa,
           nome_produto: nomeComercial,
           tipo_relacao: tipoRelacao,
-          razao_social: ln,
-          nome_fantasia: ln.split(' ')[0] || '',
-          cnpj: '',
+          razao_social: rzLimpa,
+          nome_fantasia: rzLimpa.split(' ')[0] || '',
+          cnpj: extrairCnpj(ln),
           endereco: '',
-          municipio: '',
-          uf: '',
-          cep: '',
+          municipio: loc.municipio,
+          uf: loc.uf,
+          cep: extrairCep(ln),
           inscricao_estadual: '',
-          pais: paisDetectado,
+          pais: pDetect,
           dados_extras: { texto_bruto: [ln] },
+        }
+
+        if (empresasNaLinha.length > 1) {
+          for (let eIdx = 1; eIdx < empresasNaLinha.length; eIdx++) {
+            if (emp && emp.razao_social) lista.push(emp)
+            const segNome = sanitizarRazaoSocial(empresasNaLinha[eIdx].nome)
+            emp = {
+              registro_mapa: registroMapa,
+              nome_produto: nomeComercial,
+              tipo_relacao: tipoRelacao,
+              razao_social: segNome,
+              nome_fantasia: segNome.split(' ')[0] || '',
+              cnpj: '',
+              endereco: '',
+              municipio: '',
+              uf: '',
+              cep: '',
+              inscricao_estadual: '',
+              pais: detectarPais(segNome),
+              dados_extras: { texto_bruto: [empresasNaLinha[eIdx].nome] },
+            }
+          }
         }
       } else if (emp) {
         emp.dados_extras.texto_bruto.push(ln)
 
-        const cnpjM = ln.match(/\d{2}\.\d{3}\.\d{3}\/\d{4}-\d{2}/)
-        if (cnpjM) emp.cnpj = cnpjM[0]
+        const cnp = extrairCnpj(ln)
+        if (cnp && !emp.cnpj) emp.cnpj = cnp
 
-        const cepM = ln.match(/\d{5}-\d{3}/)
-        if (cepM) emp.cep = cepM[0]
+        const cp = extrairCep(ln)
+        if (cp && !emp.cep) emp.cep = cp
 
         if (
           ln.toUpperCase().includes('REGISTRO DO ESTABELECIMENTO') ||
@@ -585,63 +773,26 @@ export function parsearTextoBula(markdown: string, pdfFileName?: string, _trunca
           emp.inscricao_estadual = ln.slice(0, 95)
         }
 
-        if (
-          ln.includes('Rua') ||
-          ln.includes('Av.') ||
-          ln.includes('Avenida') ||
-          ln.includes('Ruta') ||
-          ln.includes('SIPCOT') ||
-          ln.includes('Plant') ||
-          ln.includes('Road') ||
-          ln.includes('Haven')
-        ) {
-          emp.endereco = emp.endereco ? `${emp.endereco} - ${ln}` : ln
-        }
-
-        if (ln.includes('Cotia – SP') || ln.includes('Cotia/SP') || ln.includes('Cotia - SP')) {
-          emp.municipio = 'Cotia'
-          emp.uf = 'SP'
-          emp.pais = 'Brasil'
-        } else if (
-          ln.includes('Maracanaú – CE') ||
-          ln.includes('Maracanaú/CE') ||
-          ln.includes('Maracanaú - CE')
-        ) {
-          emp.municipio = 'Maracanaú'
-          emp.uf = 'CE'
-          emp.pais = 'Brasil'
-        } else if (
-          ln.includes('Uberaba – MG') ||
-          ln.includes('Uberaba/MG') ||
-          ln.includes('Uberaba - MG')
-        ) {
-          emp.municipio = 'Uberaba'
-          emp.uf = 'MG'
-          emp.pais = 'Brasil'
-        } else if (ln.includes('São Paulo/SP') || ln.includes('São Paulo - SP')) {
-          emp.municipio = 'São Paulo'
-          emp.uf = 'SP'
-          emp.pais = 'Brasil'
-        } else if (
-          ln.includes('São José dos Campos - SP') ||
-          ln.includes('São José dos Campos/SP')
-        ) {
-          emp.municipio = 'São José dos Campos'
-          emp.uf = 'SP'
-          emp.pais = 'Brasil'
-        } else if (ln.includes('INDIA') || ln.includes('India') || ln.includes('Cuddalore')) {
-          emp.pais = 'Índia'
-          emp.municipio = 'Cuddalore'
-        } else if (ln.includes('Uruguai') || ln.includes('Uruguay') || ln.includes('Canelones')) {
-          emp.pais = 'Uruguai'
-          emp.municipio = 'Canelones'
-        }
+        emp.endereco = emp.endereco ? `${emp.endereco} - ${ln}` : ln
+        const loc = detectarMunicipioUf(ln)
+        if (loc.municipio && !emp.municipio) emp.municipio = loc.municipio
+        if (loc.uf && !emp.uf) emp.uf = loc.uf
+        const p = detectarPais(ln)
+        if (p !== 'Brasil' || emp.pais === 'Brasil') emp.pais = p
       }
     }
     if (emp && emp.razao_social) {
       lista.push(emp)
     }
-    return lista
+
+    return lista.filter((e) => {
+      const rz = (e.razao_social || '').trim()
+      if (rz.length < 3) return false
+      if (isLinhaEndereco(rz)) return false
+      if (/^CEP\b/i.test(rz) || /^Av\.?/i.test(rz) || /^Rua\b/i.test(rz) || /^Tel\b/i.test(rz))
+        return false
+      return true
+    })
   }
 
   const titulares = extrairEmpresasSecaoDinamica(
@@ -687,6 +838,40 @@ export function parsearTextoBula(markdown: string, pdfFileName?: string, _trunca
   )
   for (let imp = 0; imp < importadores.length; imp++) {
     empresas.push(importadores[imp])
+  }
+
+  // Deduplicação estrita de empresas por (tipo_relacao + razao_social + cnpj)
+  const empresasUnicas: any[] = []
+  const chavesVistas = new Set<string>()
+  for (let i = 0; i < empresas.length; i++) {
+    const e = empresas[i]
+    const rzNorm = (e.razao_social || '').toUpperCase().replace(/\s+/g, ' ').trim()
+    const cnpjNorm = (e.cnpj || '').replace(/\D/g, '')
+    const tipoNorm = (e.tipo_relacao || '').toUpperCase().trim()
+    const chave = `${tipoNorm}|${rzNorm}|${cnpjNorm}`
+    if (!chavesVistas.has(chave)) {
+      chavesVistas.add(chave)
+      empresasUnicas.push(e)
+    } else {
+      const existente = empresasUnicas.find((ex) => {
+        const exRz = (ex.razao_social || '').toUpperCase().replace(/\s+/g, ' ').trim()
+        const exTipo = (ex.tipo_relacao || '').toUpperCase().trim()
+        return exRz === rzNorm && exTipo === tipoNorm
+      })
+      if (existente) {
+        if (!existente.cnpj && e.cnpj) existente.cnpj = e.cnpj
+        if (!existente.endereco && e.endereco) existente.endereco = e.endereco
+        if (!existente.municipio && e.municipio) existente.municipio = e.municipio
+        if (!existente.uf && e.uf) existente.uf = e.uf
+        if (!existente.cep && e.cep) existente.cep = e.cep
+        if (!existente.inscricao_estadual && e.inscricao_estadual)
+          existente.inscricao_estadual = e.inscricao_estadual
+      }
+    }
+  }
+  empresas.length = 0
+  for (let i = 0; i < empresasUnicas.length; i++) {
+    empresas.push(empresasUnicas[i])
   }
   // 7. Culturas e Alvos
   const culturas: any[] = []
@@ -995,6 +1180,87 @@ Produto comercial: ROUNDUP ORIGINAL® MAIS corresponde a 577 g/L do sal de di-am
     const textoSobNMinusculo = `REGISTRADO NO MINISTÉRIO DA AGRICULTURA E PECUÁRIA - MAPA sob n° 19917 COMPOSIÇÃO: Glifosato 480 g/L`
     const resMinusculo = parsearTextoBula(textoSobNMinusculo)
     expect(resMinusculo.produto.registro_mapa).toBe('Nº 19917')
+  })
+
+  it('14. Parser de Empresas: NUNCA deve transformar linha de endereço em fornecedor/empresa', () => {
+    const res = parsearTextoBula(textoBulaRoundup)
+    // Nenhuma razão social pode começar com Av., Rua, CEP, Tel, etc.
+    for (const emp of res.empresas) {
+      expect(emp.razao_social).not.toMatch(
+        /^(?:Av\.?|Avenida|Rua|Rod\.?|Rodovia|CEP\b|Tel\b|CNPJ\b|Distrito|Bairro|Lote)/i,
+      )
+      expect(emp.razao_social).not.toContain('CEP 12241-421')
+      expect(emp.razao_social).not.toContain('Av. Carlos Marcondes')
+    }
+  })
+
+  it('15. Parser de Empresas: Linha concatenando endereço e empresa seguinte deve separar corretamente AGRO BAYER S.R.L.', () => {
+    const textoLinhaJunta = `
+REGISTRADO NO MINISTÉRIO DA AGRICULTURA E PECUÁRIA
+MAPA SOB N° 01119
+ROUNDUP ORIGINAL® MAIS
+COMPOSIÇÃO:
+Glifosato 480 g/L
+
+TITULAR DO REGISTRO:
+MONSANTO DO BRASIL LTDA.
+Rua Domingos Jorge, 1.100 - CEP: 04779-900 - São Paulo/SP
+CNPJ 64.858.525/0001-45
+
+FABRICANTE DO PRODUTO TÉCNICO:
+MONSANTO DO BRASIL LTDA.
+Av. Carlos Marcondes, 1200, km 159,5 - Limoeiro - CEP 12241-421 São José dos Campos - SP - Tel.: 0800-011-5560 - CNPJ: 64.858.525/0002-26 AGRO BAYER S.R.L.
+Zarate Plant – Ruta Provincial 6, km 83,1 - Zarate - 2800 - Argentina.
+BAYER CROPSCIENCE LP
+Luling Plant - 12.501 - River Road - Luling - Louisiana - 70.070 - E.U.A.
+`
+    const res = parsearTextoBula(textoLinhaJunta)
+    const agroBayer = res.empresas.find((e) => e.razao_social.includes('AGRO BAYER'))
+    expect(agroBayer).toBeDefined()
+    expect(agroBayer?.razao_social).toBe('AGRO BAYER S.R.L.')
+    expect(agroBayer?.razao_social).not.toContain('Carlos Marcondes')
+    expect(agroBayer?.razao_social).not.toContain('CEP')
+
+    const monsantoFabr = res.empresas.find(
+      (e) => e.tipo_relacao === 'Fabricante' && e.razao_social.includes('MONSANTO'),
+    )
+    expect(monsantoFabr).toBeDefined()
+    expect(monsantoFabr?.cnpj).toBe('64.858.525/0002-26')
+    expect(monsantoFabr?.endereco).toContain('Carlos Marcondes')
+  })
+
+  it('16. Parser de Empresas: Titular MONSANTO DO BRASIL LTDA. deve ter CNPJ 64.858.525/0001-45', () => {
+    const res = parsearTextoBula(textoBulaRoundup)
+    const titular = res.empresas.find((e) => e.tipo_relacao === 'Titular do Registro')
+    expect(titular).toBeDefined()
+    expect(titular?.razao_social).toBe('MONSANTO DO BRASIL LTDA.')
+    expect(titular?.cnpj).toBe('64.858.525/0001-45')
+    expect(titular?.cep).toBe('04779-900')
+    expect(titular?.municipio).toBe('São Paulo')
+    expect(titular?.uf).toBe('SP')
+  })
+
+  it('17. Parser de Empresas: Deduplicação deve eliminar duplicatas da mesma empresa no mesmo papel', () => {
+    const textoComDuplicata = `
+REGISTRADO NO MINISTÉRIO DA AGRICULTURA E PECUÁRIA
+MAPA SOB N° 01119
+ROUNDUP ORIGINAL® MAIS
+COMPOSIÇÃO:
+Glifosato 480 g/L
+
+TITULAR DO REGISTRO:
+MONSANTO DO BRASIL LTDA.
+Rua Domingos Jorge, 1.100 - CEP: 04779-900 - São Paulo/SP
+CNPJ 64.858.525/0001-45
+MONSANTO DO BRASIL LTDA.
+Rua Domingos Jorge, 1.100 - CEP: 04779-900 - São Paulo/SP
+CNPJ 64.858.525/0001-45
+`
+    const res = parsearTextoBula(textoComDuplicata)
+    const titulares = res.empresas.filter(
+      (e) => e.tipo_relacao === 'Titular do Registro' && e.razao_social.includes('MONSANTO'),
+    )
+    expect(titulares.length).toBe(1)
   })
 })
 

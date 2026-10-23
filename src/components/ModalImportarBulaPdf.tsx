@@ -409,28 +409,30 @@ export function ModalImportarBulaPdf({
             <div className="space-y-4 pt-1">
               {/* Banner de Resumo da Detecção */}
               <div className="p-3.5 bg-white border border-[#DCE5DC] rounded-2xl shadow-sm flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
-                <div className="space-y-1">
+                <div className="space-y-1 min-w-0 flex-1">
                   <div className="flex items-center gap-2 flex-wrap">
-                    <span className="font-bold text-sm text-[#1C2B1C]">
+                    <span className="font-bold text-sm sm:text-base text-[#1C2B1C] break-words whitespace-normal leading-snug">
                       {dados?.produto.nome_comercial}
                     </span>
-                    <Badge className="bg-emerald-100 text-emerald-900 border-emerald-300 font-mono text-xs">
+                    <Badge className="bg-emerald-100 text-emerald-900 border-emerald-300 font-mono text-xs flex-shrink-0">
                       MAPA {dados?.produto.registro_mapa}
                     </Badge>
                     <Badge
                       variant="outline"
-                      className="border-emerald-200 text-emerald-800 bg-emerald-50 text-[11px]"
+                      className="border-emerald-200 text-emerald-800 bg-emerald-50 text-[11px] flex-shrink-0"
                     >
                       {dados?.produto.tipo_formulacao}
                     </Badge>
                   </div>
-                  <p className="text-xs text-[#5A6D5A]">
+                  <p className="text-xs text-[#5A6D5A] break-words leading-relaxed">
                     Titular:{' '}
                     <strong className="text-[#1C2B1C]">
                       {dados?.produto.titular_registro || 'Identificado'}
                     </strong>{' '}
                     • Princípio Ativo:{' '}
-                    <strong className="text-[#1C2B1C]">{dados?.produto.principio_ativo}</strong>
+                    <strong className="text-[#1C2B1C] break-words">
+                      {dados?.produto.principio_ativo}
+                    </strong>
                   </p>
                 </div>
 

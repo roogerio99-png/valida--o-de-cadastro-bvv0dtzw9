@@ -627,6 +627,123 @@ routerAdd('POST', '/backend/v1/bula/analisar-pdf', (e) => {
     }
 
     // 6. CADEIA DE EMPRESAS DINÂMICA
+    // Funções auxiliares para detecção e sanitização estrita de dados cadastrais
+    function extrairCnpj(str) {
+      if (!str) return ''
+      // 1) CNPJ padrão formatado 00.000.000/0000-00
+      const mFormatado = str.match(/\d{2}\.\d{3}\.\d{3}\/\d{4}-\d{2}/)
+      if (mFormatado) return mFormatado[0]
+      // 2) CNPJ com pontos/barras/traços com espaços ou C.N.P.J. quebrado
+      const mQuebrado = str.match(
+        /(?:CNPJ|C\.N\.P\.J\.?)[\s.:]*(\d{2}[\s.]*\d{3}[\s.]*\d{3}[\s/]*\d{4}[\s-]*\d{2})/i,
+      )
+      if (mQuebrado && mQuebrado[1]) {
+        const digitos = mQuebrado[1].replace(/\D/g, '')
+        if (digitos.length === 14) {
+          return `${digitos.slice(0, 2)}.${digitos.slice(2, 5)}.${digitos.slice(5, 8)}/${digitos.slice(8, 12)}-${digitos.slice(12, 14)}`
+        }
+      }
+      return ''
+    }
+
+    function extrairCep(str) {
+      if (!str) return ''
+      const m = str.match(/\b\d{5}-\d{3}\b/)
+      return m ? m[0] : ''
+    }
+
+    function isLinhaEndereco(str) {
+      if (!str) return false
+      const s = str.trim()
+      // Marcadores comuns no início da linha
+      if (
+        /^(?:Av\.?|Avenida|Rua|Rod\.?|Rodovia|Estrada|Alameda|Travessa|Pra[çc]a|Distrito|Bairro|Lote|Quadra|KM\b|km\b|CEP\b|C\.E\.P\.|Tel\.?|Telefone|Fone|Fax|C\.?N\.?P\.?J\.?|Inscri[çc][ãa]o|Registro\s+Estadual|Caixa\s+Postal|Plant\b|Zarate\s+Plant|Luling\s+Plant|Ruta\b)/i.test(
+          s,
+        )
+      ) {
+        return true
+      }
+      // Se contiver marcadores de endereço com CEP, CNPJ ou telefone explícito
+      if (
+        /CEP\s*:?\s*\d{2}/i.test(s) ||
+        /Tel\.?\s*:?\s*[\d(]/i.test(s) ||
+        /CNPJ\s*:?\s*\d{2}/i.test(s)
+      ) {
+        return true
+      }
+      return false
+    }
+
+    const REGEX_SUFIXOS_EMPRESA =
+      /\b(?:LTDA|S\.A\.|S\/A|S\.R\.L\.|LIMITED|LTD\.?|L\.P\.|LP|B\.V\.|BV|INC\.?|CORP\.?|GMBH|S\.L\.|A\.G\.|PVT\.?\s+LTD\.?)\b/i
+
+    function extrairNomesEmpresaDeLinha(str) {
+      if (!str) return []
+      const s = str.trim()
+      // Padrão de nome de empresa: 2 ou mais palavras, geralmente maiúsculas, terminando num sufixo corporativo
+      // Ex.: "AGRO BAYER S.R.L.", "BAYER CROPSCIENCE LP", "MONSANTO DO BRASIL LTDA."
+      const regexNomeCorp =
+        /([A-ZÁÉÍÓÚÂÊÔÃÕÇ][A-Za-zÁÉÍÓÚÂÊÔÃÕÇ0-9&.\-'\s]{2,60}\b(?:LTDA|S\.A\.|S\/A|S\.R\.L\.|LIMITED|LTD\.?|L\.P\.|LP|B\.V\.|BV|INC\.?|CORP\.?|GMBH|S\.L\.|A\.G\.|PVT\.?\s+LTD\.?)\.?)/gi
+      const matches = []
+      let m
+      while ((m = regexNomeCorp.exec(s)) !== null) {
+        let nome = m[1].trim().replace(/^[-–—,;:.\s]+|[-–—,;:.\s]+$/g, '')
+        // Limpar possíveis prefixos de endereço grudados no nome
+        nome = nome
+          .replace(
+            /^(?:Av\.?|Avenida|Rua|Rod\.?|Rodovia|CEP\s*\d{5}-?\d{3}|SP\s*-\s*Tel[^\s]*|Tel[^\s]*)\s+/i,
+            '',
+          )
+          .trim()
+        if (nome.length >= 3 && !isLinhaEndereco(nome) && REGEX_SUFIXOS_EMPRESA.test(nome)) {
+          matches.push({
+            nome: nome,
+            index: m.index,
+          })
+        }
+      }
+      return matches
+    }
+
+    function sanitizarRazaoSocial(str) {
+      if (!str) return ''
+      let s = str.trim().replace(/^[-–—,;:.\s]+|[-–—,;:.\s]+$/g, '')
+      // Se tiver quebra de marcadores de endereço no final
+      s = s.replace(/\s*[-–—]\s*(?:Av\.?|Rua|CEP|CNPJ|Tel|Rod\.).*$/i, '')
+      // Se começar com prefixos de endereço que restaram
+      s = s.replace(/^(?:Av\.?|Avenida|Rua|Rod\.?|Rodovia|Distrito|Bairro|CEP\b[^\s]*)\s+/i, '')
+      return s.trim()
+    }
+
+    function detectarPais(str) {
+      if (!str) return 'Brasil'
+      if (/Índia|India|SIPCOT|Cuddalore/i.test(str)) return 'Índia'
+      if (/Uruguai|Uruguay|Canelones|Juanic[óo]/i.test(str)) return 'Uruguai'
+      if (/Argentina|Zarate/i.test(str)) return 'Argentina'
+      if (/E\.U\.A\.|USA|United States|Louisiana|Luling/i.test(str)) return 'E.U.A.'
+      if (/Bélgica|Belgium/i.test(str)) return 'Bélgica'
+      if (/China/i.test(str)) return 'China'
+      return 'Brasil'
+    }
+
+    function detectarMunicipioUf(str) {
+      if (!str) return { municipio: '', uf: '' }
+      if (/Cotia/i.test(str)) return { municipio: 'Cotia', uf: 'SP' }
+      if (/Maracana[úu]/i.test(str)) return { municipio: 'Maracanaú', uf: 'CE' }
+      if (/Uberaba/i.test(str)) return { municipio: 'Uberaba', uf: 'MG' }
+      if (/S[ãa]o\s+Jos[ée]\s+dos\s+Campos/i.test(str))
+        return { municipio: 'São José dos Campos', uf: 'SP' }
+      if (/S[ãa]o\s+Paulo/i.test(str)) return { municipio: 'São Paulo', uf: 'SP' }
+      if (/Paul[íi]nia/i.test(str)) return { municipio: 'Paulínia', uf: 'SP' }
+      if (/Campinas/i.test(str)) return { municipio: 'Campinas', uf: 'SP' }
+      if (/Cama[çc]ari/i.test(str)) return { municipio: 'Camaçari', uf: 'BA' }
+      if (/Zarate/i.test(str)) return { municipio: 'Zárate', uf: '' }
+      if (/Canelones/i.test(str)) return { municipio: 'Canelones', uf: '' }
+      if (/Luling/i.test(str)) return { municipio: 'Luling', uf: 'LA' }
+      if (/Cuddalore/i.test(str)) return { municipio: 'Cuddalore', uf: '' }
+      return { municipio: '', uf: '' }
+    }
+
     const empresas = []
     function extrairEmpresasSecaoDinamica(tipoRelacao, regexInicio, regexFim) {
       const idxInicio = textoCompleto.search(regexInicio)
@@ -660,52 +777,142 @@ routerAdd('POST', '/backend/v1/bula/analisar-pdf', (e) => {
           continue
         }
 
-        const isNovaEmpresa =
-          ln.toUpperCase().includes('LTDA') ||
-          ln.toUpperCase().includes('S.A.') ||
-          ln.toUpperCase().includes('S/A') ||
-          ln.toUpperCase().includes('S.R.L.') ||
-          ln.toUpperCase().includes('LIMITED') ||
-          ln.toUpperCase().includes('LTD') ||
-          ln.toUpperCase().includes('LP') ||
-          ln.toUpperCase().includes('BV') ||
-          ln.toUpperCase().includes('INC') ||
-          ln.toUpperCase().includes('CORP')
+        const linhaEhEndereco = isLinhaEndereco(ln)
+        const empresasNaLinha = extrairNomesEmpresaDeLinha(ln)
 
-        if (isNovaEmpresa) {
+        // CASO A: Linha começa com endereço MAS contém uma ou mais empresas concatenadas no meio/fim
+        // Exemplo real da bula Roundup Original Mais:
+        // "Av. Carlos Marcondes, 1200, km 159,5 - Limoeiro - CEP 12241-421 São José dos Campos - SP ... AGRO BAYER S.R.L."
+        if (linhaEhEndereco && empresasNaLinha.length > 0) {
+          // A primeira parte (antes da primeira empresa) pertence ao endereço da empresa corrente (se houver)
+          const primEmpIdx = empresasNaLinha[0].index
+          const pedacoEndereco = ln.slice(0, primEmpIdx).trim()
+          if (emp && pedacoEndereco) {
+            emp.dados_extras.texto_bruto.push(pedacoEndereco)
+            const cnp = extrairCnpj(pedacoEndereco)
+            if (cnp && !emp.cnpj) emp.cnpj = cnp
+            const cp = extrairCep(pedacoEndereco)
+            if (cp && !emp.cep) emp.cep = cp
+            emp.endereco = emp.endereco ? `${emp.endereco} - ${pedacoEndereco}` : pedacoEndereco
+            const loc = detectarMunicipioUf(pedacoEndereco)
+            if (loc.municipio && !emp.municipio) emp.municipio = loc.municipio
+            if (loc.uf && !emp.uf) emp.uf = loc.uf
+          }
+
+          // Para cada empresa encontrada nesta linha composta
+          for (let eIdx = 0; eIdx < empresasNaLinha.length; eIdx++) {
+            if (emp && emp.razao_social) {
+              lista.push(emp)
+            }
+            const empItem = empresasNaLinha[eIdx]
+            const rzLimpa = sanitizarRazaoSocial(empItem.nome)
+            emp = {
+              registro_mapa: registroMapa,
+              nome_produto: nomeComercial,
+              tipo_relacao: tipoRelacao,
+              razao_social: rzLimpa,
+              nome_fantasia: rzLimpa.split(' ')[0] || '',
+              cnpj: '',
+              endereco: '',
+              municipio: '',
+              uf: '',
+              cep: '',
+              inscricao_estadual: '',
+              pais: detectarPais(rzLimpa),
+              dados_extras: { texto_bruto: [empItem.nome] },
+            }
+          }
+          continue
+        }
+
+        // CASO B: Linha é endereço puro (sem empresa concatenada)
+        if (linhaEhEndereco) {
+          if (emp) {
+            emp.dados_extras.texto_bruto.push(ln)
+            const cnp = extrairCnpj(ln)
+            if (cnp && !emp.cnpj) emp.cnpj = cnp
+            const cp = extrairCep(ln)
+            if (cp && !emp.cep) emp.cep = cp
+
+            if (
+              ln.toUpperCase().includes('REGISTRO DO ESTABELECIMENTO') ||
+              ln.toUpperCase().includes('REGISTRO ESTADUAL') ||
+              ln.toUpperCase().includes('CDA') ||
+              ln.toUpperCase().includes('SEMACE') ||
+              ln.toUpperCase().includes('IMA')
+            ) {
+              emp.inscricao_estadual = ln.slice(0, 95)
+            }
+
+            emp.endereco = emp.endereco ? `${emp.endereco} - ${ln}` : ln
+            const loc = detectarMunicipioUf(ln)
+            if (loc.municipio && !emp.municipio) emp.municipio = loc.municipio
+            if (loc.uf && !emp.uf) emp.uf = loc.uf
+            const p = detectarPais(ln)
+            if (p !== 'Brasil' || emp.pais === 'Brasil') emp.pais = p
+          }
+          continue
+        }
+
+        // CASO C: Linha normal de empresa (contém sufixo de empresa e NÃO começa com endereço)
+        const temSufixoEmpresa = REGEX_SUFIXOS_EMPRESA.test(ln)
+        if (temSufixoEmpresa && empresasNaLinha.length > 0) {
           if (emp && emp.razao_social) {
             lista.push(emp)
           }
-          let paisDetectado = 'Brasil'
-          if (ln.includes('India') || ln.includes('INDIA')) paisDetectado = 'Índia'
-          else if (ln.includes('Uruguai') || ln.includes('Uruguay')) paisDetectado = 'Uruguai'
-          else if (ln.includes('Argentina')) paisDetectado = 'Argentina'
-          else if (ln.includes('E.U.A.') || ln.includes('USA')) paisDetectado = 'E.U.A.'
-          else if (ln.includes('Bélgica') || ln.includes('Belgium')) paisDetectado = 'Bélgica'
+
+          // Se tiver apenas 1 empresa na linha
+          const rzLimpa = sanitizarRazaoSocial(empresasNaLinha[0].nome)
+          const pDetect = detectarPais(ln)
+          const loc = detectarMunicipioUf(ln)
 
           emp = {
             registro_mapa: registroMapa,
             nome_produto: nomeComercial,
             tipo_relacao: tipoRelacao,
-            razao_social: ln,
-            nome_fantasia: ln.split(' ')[0] || '',
-            cnpj: '',
+            razao_social: rzLimpa,
+            nome_fantasia: rzLimpa.split(' ')[0] || '',
+            cnpj: extrairCnpj(ln),
             endereco: '',
-            municipio: '',
-            uf: '',
-            cep: '',
+            municipio: loc.municipio,
+            uf: loc.uf,
+            cep: extrairCep(ln),
             inscricao_estadual: '',
-            pais: paisDetectado,
+            pais: pDetect,
             dados_extras: { texto_bruto: [ln] },
           }
+
+          // Se houver mais de uma empresa na mesma linha
+          if (empresasNaLinha.length > 1) {
+            for (let eIdx = 1; eIdx < empresasNaLinha.length; eIdx++) {
+              if (emp && emp.razao_social) lista.push(emp)
+              const segNome = sanitizarRazaoSocial(empresasNaLinha[eIdx].nome)
+              emp = {
+                registro_mapa: registroMapa,
+                nome_produto: nomeComercial,
+                tipo_relacao: tipoRelacao,
+                razao_social: segNome,
+                nome_fantasia: segNome.split(' ')[0] || '',
+                cnpj: '',
+                endereco: '',
+                municipio: '',
+                uf: '',
+                cep: '',
+                inscricao_estadual: '',
+                pais: detectarPais(segNome),
+                dados_extras: { texto_bruto: [empresasNaLinha[eIdx].nome] },
+              }
+            }
+          }
         } else if (emp) {
+          // Linha de continuação de dados (endereço, CNPJ, etc.)
           emp.dados_extras.texto_bruto.push(ln)
 
-          const cnpjM = ln.match(/\d{2}\.\d{3}\.\d{3}\/\d{4}-\d{2}/)
-          if (cnpjM) emp.cnpj = cnpjM[0]
+          const cnp = extrairCnpj(ln)
+          if (cnp && !emp.cnpj) emp.cnpj = cnp
 
-          const cepM = ln.match(/\d{5}-\d{3}/)
-          if (cepM) emp.cep = cepM[0]
+          const cp = extrairCep(ln)
+          if (cp && !emp.cep) emp.cep = cp
 
           if (
             ln.toUpperCase().includes('REGISTRO DO ESTABELECIMENTO') ||
@@ -717,63 +924,27 @@ routerAdd('POST', '/backend/v1/bula/analisar-pdf', (e) => {
             emp.inscricao_estadual = ln.slice(0, 95)
           }
 
-          if (
-            ln.includes('Rua') ||
-            ln.includes('Av.') ||
-            ln.includes('Avenida') ||
-            ln.includes('Ruta') ||
-            ln.includes('SIPCOT') ||
-            ln.includes('Plant') ||
-            ln.includes('Road') ||
-            ln.includes('Haven')
-          ) {
-            emp.endereco = emp.endereco ? `${emp.endereco} - ${ln}` : ln
-          }
-
-          if (ln.includes('Cotia – SP') || ln.includes('Cotia/SP') || ln.includes('Cotia - SP')) {
-            emp.municipio = 'Cotia'
-            emp.uf = 'SP'
-            emp.pais = 'Brasil'
-          } else if (
-            ln.includes('Maracanaú – CE') ||
-            ln.includes('Maracanaú/CE') ||
-            ln.includes('Maracanaú - CE')
-          ) {
-            emp.municipio = 'Maracanaú'
-            emp.uf = 'CE'
-            emp.pais = 'Brasil'
-          } else if (
-            ln.includes('Uberaba – MG') ||
-            ln.includes('Uberaba/MG') ||
-            ln.includes('Uberaba - MG')
-          ) {
-            emp.municipio = 'Uberaba'
-            emp.uf = 'MG'
-            emp.pais = 'Brasil'
-          } else if (ln.includes('São Paulo/SP') || ln.includes('São Paulo - SP')) {
-            emp.municipio = 'São Paulo'
-            emp.uf = 'SP'
-            emp.pais = 'Brasil'
-          } else if (
-            ln.includes('São José dos Campos - SP') ||
-            ln.includes('São José dos Campos/SP')
-          ) {
-            emp.municipio = 'São José dos Campos'
-            emp.uf = 'SP'
-            emp.pais = 'Brasil'
-          } else if (ln.includes('INDIA') || ln.includes('India') || ln.includes('Cuddalore')) {
-            emp.pais = 'Índia'
-            emp.municipio = 'Cuddalore'
-          } else if (ln.includes('Uruguai') || ln.includes('Uruguay') || ln.includes('Canelones')) {
-            emp.pais = 'Uruguai'
-            emp.municipio = 'Canelones'
-          }
+          emp.endereco = emp.endereco ? `${emp.endereco} - ${ln}` : ln
+          const loc = detectarMunicipioUf(ln)
+          if (loc.municipio && !emp.municipio) emp.municipio = loc.municipio
+          if (loc.uf && !emp.uf) emp.uf = loc.uf
+          const p = detectarPais(ln)
+          if (p !== 'Brasil' || emp.pais === 'Brasil') emp.pais = p
         }
       }
       if (emp && emp.razao_social) {
         lista.push(emp)
       }
-      return lista
+
+      // Validação final de segurança: nenhuma empresa com razão social inválida (endereço ou curta demais)
+      return lista.filter((e) => {
+        const rz = (e.razao_social || '').trim()
+        if (rz.length < 3) return false
+        if (isLinhaEndereco(rz)) return false
+        if (/^CEP\b/i.test(rz) || /^Av\.?/i.test(rz) || /^Rua\b/i.test(rz) || /^Tel\b/i.test(rz))
+          return false
+        return true
+      })
     }
 
     const titulares = extrairEmpresasSecaoDinamica(
@@ -821,28 +992,40 @@ routerAdd('POST', '/backend/v1/bula/analisar-pdf', (e) => {
       empresas.push(importadores[imp])
     }
 
-    // Se o titular não foi capturado na seção, tenta buscar Tagros ou Monsanto no texto
-    if (empresas.length === 0) {
-      const tagrosMatch = textoCompleto.match(
-        /Tagros Brasil Com[ée]rcio de Produtos Qu[íi]micos Ltda/i,
-      )
-      if (tagrosMatch) {
-        empresas.push({
-          registro_mapa: registroMapa,
-          nome_produto: nomeComercial,
-          tipo_relacao: 'Titular do Registro',
-          razao_social: 'Tagros Brasil Comércio de Produtos Químicos Ltda',
-          nome_fantasia: 'TAGROS',
-          cnpj: '21.545.388/0001-86',
-          endereco: 'Rua Jorge Caixe, 132 – sala 02',
-          municipio: 'Cotia',
-          uf: 'SP',
-          cep: '06716-690',
-          inscricao_estadual: 'CDA 1188',
-          pais: 'Brasil',
-          dados_extras: { fonte: 'Bula Oficial MAPA' },
+    // Deduplicação estrita de empresas por (tipo_relacao + razao_social + cnpj)
+    // Se a mesma empresa aparecer repetida no mesmo papel (ex.: Monsanto), consolidamos os dados em 1 registro único
+    const empresasUnicas = []
+    const chavesVistas = new Set()
+    for (let i = 0; i < empresas.length; i++) {
+      const e = empresas[i]
+      const rzNorm = (e.razao_social || '').toUpperCase().replace(/\s+/g, ' ').trim()
+      const cnpjNorm = (e.cnpj || '').replace(/\D/g, '')
+      const tipoNorm = (e.tipo_relacao || '').toUpperCase().trim()
+      const chave = `${tipoNorm}|${rzNorm}|${cnpjNorm}`
+      if (!chavesVistas.has(chave)) {
+        chavesVistas.add(chave)
+        empresasUnicas.push(e)
+      } else {
+        // Encontra o registro existente e mescla campos vazios (ex.: se o anterior não tinha CNPJ ou endereço)
+        const existente = empresasUnicas.find((ex) => {
+          const exRz = (ex.razao_social || '').toUpperCase().replace(/\s+/g, ' ').trim()
+          const exTipo = (ex.tipo_relacao || '').toUpperCase().trim()
+          return exRz === rzNorm && exTipo === tipoNorm
         })
+        if (existente) {
+          if (!existente.cnpj && e.cnpj) existente.cnpj = e.cnpj
+          if (!existente.endereco && e.endereco) existente.endereco = e.endereco
+          if (!existente.municipio && e.municipio) existente.municipio = e.municipio
+          if (!existente.uf && e.uf) existente.uf = e.uf
+          if (!existente.cep && e.cep) existente.cep = e.cep
+          if (!existente.inscricao_estadual && e.inscricao_estadual)
+            existente.inscricao_estadual = e.inscricao_estadual
+        }
       }
+    }
+    empresas.length = 0
+    for (let i = 0; i < empresasUnicas.length; i++) {
+      empresas.push(empresasUnicas[i])
     }
 
     // 7. APLICAÇÃO E REENTRADA
