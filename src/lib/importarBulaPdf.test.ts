@@ -36,7 +36,7 @@ export function sanitizarNomeComercial(raw: unknown): string {
   if (!raw) return ''
   let s = String(raw)
   s = s.replace(/\s+corresponde\s+a.*$/i, '')
-  s = s.replace(/[®™]/g, '')
+  s = s.replace(/[®™]/g, ' ')
   s = limparMarkdown(s)
   s = s.replace(/^\d+\/\d+\s*/, '')
   return s.trim()
@@ -50,26 +50,63 @@ export function parsearTextoBula(markdown: string, pdfFileName?: string, _trunca
     .filter((l) => l.length > 0)
 
   // 1. Registro MAPA ancorado
+  // Prioridade máxima: cabeçalho oficial ("REGISTRADO NO MINISTÉRIO DA AGRICULTURA ... MAPA SOB N° 01119")
+  // NUNCA aceitar o registro do produto técnico ("Glifosate Técnico Monsanto registrado... sob Nº 01998").
   let registroMapa = ''
-  const m1 = textoCompleto.match(
-    /REGISTRADO\s+NO\s+MINIST[ÉE]RIO\s+DA\s+AGRICULTURA[^\n\r]*[\r\n\s]*(?:MAPA\s+)?SOB\s+N[°ºoO]?\s*[:.]?\s*([0-9]{3,7})/i,
+
+  const cabecalhoTexto = textoCompleto.slice(0, 4000)
+
+  const mCabecalhoCompleto = cabecalhoTexto.match(
+    /REGISTRADO\s+NO\s+MINIST[ÉE]RIO\s+DA\s+AGRICULTURA[^\n\r.;]*?[\r\n\s]+(?:#*\s*)*(?:MAPA\s+)?SOB\s+N[°ºoO?]?\s*[:.]?\s*([0-9]{3,7})/i,
   )
-  const m2 = textoCompleto.match(/MAPA\s+SOB\s+N[°ºoO]?\s*[:.]?\s*([0-9]{3,7})/i)
-  const m3 = textoCompleto.match(
-    /REGISTRO\s+(?:NO\s+)?MAPA\s*(?:SOB\s+)?N?[°ºoO]?\s*[:.]?\s*([0-9]{3,7})/i,
+  const mCabecalhoMapa = cabecalhoTexto.match(
+    /(?:^|[\r\n\s])MAPA\s+SOB\s+N[°ºoO?]?\s*[:.]?\s*([0-9]{3,7})/i,
   )
-  const m4 = textoCompleto.match(
-    /MINIST[ÉE]RIO\s+DA\s+AGRICULTURA[^\n\r]*N[°ºoO]?\s*[:.]?\s*([0-9]{3,7})/i,
+  const mCabecalhoLinha = cabecalhoTexto.match(
+    /REGISTRADO\s+NO\s+MINIST[ÉE]RIO\s+DA\s+AGRICULTURA[^\n\r]*?(?:MAPA\s+)?SOB\s+N[°ºoO?]?\s*[:.]?\s*([0-9]{3,7})/i,
+  )
+  const mCabecalhoGenerico = cabecalhoTexto.match(
+    /REGISTRO\s+(?:NO\s+)?MAPA\s*(?:SOB\s+)?N?[°ºoO?]?\s*[:.]?\s*([0-9]{3,7})/i,
   )
 
-  if (m1 && m1[1]) {
-    registroMapa = sanitizarRegistroMapa(m1[1])
-  } else if (m2 && m2[1]) {
-    registroMapa = sanitizarRegistroMapa(m2[1])
-  } else if (m3 && m3[1]) {
-    registroMapa = sanitizarRegistroMapa(m3[1])
-  } else if (m4 && m4[1]) {
-    registroMapa = sanitizarRegistroMapa(m4[1])
+  if (mCabecalhoCompleto && mCabecalhoCompleto[1]) {
+    registroMapa = sanitizarRegistroMapa(mCabecalhoCompleto[1])
+  } else if (mCabecalhoMapa && mCabecalhoMapa[1]) {
+    registroMapa = sanitizarRegistroMapa(mCabecalhoMapa[1])
+  } else if (mCabecalhoLinha && mCabecalhoLinha[1]) {
+    registroMapa = sanitizarRegistroMapa(mCabecalhoLinha[1])
+  } else if (mCabecalhoGenerico && mCabecalhoGenerico[1]) {
+    registroMapa = sanitizarRegistroMapa(mCabecalhoGenerico[1])
+  }
+
+  if (!registroMapa) {
+    const textoSemProdutoTecnico = textoCompleto
+      .replace(
+        /FABRICANTE\s+DO\s+PRODUTO\s+T[ÉE]CNICO[\s\S]*?(?=FORMULADOR|MANIPULADOR|IMPORTADOR|TITULAR|$)/gi,
+        '',
+      )
+      .replace(/[^\n\r]+t[ée]cnico[^\n\r]+sob\s+n[°ºoO?]?\s*[:.]?\s*[0-9]{3,7}/gi, '')
+
+    const m1 = textoSemProdutoTecnico.match(
+      /REGISTRADO\s+NO\s+MINIST[ÉE]RIO\s+DA\s+AGRICULTURA[^\n\r]*?[\r\n\s]+(?:#*\s*)*(?:MAPA\s+)?SOB\s+N[°ºoO?]?\s*[:.]?\s*([0-9]{3,7})/i,
+    )
+    const m2 = textoSemProdutoTecnico.match(/MAPA\s+SOB\s+N[°ºoO?]?\s*[:.]?\s*([0-9]{3,7})/i)
+    const m3 = textoSemProdutoTecnico.match(
+      /REGISTRO\s+(?:NO\s+)?MAPA\s*(?:SOB\s+)?N?[°ºoO?]?\s*[:.]?\s*([0-9]{3,7})/i,
+    )
+    const m4 = textoSemProdutoTecnico.match(
+      /MINIST[ÉE]RIO\s+DA\s+AGRICULTURA[^\n\r]*N[°ºoO?]?\s*[:.]?\s*([0-9]{3,7})/i,
+    )
+
+    if (m1 && m1[1]) {
+      registroMapa = sanitizarRegistroMapa(m1[1])
+    } else if (m2 && m2[1]) {
+      registroMapa = sanitizarRegistroMapa(m2[1])
+    } else if (m3 && m3[1]) {
+      registroMapa = sanitizarRegistroMapa(m3[1])
+    } else if (m4 && m4[1]) {
+      registroMapa = sanitizarRegistroMapa(m4[1])
+    }
   }
 
   // 2. Nome Comercial
@@ -598,9 +635,8 @@ export function parsearTextoBula(markdown: string, pdfFileName?: string, _trunca
 }
 
 describe('Testes do Parser de Bula PDF - Caso Real ROUNDUP ORIGINAL MAIS', () => {
+  // Texto real correspondente à bula oficial do ROUNDUP ORIGINAL MAIS (anexo da tarefa)
   const textoBulaRoundup = `
-# ## ROUNDUP ORIGINAL® MAIS
-
 1/27
 REGISTRADO NO MINISTÉRIO DA AGRICULTURA E PECUÁRIA
 MAPA SOB N° 01119
@@ -617,21 +653,26 @@ CLASSE: Herbicida seletivo condicional, de ação sistêmica, do grupo químico 
 TIPO DE FORMULAÇÃO: Concentrado solúvel (SL).
 
 TITULAR DO REGISTRO:
-## MONSANTO DO BRASIL LTDA.
+MONSANTO DO BRASIL LTDA.
 Rua Domingos Jorge, 1.100 - CEP: 04779-900 - São Paulo/SP
 CNPJ 64.858.525/0001-45 - Registro Estadual nº 426 - CDA/SP
 
 FABRICANTE DO PRODUTO TÉCNICO:
+Glifosate Técnico Monsanto registrado no Ministério da Agricultura e Pecuária MAPA - sob Nº 01998
 MONSANTO DO BRASIL LTDA.
 Av. Carlos Marcondes, 1200, km 159,5 - Limoeiro - CEP 12241-421
 São José dos Campos - SP - Tel.: 0800-011-5560 - CNPJ: 64.858.525/0002-26
+Registro Estadual nº 525 - CDA/SP
 AGRO BAYER S.R.L.
 Zarate Plant – Ruta Provincial 6, km 83,1 - Zarate - 2800 - Argentina. 
+BAYER CROPSCIENCE LP
+Luling Plant - 12.501 - River Road - Luling - Louisiana - 70.070 - E.U.A.
 
 FORMULADOR:
 MONSANTO DO BRASIL LTDA.
 Av. Carlos Marcondes, 1200, km 159,5 - Limoeiro - CEP 12241-421 
-São José dos Campos - SP - CNPJ: 64.858.525/0002-26
+São José dos Campos - SP - Tel.: 0800-011-5560 - CNPJ: 64.858.525/0002-26
+Registro Estadual nº 525 - CDA/SP
 
 IMPORTADOR:
 MONSANTO DO BRASIL LTDA.
@@ -640,14 +681,37 @@ CNPJ 64.858.525/0001-45
 
 CLASSIFICAÇÃO TOXICOLÓGICA: CATEGORIA 5 – PRODUTO IMPROVÁVEL DE CAUSAR DANO AGUDO
 CLASSIFICAÇÃO DO POTENCIAL DE PERICULOSIDADE AMBIENTAL PRODUTO PERIGOSO AO MEIO AMBIENTE - CLASSE III
+
+INSTRUÇÕES DE USO:
+Recomendado para o controle em pós-emergência de plantas daninhas...
+Produto comercial: ROUNDUP ORIGINAL® MAIS corresponde a 577 g/L do sal de di-amônio de glifosato ou 480 g/L do equivalente ácido de glifosato.
 `
 
-  it('1. Deve extrair ROUNDUP ORIGINAL MAIS e MAPA Nº 01119', () => {
+  it('1. Deve extrair registro MAPA Nº 01119 do cabeçalho e NUNCA o registro Nº 01998 do produto técnico', () => {
     const res = parsearTextoBula(textoBulaRoundup)
     expect(res.produto.registro_mapa).toBe('Nº 01119')
+    expect(res.produto.registro_mapa).not.toBe('Nº 01998')
+  })
+
+  it('2. Deve extrair o nome comercial completo ROUNDUP ORIGINAL MAIS (sem truncar no ®)', () => {
+    const res = parsearTextoBula(textoBulaRoundup)
     expect(res.produto.nome_comercial).toBe('ROUNDUP ORIGINAL MAIS')
+    expect(res.produto.nome_comercial).not.toBe('ROUNDUP ORIGINAL')
+  })
+
+  it('3. Titular do registro deve ser MONSANTO DO BRASIL LTDA. e composição glifosato 577 g/L', () => {
+    const res = parsearTextoBula(textoBulaRoundup)
     expect(res.produto.titular_registro).toBe('MONSANTO DO BRASIL LTDA.')
-    expect(res.produto.principio_ativo).toContain('GLIFOSATO')
+    const compPrincipal = res.composicao.find((c) => c.funcao_ingrediente === 'Ingrediente Ativo')
+    expect(compPrincipal).toBeDefined()
+    expect(compPrincipal?.concentracao).toBe('577.0')
+    expect(compPrincipal?.unidade_medida).toBe('g/L')
+  })
+
+  it('4. NCM padrão deve ser 3808.93.29 e NÃO a exceção exclusiva 3808.93.24 do ROUNDUP WG', () => {
+    const res = parsearTextoBula(textoBulaRoundup)
+    expect(res.produto.ncm_padrao).toBe('3808.93.29')
+    expect(res.produto.ncm_padrao).not.toBe('3808.93.24')
   })
 })
 

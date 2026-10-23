@@ -115,8 +115,10 @@ routerAdd('POST', '/backend/v1/bula/analisar-pdf', (e) => {
     function sanitizarNomeComercial(raw) {
       if (!raw) return ''
       let s = String(raw)
+      // Corta texto a partir de "corresponde a..."
       s = s.replace(/\s+corresponde\s+a.*$/i, '')
-      s = s.replace(/[®™]/g, '')
+      // Remove apenas o símbolo ® ou ™ sem perder palavras/sufixos subsequentes (ex: MAIS)
+      s = s.replace(/[®™]/g, ' ')
       s = limparMarkdown(s)
       s = s.replace(/^\d+\/\d+\s*/, '')
       return s.trim()
@@ -129,30 +131,80 @@ routerAdd('POST', '/backend/v1/bula/analisar-pdf', (e) => {
       .filter((l) => l.length > 0)
 
     // 1. REGISTRO MAPA
+    // Prioridade máxima: frase canônica do cabeçalho da bula (produto formulado comercial).
+    // NUNCA aceitar registros de produto técnico (seções "FABRICANTE DO PRODUTO TÉCNICO", "TÉCNICO... SOB Nº").
     let registroMapa = ''
-    const m1 = textoCompleto.match(
-      /REGISTRADO\s+NO\s+MINIST[ÉE]RIO\s+DA\s+AGRICULTURA[^\n\r]*[\r\n\s]*(?:MAPA\s+)?SOB\s+N[°ºoO]?\s*[:.]?\s*([0-9]{3,7})/i,
-    )
-    const m2 = textoCompleto.match(/MAPA\s+SOB\s+N[°ºoO]?\s*[:.]?\s*([0-9]{3,7})/i)
-    const m3 = textoCompleto.match(
-      /REGISTRO\s+(?:NO\s+)?MAPA\s*(?:SOB\s+)?N?[°ºoO]?\s*[:.]?\s*([0-9]{3,7})/i,
-    )
-    const m4 = textoCompleto.match(
-      /MINIST[ÉE]RIO\s+DA\s+AGRICULTURA[^\n\r]*N[°ºoO]?\s*[:.]?\s*([0-9]{3,7})/i,
+
+    // Procuramos primeiro apenas nas primeiras linhas/primeiro terço da bula (onde fica o cabeçalho oficial)
+    const cabecalhoTexto = textoCompleto.slice(0, 4000)
+
+    // Regex 1 (canônica explícita com quebras de linha e markdown flexíveis):
+    // "REGISTRADO NO MINISTÉRIO DA AGRICULTURA ... MAPA SOB N° 01119"
+    const mCabecalhoCompleto = cabecalhoTexto.match(
+      /REGISTRADO\s+NO\s+MINIST[ÉE]RIO\s+DA\s+AGRICULTURA[^\n\r.;]*?[\r\n\s]+(?:#*\s*)*(?:MAPA\s+)?SOB\s+N[°ºoO\?]?\s*[:.]?\s*([0-9]{3,7})/i,
     )
 
-    if (m1 && m1[1]) {
-      registroMapa = sanitizarRegistroMapa(m1[1])
-    } else if (m2 && m2[1]) {
-      registroMapa = sanitizarRegistroMapa(m2[1])
-    } else if (m3 && m3[1]) {
-      registroMapa = sanitizarRegistroMapa(m3[1])
-    } else if (m4 && m4[1]) {
-      registroMapa = sanitizarRegistroMapa(m4[1])
+    // Regex 2: "MAPA SOB N° 01119" no cabeçalho
+    const mCabecalhoMapa = cabecalhoTexto.match(
+      /(?:^|[\r\n\s])MAPA\s+SOB\s+N[°ºoO\?]?\s*[:.]?\s*([0-9]{3,7})/i,
+    )
+
+    // Regex 3: Frase em linha única "REGISTRADO NO MINISTÉRIO... MAPA SOB Nº 01119"
+    const mCabecalhoLinha = cabecalhoTexto.match(
+      /REGISTRADO\s+NO\s+MINIST[ÉE]RIO\s+DA\s+AGRICULTURA[^\n\r]*?(?:MAPA\s+)?SOB\s+N[°ºoO\?]?\s*[:.]?\s*([0-9]{3,7})/i,
+    )
+
+    // Regex 4: Registrado no MAPA sob nº no cabeçalho
+    const mCabecalhoGenerico = cabecalhoTexto.match(
+      /REGISTRO\s+(?:NO\s+)?MAPA\s*(?:SOB\s+)?N?[°ºoO\?]?\s*[:.]?\s*([0-9]{3,7})/i,
+    )
+
+    if (mCabecalhoCompleto && mCabecalhoCompleto[1]) {
+      registroMapa = sanitizarRegistroMapa(mCabecalhoCompleto[1])
+    } else if (mCabecalhoMapa && mCabecalhoMapa[1]) {
+      registroMapa = sanitizarRegistroMapa(mCabecalhoMapa[1])
+    } else if (mCabecalhoLinha && mCabecalhoLinha[1]) {
+      registroMapa = sanitizarRegistroMapa(mCabecalhoLinha[1])
+    } else if (mCabecalhoGenerico && mCabecalhoGenerico[1]) {
+      registroMapa = sanitizarRegistroMapa(mCabecalhoGenerico[1])
+    }
+
+    // Se ainda não encontrou no cabeçalho, procura no texto inteiro com exclusão estrita de produto técnico
+    if (!registroMapa) {
+      // Remove da busca trechos de produto técnico
+      const textoSemProdutoTecnico = textoCompleto
+        .replace(
+          /FABRICANTE\s+DO\s+PRODUTO\s+T[ÉE]CNICO[\s\S]*?(?=FORMULADOR|MANIPULADOR|IMPORTADOR|TITULAR|$)/gi,
+          '',
+        )
+        .replace(/[^\n\r]+t[ée]cnico[^\n\r]+sob\s+n[°ºoO\?]?\s*[:.]?\s*[0-9]{3,7}/gi, '')
+
+      const m1 = textoSemProdutoTecnico.match(
+        /REGISTRADO\s+NO\s+MINIST[ÉE]RIO\s+DA\s+AGRICULTURA[^\n\r]*?[\r\n\s]+(?:#*\s*)*(?:MAPA\s+)?SOB\s+N[°ºoO\?]?\s*[:.]?\s*([0-9]{3,7})/i,
+      )
+      const m2 = textoSemProdutoTecnico.match(/MAPA\s+SOB\s+N[°ºoO\?]?\s*[:.]?\s*([0-9]{3,7})/i)
+      const m3 = textoSemProdutoTecnico.match(
+        /REGISTRO\s+(?:NO\s+)?MAPA\s*(?:SOB\s+)?N?[°ºoO\?]?\s*[:.]?\s*([0-9]{3,7})/i,
+      )
+      const m4 = textoSemProdutoTecnico.match(
+        /MINIST[ÉE]RIO\s+DA\s+AGRICULTURA[^\n\r]*N[°ºoO\?]?\s*[:.]?\s*([0-9]{3,7})/i,
+      )
+
+      if (m1 && m1[1]) {
+        registroMapa = sanitizarRegistroMapa(m1[1])
+      } else if (m2 && m2[1]) {
+        registroMapa = sanitizarRegistroMapa(m2[1])
+      } else if (m3 && m3[1]) {
+        registroMapa = sanitizarRegistroMapa(m3[1])
+      } else if (m4 && m4[1]) {
+        registroMapa = sanitizarRegistroMapa(m4[1])
+      }
     }
 
     // 2. NOME COMERCIAL
     let nomeComercial = ''
+    // O nome correto pode estar na linha:
+    // "Produto comercial: ROUNDUP ORIGINAL® MAIS corresponde a 577 g/L do sal de di-amônio..."
     const prodComMatch = textoCompleto.match(/Produto\s+comercial\s*:\s*([^\n\r]+)/i)
     if (prodComMatch && prodComMatch[1]) {
       const rawProd = prodComMatch[1]
