@@ -1,6 +1,59 @@
 import { describe, it, expect } from 'vitest'
 
 // Funções de sanitização e parsing que espelham o hook pocketbase/hooks/importar_bula_pdf.js
+export function normalizarTextoBula(raw: unknown): string {
+  if (raw === null || raw === undefined) return ''
+  let s = String(raw)
+
+  // Correção de mojibake comum
+  const mapaMojibake: [RegExp, string][] = [
+    [/Âº/g, 'º'],
+    [/Â°/g, '°'],
+    [/Âª/g, 'ª'],
+    [/Â/g, ''],
+    [/Ã‰/g, 'É'],
+    [/Ã©/g, 'é'],
+    [/ÃŠ/g, 'Ê'],
+    [/Ãª/g, 'ê'],
+    [/Ã“/g, 'Ó'],
+    [/Ã³/g, 'ó'],
+    [/Ã”/g, 'Ô'],
+    [/Ã´/g, 'ô'],
+    [/Ã•/g, 'Õ'],
+    [/Ãµ/g, 'õ'],
+    [/Ã/g, 'Á'],
+    [/Ã¡/g, 'á'],
+    [/Ã€/g, 'À'],
+    [/Ã /g, 'à'],
+    [/Ã‚/g, 'Â'],
+    [/Ã¢/g, 'â'],
+    [/Ãƒ/g, 'Ã'],
+    [/Ã£/g, 'ã'],
+    [/Ã/g, 'Í'],
+    [/Ã­/g, 'í'],
+    [/Ãš/g, 'Ú'],
+    [/Ãº/g, 'ú'],
+    [/Ã‡/g, 'Ç'],
+    [/Ã§/g, 'ç'],
+    [/â€“|â€”/g, '–'],
+    [/â€œ|â€/g, '"'],
+    [/â€˜|â€™/g, "'"],
+  ]
+  for (let i = 0; i < mapaMojibake.length; i++) {
+    s = s.replace(mapaMojibake[i][0], mapaMojibake[i][1])
+  }
+
+  // Normalizar espaços não-separáveis (\u00A0), tabs e caracteres de controle
+  s = s.replace(/[\u00A0\u2000-\u200B\u202F\u205F\u3000\t]/g, ' ')
+  // eslint-disable-next-line no-control-regex
+  s = s.replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F]/g, '')
+
+  // Normalizar quebras de linha preservando estrutura
+  s = s.replace(/\r\n/g, '\n').replace(/\r/g, '\n')
+
+  return s
+}
+
 export function limparMarkdown(val: unknown): string {
   if (val === null || val === undefined) return ''
   let s = String(val)
@@ -21,7 +74,7 @@ export function limparMarkdown(val: unknown): string {
 export function sanitizarRegistroMapa(raw: unknown): string {
   if (!raw) return ''
   const s = String(raw).trim()
-  const match = s.match(/(?:N[°ºoO]?\s*[:.]?\s*)?(\d{1,7})/i)
+  const match = s.match(/(?:N[°ºoO?]?\s*[:.]?\s*)?(\d{1,7})/i)
   if (match && match[1]) {
     const digits = match[1]
     if (digits.length <= 4) {
@@ -43,30 +96,32 @@ export function sanitizarNomeComercial(raw: unknown): string {
 }
 
 export function parsearTextoBula(markdown: string, pdfFileName?: string, _truncatedFlag?: boolean) {
-  const textoCompleto = markdown || ''
+  const textoCompleto = normalizarTextoBula(markdown || '')
+  const textoLinhaUnica = textoCompleto.replace(/\s+/g, ' ')
+
   const linhas = textoCompleto
-    .split(/\r?\n/)
+    .split(/\n/)
     .map((l) => l.trim())
     .filter((l) => l.length > 0)
 
   // 1. Registro MAPA ancorado
   let registroMapa = ''
 
-  let cabecalhoTexto = textoCompleto.slice(0, 6000)
-  const idxTecnico = cabecalhoTexto.search(/FABRICANTE\s+DO\s+PRODUTO\s+T[ÉE]CNICO/i)
-  if (idxTecnico !== -1) {
-    cabecalhoTexto = cabecalhoTexto.slice(0, idxTecnico)
-  }
-
   function isNumeroProdutoTecnico(numStr: string) {
     if (!numStr) return true
     const numLimpo = String(numStr).replace(/^0+/, '')
+    if (!numLimpo) return true
+
     const regexGlifTec = new RegExp(
-      `(?:t[ée]cnico|glifosato\\s+t[ée]cnico)[\\s\\S]{1,100}?(?:sob\\s+n[°ºoO\\?]?\\s*[:.]?\\s*|n[°ºoO\\?]?\\s*[:.]?\\s*)0*${numLimpo}\\b`,
+      `(?:t[ée]cnico|glifosato\\s+t[ée]cnico)[\\s\\S]{1,120}?(?:sob\\s+(?:o\\s+)?n[°ºoO\\?]?\\s*[:.]?\\s*|n[°ºoO\\?]?\\s*[:.]?\\s*)0*${numLimpo}\\b`,
       'i',
     )
     if (regexGlifTec.test(textoCompleto)) return true
-    const regexGlifTecAntes = new RegExp(`0*${numLimpo}\\b[\\s\\S]{1,60}?t[ée]cnico`, 'i')
+
+    const regexGlifTecAntes = new RegExp(
+      `0*${numLimpo}\\b[\\s\\S]{1,60}?(?:produto\\s+t[ée]cnico|t[ée]cnico)`,
+      'i',
+    )
     if (regexGlifTecAntes.test(textoCompleto)) {
       const idxSecaoTecnica = textoCompleto.search(/FABRICANTE\s+DO\s+PRODUTO\s+T[ÉE]CNICO/i)
       const idxOcorr = textoCompleto.search(new RegExp(`0*${numLimpo}\\b`))
@@ -75,66 +130,96 @@ export function parsearTextoBula(markdown: string, pdfFileName?: string, _trunca
     return false
   }
 
-  const mCab1 = cabecalhoTexto.match(
-    /REGISTRAD[OA]\s+NO\s+MINIST[ÉE]RIO\s+DA\s+AGRICULTURA[\s\S]{0,180}?(?:MAPA\s*)?SOB\s+(?:O\s+)?N[°ºoO?]?\s*[:.]?\s*([0-9]{3,7})/i,
-  )
-  const mCab2 = cabecalhoTexto.match(
-    /(?:^|[\r\n\s|#*])MAPA\s+(?:SOB\s+(?:O\s+)?)?N[°ºoO?]?\s*[:.]?\s*([0-9]{3,7})/i,
-  )
-  const mCab3 = cabecalhoTexto.match(
-    /REGISTRO\s+(?:NO\s+)?MAPA\s*(?:SOB\s+(?:O\s+)?)?N?[°ºoO?]?\s*[:.]?\s*([0-9]{3,7})/i,
-  )
-  const mCab4 = cabecalhoTexto.match(
-    /REGISTRAD[OA][\s\S]{1,120}?(?:MAPA\s*)?SOB\s+(?:O\s+)?N[°ºoO?]?\s*[:.]?\s*([0-9]{3,7})/i,
-  )
-  const mCab5 = cabecalhoTexto.match(
-    /MINIST[ÉE]RIO\s+DA\s+AGRICULTURA[\s\S]{1,150}?(?:N[°ºoO?]?|NÚMERO)\s*[:.]?\s*([0-9]{3,7})/i,
-  )
-  const mCab6 = cabecalhoTexto.match(
-    /(?:^|[\r\n\s|#*])(?:SOB\s+(?:O\s+)?)N[°ºoO?]?\s*[:.]?\s*([0-9]{3,7})/i,
-  )
+  let cabecalhoTexto = textoCompleto.slice(0, 6000)
+  const idxTecnico = cabecalhoTexto.search(/FABRICANTE\s+DO\s+PRODUTO\s+T[ÉE]CNICO/i)
+  if (idxTecnico !== -1) {
+    cabecalhoTexto = cabecalhoTexto.slice(0, idxTecnico)
+  }
+  const cabecalhoLinhaUnica = cabecalhoTexto.replace(/\s+/g, ' ')
 
-  if (mCab1 && mCab1[1] && !isNumeroProdutoTecnico(mCab1[1])) {
-    registroMapa = sanitizarRegistroMapa(mCab1[1])
-  } else if (mCab2 && mCab2[1] && !isNumeroProdutoTecnico(mCab2[1])) {
-    registroMapa = sanitizarRegistroMapa(mCab2[1])
-  } else if (mCab3 && mCab3[1] && !isNumeroProdutoTecnico(mCab3[1])) {
-    registroMapa = sanitizarRegistroMapa(mCab3[1])
-  } else if (mCab4 && mCab4[1] && !isNumeroProdutoTecnico(mCab4[1])) {
-    registroMapa = sanitizarRegistroMapa(mCab4[1])
-  } else if (mCab5 && mCab5[1] && !isNumeroProdutoTecnico(mCab5[1])) {
-    registroMapa = sanitizarRegistroMapa(mCab5[1])
-  } else if (mCab6 && mCab6[1] && !isNumeroProdutoTecnico(mCab6[1])) {
-    registroMapa = sanitizarRegistroMapa(mCab6[1])
+  const candidatosRegistro: Array<{ fonte: string; num: string }> = []
+
+  // Regex Principal
+  const mPrincipal = cabecalhoLinhaUnica.match(
+    /MINIST[ÉE]RIO[\s\S]{0,240}?SOB\s+(?:O\s+)?N[º°oO?]?\s*[:.]?\s*([0-9]{3,7})/i,
+  )
+  if (mPrincipal && mPrincipal[1]) {
+    candidatosRegistro.push({ fonte: 'mPrincipal', num: mPrincipal[1] })
   }
 
-  if (!registroMapa) {
-    const textoSemSecaoTecnica = textoCompleto.replace(
-      /FABRICANTE\s+DO\s+PRODUTO\s+T[ÉE]CNICO[\s\S]*?(?=FORMULADOR|MANIPULADOR|IMPORTADOR|TITULAR\s+DO\s+REGISTRO|CONTE[ÚU]DO|CLASSE|INSTRU[ÇC][ÕO]ES|$)/gi,
-      '\n\n',
-    )
+  // Regex Secundária
+  const mSecundaria = cabecalhoLinhaUnica.match(
+    /MAPA[\s\S]{0,120}?SOB\s+(?:O\s+)?N[º°oO?]?\s*[:.]?\s*([0-9]{3,7})/i,
+  )
+  if (mSecundaria && mSecundaria[1]) {
+    candidatosRegistro.push({ fonte: 'mSecundaria', num: mSecundaria[1] })
+  }
 
-    const mFall1 = textoSemSecaoTecnica.match(
-      /REGISTRAD[OA]\s+NO\s+MINIST[ÉE]RIO\s+DA\s+AGRICULTURA[\s\S]{0,180}?(?:MAPA\s*)?SOB\s+(?:O\s+)?N[°ºoO?]?\s*[:.]?\s*([0-9]{3,7})/i,
-    )
-    const mFall2 = textoSemSecaoTecnica.match(
-      /(?:^|[\r\n\s|#*])MAPA\s+(?:SOB\s+(?:O\s+)?)?N[°ºoO?]?\s*[:.]?\s*([0-9]{3,7})/i,
-    )
-    const mFall3 = textoSemSecaoTecnica.match(
-      /REGISTRO\s+(?:NO\s+)?MAPA\s*(?:SOB\s+(?:O\s+)?)?N?[°ºoO?]?\s*[:.]?\s*([0-9]{3,7})/i,
-    )
-    const mFall4 = textoSemSecaoTecnica.match(
-      /MINIST[ÉE]RIO\s+DA\s+AGRICULTURA[\s\S]{1,150}?(?:N[°ºoO?]?|NÚMERO)\s*[:.]?\s*([0-9]{3,7})/i,
-    )
+  // Registrado no ... sob nº
+  const mRegistrado = cabecalhoLinhaUnica.match(
+    /REGISTRAD[OA][\s\S]{0,180}?SOB\s+(?:O\s+)?N[º°oO?]?\s*[:.]?\s*([0-9]{3,7})/i,
+  )
+  if (mRegistrado && mRegistrado[1]) {
+    candidatosRegistro.push({ fonte: 'mRegistrado', num: mRegistrado[1] })
+  }
 
-    if (mFall1 && mFall1[1] && !isNumeroProdutoTecnico(mFall1[1])) {
-      registroMapa = sanitizarRegistroMapa(mFall1[1])
-    } else if (mFall2 && mFall2[1] && !isNumeroProdutoTecnico(mFall2[1])) {
-      registroMapa = sanitizarRegistroMapa(mFall2[1])
-    } else if (mFall3 && mFall3[1] && !isNumeroProdutoTecnico(mFall3[1])) {
-      registroMapa = sanitizarRegistroMapa(mFall3[1])
-    } else if (mFall4 && mFall4[1] && !isNumeroProdutoTecnico(mFall4[1])) {
-      registroMapa = sanitizarRegistroMapa(mFall4[1])
+  // REGISTRO NO MAPA
+  const mRegistroMapa = cabecalhoLinhaUnica.match(
+    /REGISTRO\s+(?:NO\s+)?MAPA[\s\S]{0,80}?(?:SOB\s+(?:O\s+)?)?N[º°oO?]?\s*[:.]?\s*([0-9]{3,7})/i,
+  )
+  if (mRegistroMapa && mRegistroMapa[1]) {
+    candidatosRegistro.push({ fonte: 'mRegistroMapa', num: mRegistroMapa[1] })
+  }
+
+  // MINISTÉRIO DA AGRICULTURA ... Nº
+  const mMinAgri = cabecalhoLinhaUnica.match(
+    /MINIST[ÉE]RIO\s+DA\s+AGRICULTURA[\s\S]{0,180}?(?:N[º°oO?]?|N[ÚU]MERO)\s*[:.]?\s*([0-9]{3,7})/i,
+  )
+  if (mMinAgri && mMinAgri[1]) {
+    candidatosRegistro.push({ fonte: 'mMinAgri', num: mMinAgri[1] })
+  }
+
+  // SOB Nº
+  const mSobNo = cabecalhoLinhaUnica.match(
+    /(?:^|[\s|#*])SOB\s+(?:O\s+)?N[º°oO?]?\s*[:.]?\s*([0-9]{3,7})/i,
+  )
+  if (mSobNo && mSobNo[1]) {
+    candidatosRegistro.push({ fonte: 'mSobNo', num: mSobNo[1] })
+  }
+
+  // Fallback em textoSemSecaoTecnica
+  const textoSemSecaoTecnica = textoCompleto.replace(
+    /FABRICANTE\s+DO\s+PRODUTO\s+T[ÉE]CNICO[\s\S]*?(?=FORMULADOR|MANIPULADOR|IMPORTADOR|TITULAR\s+DO\s+REGISTRO|CONTE[ÚU]DO|CLASSE|INSTRU[ÇC][ÕO]ES|$)/gi,
+    ' ',
+  )
+  const textoSemTecnicaLinhaUnica = textoSemSecaoTecnica.replace(/\s+/g, ' ')
+
+  const mFallPrinc = textoSemTecnicaLinhaUnica.match(
+    /MINIST[ÉE]RIO[\s\S]{0,240}?SOB\s+(?:O\s+)?N[º°oO?]?\s*[:.]?\s*([0-9]{3,7})/i,
+  )
+  if (mFallPrinc && mFallPrinc[1]) {
+    candidatosRegistro.push({ fonte: 'mFallPrinc', num: mFallPrinc[1] })
+  }
+
+  const mFallSec = textoSemTecnicaLinhaUnica.match(
+    /MAPA[\s\S]{0,120}?SOB\s+(?:O\s+)?N[º°oO?]?\s*[:.]?\s*([0-9]{3,7})/i,
+  )
+  if (mFallSec && mFallSec[1]) {
+    candidatosRegistro.push({ fonte: 'mFallSec', num: mFallSec[1] })
+  }
+
+  const mFallReg = textoSemTecnicaLinhaUnica.match(
+    /REGISTRO\s+(?:NO\s+)?MAPA[\s\S]{0,80}?(?:SOB\s+(?:O\s+)?)?N[º°oO?]?\s*[:.]?\s*([0-9]{3,7})/i,
+  )
+  if (mFallReg && mFallReg[1]) {
+    candidatosRegistro.push({ fonte: 'mFallReg', num: mFallReg[1] })
+  }
+
+  for (let c = 0; c < candidatosRegistro.length; c++) {
+    const cand = candidatosRegistro[c]
+    if (!isNumeroProdutoTecnico(cand.num)) {
+      registroMapa = sanitizarRegistroMapa(cand.num)
+      break
     }
   }
 
@@ -782,6 +867,57 @@ ROUNDUP ORIGINAL® MAIS
 Registrado no Ministério da Agricultura e Pecuária – MAPA sob o nº 01119
 `
     const res = parsearTextoBula(mockSobONo)
+    expect(res.produto.registro_mapa).toBe('Nº 01119')
+    expect(res.produto.nome_comercial).toBe('ROUNDUP ORIGINAL MAIS')
+  })
+
+  it('8. Deve extrair 01119 mesmo com texto degradado por mojibake "NÂº", "MINISTÃ‰RIO", "PECUÃRIA" e espaços não separáveis', () => {
+    const textoMojibakeDegradado = `
+1/27\u00A0\u00A0\u00A0
+REGISTRADO NO MINISTÃ‰RIO DA AGRICULTURA E PECUÃRIA\u00A0\u00A0\u00A0\u00A0\u00A0\u00A0
+MAPA SOB NÂº 01119
+
+COMPOSIÃ‡ÃƒO:
+Sal de Di-amÃ´nio de N-(phosphonomethyl)glycine (GLIFOSATO)..................577,0 g/L (57,7% m/v)
+Dietilenoglicol.......................................................................................................20,0 g/L (2,0% m/v)
+Outros Ingredientes..........................................................................................658,0 g/L (65,8% m/v)
+
+TITULAR DO REGISTRO:
+MONSANTO DO BRASIL LTDA.
+
+FABRICANTE DO PRODUTO TÃ‰CNICO:
+Glifosato TÃ©cnico Monsanto registrado no MinistÃ©rio da Agricultura e PecuÃ¡ria MAPA - sob NÂº 01998
+MONSANTO DO BRASIL LTDA.
+
+Produto comercial: ROUNDUP ORIGINALÂ® MAIS corresponde a 577 g/L do sal de di-amÃ´nio...
+`
+    const res = parsearTextoBula(textoMojibakeDegradado)
+    expect(res.produto.registro_mapa).toBe('Nº 01119')
+    expect(res.produto.registro_mapa).not.toBe('Nº 01998')
+    expect(res.produto.nome_comercial).toBe('ROUNDUP ORIGINAL MAIS')
+  })
+
+  it('9. Deve extrair 01119 com quebras duras e variação de ponto e interrogação "N? 01119"', () => {
+    const textoComInterrogacao = `
+REGISTRADO NO
+MINISTERIO DA AGRICULTURA
+MAPA SOB N? 01119
+Produto comercial: ROUNDUP ORIGINAL® MAIS
+FABRICANTE DO PRODUTO TÉCNICO:
+Glifosato Técnico sob nº 01998
+`
+    const res = parsearTextoBula(textoComInterrogacao)
+    expect(res.produto.registro_mapa).toBe('Nº 01119')
+    expect(res.produto.nome_comercial).toBe('ROUNDUP ORIGINAL MAIS')
+  })
+
+  it('10. Deve extrair 01119 com "N°" com grau e espaços múltiplos entre MAPA e SOB', () => {
+    const textoComEspacos = `
+REGISTRADO NO MINISTÉRIO DA AGRICULTURA E PECUÁRIA
+MAPA    SOB    O    N°    01119
+Produto comercial: ROUNDUP ORIGINAL® MAIS
+`
+    const res = parsearTextoBula(textoComEspacos)
     expect(res.produto.registro_mapa).toBe('Nº 01119')
     expect(res.produto.nome_comercial).toBe('ROUNDUP ORIGINAL MAIS')
   })

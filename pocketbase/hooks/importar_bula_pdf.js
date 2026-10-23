@@ -79,6 +79,61 @@ routerAdd('POST', '/backend/v1/bula/analisar-pdf', (e) => {
     }
 
     // =========================================================================
+    // NORMALIZADOR DE TEXTO PRÉ-PIPELINE (MOJIBAKE, ESPAÇOS, CARACTERES DE CONTROLE)
+    // =========================================================================
+    function normalizarTextoBula(raw) {
+      if (raw === null || raw === undefined) return ''
+      let s = String(raw)
+
+      // 1. Correção de mojibake comum decorrente de UTF-8 lido como Latin-1 / Windows-1252
+      const mapaMojibake = [
+        [/Âº/g, 'º'],
+        [/Â°/g, '°'],
+        [/Âª/g, 'ª'],
+        [/Â/g, ''],
+        [/Ã‰/g, 'É'],
+        [/Ã©/g, 'é'],
+        [/ÃŠ/g, 'Ê'],
+        [/Ãª/g, 'ê'],
+        [/Ã“/g, 'Ó'],
+        [/Ã³/g, 'ó'],
+        [/Ã”/g, 'Ô'],
+        [/Ã´/g, 'ô'],
+        [/Ã•/g, 'Õ'],
+        [/Ãµ/g, 'õ'],
+        [/Ã/g, 'Á'],
+        [/Ã¡/g, 'á'],
+        [/Ã€/g, 'À'],
+        [/Ã /g, 'à'],
+        [/Ã‚/g, 'Â'],
+        [/Ã¢/g, 'â'],
+        [/Ãƒ/g, 'Ã'],
+        [/Ã£/g, 'ã'],
+        [/Ã/g, 'Í'],
+        [/Ã­/g, 'í'],
+        [/Ãš/g, 'Ú'],
+        [/Ãº/g, 'ú'],
+        [/Ã‡/g, 'Ç'],
+        [/Ã§/g, 'ç'],
+        [/â€“|â€”/g, '–'],
+        [/â€œ|â€/g, '"'],
+        [/â€˜|â€™/g, "'"],
+      ]
+      for (let i = 0; i < mapaMojibake.length; i++) {
+        s = s.replace(mapaMojibake[i][0], mapaMojibake[i][1])
+      }
+
+      // 2. Normalizar espaços não-separáveis (\u00A0), tabs e caracteres de controle
+      s = s.replace(/[\u00A0\u2000-\u200B\u202F\u205F\u3000\t]/g, ' ')
+      s = s.replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F]/g, '')
+
+      // 3. Normalizar quebras de linha preservando estrutura (\r\n -> \n)
+      s = s.replace(/\r\n/g, '\n').replace(/\r/g, '\n')
+
+      return s
+    }
+
+    // =========================================================================
     // FUNÇÕES DE LIMPEZA E SANITIZAÇÃO (ESCOPO ISOLADO)
     // =========================================================================
     function limparMarkdown(val) {
@@ -101,7 +156,7 @@ routerAdd('POST', '/backend/v1/bula/analisar-pdf', (e) => {
     function sanitizarRegistroMapa(raw) {
       if (!raw) return ''
       const s = String(raw).trim()
-      const match = s.match(/(?:N[°ºoO]?\s*[:.]?\s*)?(\d{1,7})/i)
+      const match = s.match(/(?:N[°ºoO?]?\s*[:.]?\s*)?(\d{1,7})/i)
       if (match && match[1]) {
         const digits = match[1]
         if (digits.length <= 4) {
@@ -124,39 +179,46 @@ routerAdd('POST', '/backend/v1/bula/analisar-pdf', (e) => {
       return s.trim()
     }
 
-    const textoCompleto = markdown || ''
+    // Aplicar a normalização robusta a TODO o markdown antes de qualquer regex
+    const textoCompleto = normalizarTextoBula(markdown || '')
+    // Versão colapsada (espaços e quebras viram espaço único) para casamentos de linha cruzada ultra-tolerantes
+    const textoLinhaUnica = textoCompleto.replace(/\s+/g, ' ')
+
     const linhas = textoCompleto
-      .split(/\r?\n/)
+      .split(/\n/)
       .map((l) => l.trim())
       .filter((l) => l.length > 0)
+
+    // Log de diagnóstico no início da análise (primeiros 1.200 caracteres do texto normalizado)
+    console.log(
+      '[importar_bula_pdf] Início da análise. Primeiros 1.200 chars do texto normalizado:\n' +
+        textoCompleto.slice(0, 1200),
+    )
 
     // 1. REGISTRO MAPA
     // Prioridade máxima: frase canônica do cabeçalho da bula (produto formulado comercial).
     // NUNCA aceitar registros de produto técnico (seções "FABRICANTE DO PRODUTO TÉCNICO", "TÉCNICO... SOB Nº").
-    // Qualquer número citado em contexto de produto técnico DEVE ser categoricamente ignorado.
+    // Qualquer número citado em contexto de produto técnico DEVE ser categoricamente ignorado (apenas descarte do candidato).
     let registroMapa = ''
 
-    // Procuramos primeiro no cabeçalho antes de qualquer menção a FABRICANTE DO PRODUTO TÉCNICO ou COMPOSIÇÃO
-    let cabecalhoTexto = textoCompleto.slice(0, 6000)
-    const idxTecnico = cabecalhoTexto.search(/FABRICANTE\s+DO\s+PRODUTO\s+T[ÉE]CNICO/i)
-    if (idxTecnico !== -1) {
-      cabecalhoTexto = cabecalhoTexto.slice(0, idxTecnico)
-    }
-
-    // Helper para verificar se um número capturado é de produto técnico
+    // Helper contextual anti-produto-técnico (rejeitar número capturado associado a produto técnico)
     function isNumeroProdutoTecnico(numStr) {
       if (!numStr) return true
       const numLimpo = String(numStr).replace(/^0+/, '')
-      // Se o número citado for exatamente associado a "produto técnico" no texto
-      // Ex: "Glifosato Técnico Monsanto sob nº 01998", "produto técnico... sob nº 01998"
+      if (!numLimpo) return true
+
+      // Se o número citado for explicitamente associado a "técnico" / "glifosato técnico"
       const regexGlifTec = new RegExp(
-        `(?:t[ée]cnico|glifosato\\s+t[ée]cnico)[\\s\\S]{1,100}?(?:sob\\s+n[°ºoO\\?]?\\s*[:.]?\\s*|n[°ºoO\\?]?\\s*[:.]?\\s*)0*${numLimpo}\\b`,
+        `(?:t[ée]cnico|glifosato\\s+t[ée]cnico)[\\s\\S]{1,120}?(?:sob\\s+(?:o\\s+)?n[°ºoO\\?]?\\s*[:.]?\\s*|n[°ºoO\\?]?\\s*[:.]?\\s*)0*${numLimpo}\\b`,
         'i',
       )
       if (regexGlifTec.test(textoCompleto)) return true
-      const regexGlifTecAntes = new RegExp(`0*${numLimpo}\\b[\\s\\S]{1,60}?t[ée]cnico`, 'i')
+
+      const regexGlifTecAntes = new RegExp(
+        `0*${numLimpo}\\b[\\s\\S]{1,60}?(?:produto\\s+t[ée]cnico|t[ée]cnico)`,
+        'i',
+      )
       if (regexGlifTecAntes.test(textoCompleto)) {
-        // Se a ocorrência foi dentro de FABRICANTE DO PRODUTO TÉCNICO
         const idxSecaoTecnica = textoCompleto.search(/FABRICANTE\s+DO\s+PRODUTO\s+T[ÉE]CNICO/i)
         const idxOcorr = textoCompleto.search(new RegExp(`0*${numLimpo}\\b`))
         if (idxSecaoTecnica !== -1 && idxOcorr >= idxSecaoTecnica) return true
@@ -164,84 +226,115 @@ routerAdd('POST', '/backend/v1/bula/analisar-pdf', (e) => {
       return false
     }
 
-    // Regex 1: Cabeçalho canônico completo com Ministério da Agricultura e Pecuária/Abastecimento + quebras + MAPA sob nº
-    // Ex: "REGISTRADO NO MINISTÉRIO DA AGRICULTURA E PECUÁRIA\nMAPA SOB N° 01119"
-    // Ex: "Registrado no Ministério da Agricultura, Pecuária e Abastecimento – MAPA sob nº 03820"
-    // Ex: "Registrado no Ministério da Agricultura e Pecuária – MAPA sob nº 01119"
-    const mCab1 = cabecalhoTexto.match(
-      /REGISTRAD[OA]\s+NO\s+MINIST[ÉE]RIO\s+DA\s+AGRICULTURA[\s\S]{0,180}?(?:MAPA\s*)?SOB\s+(?:O\s+)?N[°ºoO\?]?\s*[:.]?\s*([0-9]{3,7})/i,
-    )
+    // Trecho inicial para análise de cabeçalho (primeiros ~6.000 caracteres ou antes do produto técnico)
+    let cabecalhoTexto = textoCompleto.slice(0, 6000)
+    const idxTecnico = cabecalhoTexto.search(/FABRICANTE\s+DO\s+PRODUTO\s+T[ÉE]CNICO/i)
+    if (idxTecnico !== -1) {
+      cabecalhoTexto = cabecalhoTexto.slice(0, idxTecnico)
+    }
+    const cabecalhoLinhaUnica = cabecalhoTexto.replace(/\s+/g, ' ')
 
-    // Regex 2: "MAPA SOB N° 01119" ou "MAPA SOB O Nº 01119" no cabeçalho
-    const mCab2 = cabecalhoTexto.match(
-      /(?:^|[\r\n\s|#*])MAPA\s+(?:SOB\s+(?:O\s+)?)?N[°ºoO\?]?\s*[:.]?\s*([0-9]{3,7})/i,
-    )
+    // Diagnóstico dos candidatos a registro MAPA
+    const candidatosRegistro = []
 
-    // Regex 3: "REGISTRO MAPA Nº 01119" ou "REGISTRO NO MAPA SOB Nº 01119"
-    const mCab3 = cabecalhoTexto.match(
-      /REGISTRO\s+(?:NO\s+)?MAPA\s*(?:SOB\s+(?:O\s+)?)?N?[°ºoO\?]?\s*[:.]?\s*([0-9]{3,7})/i,
+    // REGEXES ROBUSTAS DE CABEÇALHO (tolerantes a quebras duras, acentos, caixa e variações de Nº/N°/NÂº/N?/N)
+    // 1. Principal: "MINISTÉRIO DA AGRICULTURA ... SOB (O) Nº 01119" (espaços colapsados, [ÉE] e tolerância até 240 chars)
+    const mPrincipal = cabecalhoLinhaUnica.match(
+      /MINIST[ÉE]RIO[\s\S]{0,240}?SOB\s+(?:O\s+)?N[º°oO\?]?\s*[:.]?\s*([0-9]{3,7})/i,
     )
-
-    // Regex 4: "REGISTRADO NO ... SOB N° 01119"
-    const mCab4 = cabecalhoTexto.match(
-      /REGISTRAD[OA][\s\S]{1,120}?(?:MAPA\s*)?SOB\s+(?:O\s+)?N[°ºoO\?]?\s*[:.]?\s*([0-9]{3,7})/i,
-    )
-
-    // Regex 5: "MINISTÉRIO DA AGRICULTURA ... Nº 01119"
-    const mCab5 = cabecalhoTexto.match(
-      /MINIST[ÉE]RIO\s+DA\s+AGRICULTURA[\s\S]{1,150}?(?:N[°ºoO\?]?|NÚMERO)\s*[:.]?\s*([0-9]{3,7})/i,
-    )
-
-    // Regex 6: Frase simples "sob o nº 01119" ou "sob nº 01119" no cabeçalho inicial
-    const mCab6 = cabecalhoTexto.match(
-      /(?:^|[\r\n\s|#*])(?:SOB\s+(?:O\s+)?)N[°ºoO\?]?\s*[:.]?\s*([0-9]{3,7})/i,
-    )
-
-    if (mCab1 && mCab1[1] && !isNumeroProdutoTecnico(mCab1[1])) {
-      registroMapa = sanitizarRegistroMapa(mCab1[1])
-    } else if (mCab2 && mCab2[1] && !isNumeroProdutoTecnico(mCab2[1])) {
-      registroMapa = sanitizarRegistroMapa(mCab2[1])
-    } else if (mCab3 && mCab3[1] && !isNumeroProdutoTecnico(mCab3[1])) {
-      registroMapa = sanitizarRegistroMapa(mCab3[1])
-    } else if (mCab4 && mCab4[1] && !isNumeroProdutoTecnico(mCab4[1])) {
-      registroMapa = sanitizarRegistroMapa(mCab4[1])
-    } else if (mCab5 && mCab5[1] && !isNumeroProdutoTecnico(mCab5[1])) {
-      registroMapa = sanitizarRegistroMapa(mCab5[1])
-    } else if (mCab6 && mCab6[1] && !isNumeroProdutoTecnico(mCab6[1])) {
-      registroMapa = sanitizarRegistroMapa(mCab6[1])
+    if (mPrincipal && mPrincipal[1]) {
+      candidatosRegistro.push({ fonte: 'mPrincipal', num: mPrincipal[1] })
     }
 
-    // Se ainda não encontrou no cabeçalho cortado, busca no texto completo aplicando exclusão seletiva
-    if (!registroMapa) {
-      // Remove da busca apenas a seção estrita de FABRICANTE DO PRODUTO TÉCNICO
-      const textoSemSecaoTecnica = textoCompleto.replace(
-        /FABRICANTE\s+DO\s+PRODUTO\s+T[ÉE]CNICO[\s\S]*?(?=FORMULADOR|MANIPULADOR|IMPORTADOR|TITULAR\s+DO\s+REGISTRO|CONTE[ÚU]DO|CLASSE|INSTRU[ÇC][ÕO]ES|$)/gi,
-        '\n\n',
-      )
+    // 2. Secundária: "MAPA ... SOB (O) Nº 01119"
+    const mSecundaria = cabecalhoLinhaUnica.match(
+      /MAPA[\s\S]{0,120}?SOB\s+(?:O\s+)?N[º°oO\?]?\s*[:.]?\s*([0-9]{3,7})/i,
+    )
+    if (mSecundaria && mSecundaria[1]) {
+      candidatosRegistro.push({ fonte: 'mSecundaria', num: mSecundaria[1] })
+    }
 
-      const mFall1 = textoSemSecaoTecnica.match(
-        /REGISTRAD[OA]\s+NO\s+MINIST[ÉE]RIO\s+DA\s+AGRICULTURA[\s\S]{0,180}?(?:MAPA\s*)?SOB\s+(?:O\s+)?N[°ºoO\?]?\s*[:.]?\s*([0-9]{3,7})/i,
-      )
-      const mFall2 = textoSemSecaoTecnica.match(
-        /(?:^|[\r\n\s|#*])MAPA\s+(?:SOB\s+(?:O\s+)?)?N[°ºoO\?]?\s*[:.]?\s*([0-9]{3,7})/i,
-      )
-      const mFall3 = textoSemSecaoTecnica.match(
-        /REGISTRO\s+(?:NO\s+)?MAPA\s*(?:SOB\s+(?:O\s+)?)?N?[°ºoO\?]?\s*[:.]?\s*([0-9]{3,7})/i,
-      )
-      const mFall4 = textoSemSecaoTecnica.match(
-        /MINIST[ÉE]RIO\s+DA\s+AGRICULTURA[\s\S]{1,150}?(?:N[°ºoO\?]?|NÚMERO)\s*[:.]?\s*([0-9]{3,7})/i,
-      )
+    // 3. Registrado no ... sob (o) nº
+    const mRegistrado = cabecalhoLinhaUnica.match(
+      /REGISTRAD[OA][\s\S]{0,180}?SOB\s+(?:O\s+)?N[º°oO\?]?\s*[:.]?\s*([0-9]{3,7})/i,
+    )
+    if (mRegistrado && mRegistrado[1]) {
+      candidatosRegistro.push({ fonte: 'mRegistrado', num: mRegistrado[1] })
+    }
 
-      if (mFall1 && mFall1[1] && !isNumeroProdutoTecnico(mFall1[1])) {
-        registroMapa = sanitizarRegistroMapa(mFall1[1])
-      } else if (mFall2 && mFall2[1] && !isNumeroProdutoTecnico(mFall2[1])) {
-        registroMapa = sanitizarRegistroMapa(mFall2[1])
-      } else if (mFall3 && mFall3[1] && !isNumeroProdutoTecnico(mFall3[1])) {
-        registroMapa = sanitizarRegistroMapa(mFall3[1])
-      } else if (mFall4 && mFall4[1] && !isNumeroProdutoTecnico(mFall4[1])) {
-        registroMapa = sanitizarRegistroMapa(mFall4[1])
+    // 4. "REGISTRO (NO) MAPA ... SOB (O) Nº"
+    const mRegistroMapa = cabecalhoLinhaUnica.match(
+      /REGISTRO\s+(?:NO\s+)?MAPA[\s\S]{0,80}?(?:SOB\s+(?:O\s+)?)?N[º°oO\?]?\s*[:.]?\s*([0-9]{3,7})/i,
+    )
+    if (mRegistroMapa && mRegistroMapa[1]) {
+      candidatosRegistro.push({ fonte: 'mRegistroMapa', num: mRegistroMapa[1] })
+    }
+
+    // 5. "MINISTÉRIO DA AGRICULTURA ... Nº 01119"
+    const mMinAgri = cabecalhoLinhaUnica.match(
+      /MINIST[ÉE]RIO\s+DA\s+AGRICULTURA[\s\S]{0,180}?(?:N[º°oO\?]?|N[ÚU]MERO)\s*[:.]?\s*([0-9]{3,7})/i,
+    )
+    if (mMinAgri && mMinAgri[1]) {
+      candidatosRegistro.push({ fonte: 'mMinAgri', num: mMinAgri[1] })
+    }
+
+    // 6. "SOB (O) Nº 01119" no início do documento
+    const mSobNo = cabecalhoLinhaUnica.match(
+      /(?:^|[\s|#*])SOB\s+(?:O\s+)?N[º°oO\?]?\s*[:.]?\s*([0-9]{3,7})/i,
+    )
+    if (mSobNo && mSobNo[1]) {
+      candidatosRegistro.push({ fonte: 'mSobNo', num: mSobNo[1] })
+    }
+
+    // Fallback: busca em textoSemSecaoTecnica (sem FABRICANTE DO PRODUTO TÉCNICO) em textoLinhaUnica
+    const textoSemSecaoTecnica = textoCompleto.replace(
+      /FABRICANTE\s+DO\s+PRODUTO\s+T[ÉE]CNICO[\s\S]*?(?=FORMULADOR|MANIPULADOR|IMPORTADOR|TITULAR\s+DO\s+REGISTRO|CONTE[ÚU]DO|CLASSE|INSTRU[ÇC][ÕO]ES|$)/gi,
+      ' ',
+    )
+    const textoSemTecnicaLinhaUnica = textoSemSecaoTecnica.replace(/\s+/g, ' ')
+
+    const mFallPrinc = textoSemTecnicaLinhaUnica.match(
+      /MINIST[ÉE]RIO[\s\S]{0,240}?SOB\s+(?:O\s+)?N[º°oO\?]?\s*[:.]?\s*([0-9]{3,7})/i,
+    )
+    if (mFallPrinc && mFallPrinc[1]) {
+      candidatosRegistro.push({ fonte: 'mFallPrinc', num: mFallPrinc[1] })
+    }
+
+    const mFallSec = textoSemTecnicaLinhaUnica.match(
+      /MAPA[\s\S]{0,120}?SOB\s+(?:O\s+)?N[º°oO\?]?\s*[:.]?\s*([0-9]{3,7})/i,
+    )
+    if (mFallSec && mFallSec[1]) {
+      candidatosRegistro.push({ fonte: 'mFallSec', num: mFallSec[1] })
+    }
+
+    const mFallReg = textoSemTecnicaLinhaUnica.match(
+      /REGISTRO\s+(?:NO\s+)?MAPA[\s\S]{0,80}?(?:SOB\s+(?:O\s+)?)?N[º°oO\?]?\s*[:.]?\s*([0-9]{3,7})/i,
+    )
+    if (mFallReg && mFallReg[1]) {
+      candidatosRegistro.push({ fonte: 'mFallReg', num: mFallReg[1] })
+    }
+
+    // Seleção do primeiro candidato válido que não seja produto técnico
+    let candidatoAceito = null
+    const candidatosDescartados = []
+
+    for (let c = 0; c < candidatosRegistro.length; c++) {
+      const cand = candidatosRegistro[c]
+      if (isNumeroProdutoTecnico(cand.num)) {
+        candidatosDescartados.push({ ...cand, motivo: 'produto técnico' })
+      } else {
+        if (!candidatoAceito) {
+          candidatoAceito = cand
+          registroMapa = sanitizarRegistroMapa(cand.num)
+        }
       }
     }
+
+    console.log(
+      `[importar_bula_pdf] Candidatos a Registro MAPA capturados: ${candidatosRegistro.length} | ` +
+        `Aceito: ${registroMapa || 'Nenhum'} (${candidatoAceito ? candidatoAceito.fonte : 'N/A'}) | ` +
+        `Descartados: ${JSON.stringify(candidatosDescartados)}`,
+    )
 
     // 2. NOME COMERCIAL
     let nomeComercial = ''
@@ -516,6 +609,28 @@ routerAdd('POST', '/backend/v1/bula/analisar-pdf', (e) => {
         principioAtivoCalculado = nomeComercial
       }
     }
+
+    // Alinhamento dinâmico do registro_mapa nas coleções acessórias extraídas
+    composicoes.forEach((c) => {
+      c.registro_mapa = registroMapa
+      c.nome_produto = nomeComercial
+    })
+    empresas.forEach((emp) => {
+      emp.registro_mapa = registroMapa
+      emp.nome_produto = nomeComercial
+    })
+    aplicacoes.forEach((ap) => {
+      ap.registro_mapa = registroMapa
+      ap.nome_produto = nomeComercial
+    })
+    culturas.forEach((cu) => {
+      cu.registro_mapa = registroMapa
+      cu.nome_produto = nomeComercial
+    })
+    alvos.forEach((al) => {
+      al.registro_mapa = registroMapa
+      al.nome_produto = nomeComercial
+    })
 
     // 6. CADEIA DE EMPRESAS DINÂMICA
     const empresas = []
