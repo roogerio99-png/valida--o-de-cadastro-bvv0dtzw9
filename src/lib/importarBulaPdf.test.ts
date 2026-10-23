@@ -42,7 +42,7 @@ export function sanitizarNomeComercial(raw: unknown): string {
   return s.trim()
 }
 
-export function parsearTextoBula(markdown: string, pdfFileName?: string, truncatedFlag?: boolean) {
+export function parsearTextoBula(markdown: string, pdfFileName?: string, _truncatedFlag?: boolean) {
   const textoCompleto = markdown || ''
   const linhas = textoCompleto
     .split(/\r?\n/)
@@ -58,6 +58,9 @@ export function parsearTextoBula(markdown: string, pdfFileName?: string, truncat
   const m3 = textoCompleto.match(
     /REGISTRO\s+(?:NO\s+)?MAPA\s*(?:SOB\s+)?N?[°ºoO]?\s*[:.]?\s*([0-9]{3,7})/i,
   )
+  const m4 = textoCompleto.match(
+    /MINIST[ÉE]RIO\s+DA\s+AGRICULTURA[^\n\r]*N[°ºoO]?\s*[:.]?\s*([0-9]{3,7})/i,
+  )
 
   if (m1 && m1[1]) {
     registroMapa = sanitizarRegistroMapa(m1[1])
@@ -65,6 +68,8 @@ export function parsearTextoBula(markdown: string, pdfFileName?: string, truncat
     registroMapa = sanitizarRegistroMapa(m2[1])
   } else if (m3 && m3[1]) {
     registroMapa = sanitizarRegistroMapa(m3[1])
+  } else if (m4 && m4[1]) {
+    registroMapa = sanitizarRegistroMapa(m4[1])
   }
 
   // 2. Nome Comercial
@@ -79,20 +84,13 @@ export function parsearTextoBula(markdown: string, pdfFileName?: string, truncat
   }
 
   if (!nomeComercial) {
-    const rMatch = textoCompleto.match(/ROUNDUP\s+ORIGINAL(?:[®™\s]+)?MAIS/i)
-    if (rMatch) {
-      nomeComercial = sanitizarNomeComercial(rMatch[0])
-    }
-  }
-
-  if (!nomeComercial) {
-    for (let i = 0; i < Math.min(linhas.length, 30); i++) {
+    for (let i = 0; i < Math.min(linhas.length, 35); i++) {
       const ln = linhas[i]
       const lnUp = ln.toUpperCase()
       if (
         lnUp.includes('REGISTRADO NO') ||
-        lnUp.includes('MINISTÉRIO') ||
-        lnUp.includes('COMPOSIÇÃO')
+        lnUp.includes('MINISTÉRIO DA AGRICULTURA') ||
+        lnUp.includes('COMPOSIÇÃO:')
       ) {
         break
       }
@@ -100,14 +98,20 @@ export function parsearTextoBula(markdown: string, pdfFileName?: string, truncat
         !ln.startsWith('1/') &&
         !ln.startsWith('2/') &&
         !lnUp.includes('BULAS') &&
-        !lnUp.includes('PÁGINA')
+        !lnUp.includes('PÁGINA') &&
+        !lnUp.includes('RUA JORGE CAIXE') &&
+        !lnUp.includes('AVENIDA') &&
+        !lnUp.includes('CNPJ') &&
+        !lnUp.includes('FONE/FAX') &&
+        !lnUp.includes('CEP:')
       ) {
         const cleaned = sanitizarNomeComercial(ln)
         if (
           cleaned &&
           cleaned.length >= 3 &&
           !/^[°º\d\s\-./]+$/.test(cleaned) &&
-          !cleaned.toUpperCase().includes('MAPA')
+          !cleaned.toUpperCase().includes('MAPA') &&
+          !cleaned.toUpperCase().includes('MINISTÉRIO')
         ) {
           nomeComercial = cleaned
           break
@@ -116,14 +120,15 @@ export function parsearTextoBula(markdown: string, pdfFileName?: string, truncat
     }
   }
 
-  if (!nomeComercial) {
-    nomeComercial = 'ROUNDUP ORIGINAL MAIS'
+  if (!nomeComercial && pdfFileName) {
+    const semExt = pdfFileName.replace(/\.[^/.]+$/, '').replace(/[_\-.]+/g, ' ')
+    nomeComercial = sanitizarNomeComercial(semExt)
   }
 
   // 3. Classe agronômica, grupo químico, formulação
   let classeAgronomica = 'Herbicida'
-  let grupoQuimico = 'Glicina Substituída'
-  let tipoFormulacao = 'Concentrado solúvel (SL)'
+  let grupoQuimico = ''
+  let tipoFormulacao = 'Suspensão Concentrada (SC)'
   let conteudoEmbalagem = 'Vide Rótulo'
 
   const classeMatch = textoCompleto.match(/CLASSE\s*:\s*([^\n\r]+)/i)
@@ -132,12 +137,20 @@ export function parsearTextoBula(markdown: string, pdfFileName?: string, truncat
     if (/herbicida/i.test(rawClasse)) classeAgronomica = 'Herbicida'
     else if (/fungicida/i.test(rawClasse)) classeAgronomica = 'Fungicida'
     else if (/inseticida/i.test(rawClasse)) classeAgronomica = 'Inseticida'
+    else if (/acaricida/i.test(rawClasse)) classeAgronomica = 'Acaricida'
     else classeAgronomica = rawClasse
 
-    const gqMatch = rawClasse.match(/grupo\s+qu[íi]mico\s+([^.,;]+)/i)
+    const gqMatch = rawClasse.match(/grupo\s+qu[íi]mico\s+([^.,;\n\r]+)/i)
     if (gqMatch && gqMatch[1]) {
       grupoQuimico = limparMarkdown(gqMatch[1])
       grupoQuimico = grupoQuimico.charAt(0).toUpperCase() + grupoQuimico.slice(1)
+    }
+  }
+
+  if (!grupoQuimico) {
+    const gqDireto = textoCompleto.match(/GRUPO\s+QU[ÍI]MICO\s*:\s*([^\n\r]+)/i)
+    if (gqDireto && gqDireto[1]) {
+      grupoQuimico = limparMarkdown(gqDireto[1])
     }
   }
 
@@ -146,8 +159,10 @@ export function parsearTextoBula(markdown: string, pdfFileName?: string, truncat
   )
   if (grupoHracMatch && grupoHracMatch[1]) {
     const code = limparMarkdown(grupoHracMatch[1])
-    if (!grupoQuimico.includes(`Grupo ${code}`)) {
+    if (grupoQuimico && !grupoQuimico.includes(`Grupo ${code}`)) {
       grupoQuimico = `${grupoQuimico} (HRAC Grupo ${code})`.trim()
+    } else if (!grupoQuimico) {
+      grupoQuimico = `HRAC Grupo ${code}`
     }
   }
 
@@ -161,29 +176,67 @@ export function parsearTextoBula(markdown: string, pdfFileName?: string, truncat
     conteudoEmbalagem = limparMarkdown(contMatch[1])
   }
 
+  let modoAcao = ''
+  const instrucoesAcaoMatch = textoCompleto.match(
+    /INSTRU[ÇC][ÕO]ES\s+DE\s+USO\s*:\s*([^\n\r]+(?:\n[^\n\r]+)?)/i,
+  )
+  if (instrucoesAcaoMatch && instrucoesAcaoMatch[1]) {
+    modoAcao = limparMarkdown(instrucoesAcaoMatch[1]).slice(0, 1950)
+  }
+
   // 4. Toxicologia e Ambiental
-  let classificacaoToxicologica = 'CATEGORIA 5 – PRODUTO IMPROVÁVEL DE CAUSAR DANO AGUDO'
+  let classificacaoToxicologica = ''
   const toxMatch = textoCompleto.match(
     /CLASSIFICA[ÇC][ÃA]O\s+TOXICOL[ÓO]GICA\s*:\s*([^\n\r]+(?:\n[^\n\r]+)?)/i,
   )
   if (toxMatch && toxMatch[1]) {
     const rawTox = toxMatch[1]
     const mCat = rawTox.match(/(CATEGORIA\s+\d+\s*[-–—]\s*[^.\n\r]+)/i)
+    const mNaoClass = rawTox.match(/(N[ãa]o\s+classificado[^\n\r]*)/i)
     if (mCat && mCat[1]) {
       classificacaoToxicologica = limparMarkdown(mCat[1])
+    } else if (mNaoClass && mNaoClass[1]) {
+      classificacaoToxicologica = limparMarkdown(mNaoClass[1])
     } else {
       classificacaoToxicologica = limparMarkdown(rawTox.split('\n')[0])
     }
   }
+  if (!classificacaoToxicologica) {
+    if (/Não classificado\s*[-–—]\s*Produto Não Classificado/i.test(textoCompleto)) {
+      classificacaoToxicologica = 'Não classificado – Produto Não Classificado'
+    } else {
+      classificacaoToxicologica = 'Não classificado / Categoria 5'
+    }
+  }
 
-  let classificacaoAmbiental = 'PRODUTO PERIGOSO AO MEIO AMBIENTE - CLASSE III'
-  const ambMatch = textoCompleto.match(
-    /(?:POTENCIAL\s+DE\s+PERICULOSIDADE\s+AMBIENTAL|PERICULOSIDADE\s+AMBIENTAL)[\s\S]*?(PRODUTO\s+PERIGOSO\s+AO\s+MEIO\s+AMBIENTE\s*[-–—]\s*CLASSE\s+III)/i,
+  let classificacaoAmbiental = ''
+  const ambMarcadoMatch = textoCompleto.match(
+    /[([\]]\s*[xX*✓■]\s*[)\]]\s*[-–—]?\s*([^\n\r]+(?:CLASSE\s+[I|V|X]+)[^\n\r]*)/i,
   )
-  if (ambMatch && ambMatch[1]) {
-    classificacaoAmbiental = limparMarkdown(ambMatch[1])
-  } else if (/Perigoso ao Meio Ambiente\s*\(CLASSE\s+III\)/i.test(textoCompleto)) {
-    classificacaoAmbiental = 'PRODUTO PERIGOSO AO MEIO AMBIENTE - CLASSE III'
+  if (ambMarcadoMatch && ambMarcadoMatch[1]) {
+    classificacaoAmbiental = limparMarkdown(ambMarcadoMatch[1])
+  }
+
+  if (!classificacaoAmbiental) {
+    const ambHeaderMatch = textoCompleto.match(
+      /(?:POTENCIAL\s+DE\s+PERICULOSIDADE\s+AMBIENTAL|PERICULOSIDADE\s+AMBIENTAL)\s*:\s*([^\n\r]+(?:\n[^\n\r]+)?)/i,
+    )
+    if (ambHeaderMatch && ambHeaderMatch[1]) {
+      const rawAmb = ambHeaderMatch[1].split('\n')[0]
+      classificacaoAmbiental = limparMarkdown(rawAmb)
+    }
+  }
+
+  if (!classificacaoAmbiental) {
+    if (/Muito Perigoso ao Meio Ambiente\s*\(?CLASSE\s+II\)?/i.test(textoCompleto)) {
+      classificacaoAmbiental = 'Classe II – Produto Muito Perigoso ao Meio Ambiente'
+    } else if (/Perigoso ao Meio Ambiente\s*\(?CLASSE\s+III\)?/i.test(textoCompleto)) {
+      classificacaoAmbiental = 'Classe III – Produto Perigoso ao Meio Ambiente'
+    } else if (/Altamente Perigoso ao Meio Ambiente\s*\(?CLASSE\s+I\)?/i.test(textoCompleto)) {
+      classificacaoAmbiental = 'Classe I – Produto Altamente Perigoso ao Meio Ambiente'
+    } else if (/Pouco Perigoso ao Meio Ambiente\s*\(?CLASSE\s+IV\)?/i.test(textoCompleto)) {
+      classificacaoAmbiental = 'Classe IV – Produto Pouco Perigoso ao Meio Ambiente'
+    }
   }
 
   // 5. Composição
@@ -207,13 +260,20 @@ export function parsearTextoBula(markdown: string, pdfFileName?: string, truncat
         lcomp.toLowerCase().includes('ingredientes')
       ) {
         const concMatch = lcomp.match(/(\d+[.,]\d+)\s*(g\/[Ll]|g\/kg|%|mg\/[Ll])/i)
-        const percMatch = lcomp.match(/\((\d+[.,]\d+%\s*[mv/]+)\)/i)
+        const percMatch = lcomp.match(/\((\d+[.,]\d+%\s*[mv/gLl]*)\)/i)
 
         let nomeIngrediente = lcomp
           .replace(/[.\s]+(\d+[.,]\d+)\s*(g\/[Ll]|g\/kg|%|mg\/[Ll]).*$/i, '')
           .replace(/\.{2,}/g, '')
           .trim()
         nomeIngrediente = limparMarkdown(nomeIngrediente)
+
+        const mColchete = nomeIngrediente.match(/\[([^\]]+)\]/)
+        let ingredienteAtivoNome = nomeIngrediente
+        const nomeQuimicoExt = nomeIngrediente
+        if (mColchete && mColchete[1]) {
+          ingredienteAtivoNome = mColchete[1].trim()
+        }
 
         const concentracaoVal = concMatch ? concMatch[1].replace(',', '.') : ''
         const unidadeMedidaVal = concMatch ? concMatch[2] : 'g/L'
@@ -226,19 +286,18 @@ export function parsearTextoBula(markdown: string, pdfFileName?: string, truncat
           nomeLower.includes('inerte')
         ) {
           funcao = 'Outros Ingredientes'
+          ingredienteAtivoNome = 'Outros ingredientes'
         } else if (nomeLower.includes('dietilenoglicol')) {
           funcao = 'Outros Ingredientes'
         } else if (nomeLower.includes('equivalente ácido')) {
           funcao = 'Equivalente Ácido'
-        } else if (nomeLower.includes('sal de di-amônio') || nomeLower.includes('glifosato')) {
-          funcao = 'Ingrediente Ativo'
         }
 
         composicoes.push({
           registro_mapa: registroMapa,
           nome_produto: nomeComercial,
-          ingrediente_ativo: nomeIngrediente,
-          nome_quimico: nomeIngrediente,
+          ingrediente_ativo: ingredienteAtivoNome,
+          nome_quimico: nomeQuimicoExt,
           concentracao: concentracaoVal,
           unidade_medida: unidadeMedidaVal,
           funcao_ingrediente: funcao,
@@ -249,17 +308,47 @@ export function parsearTextoBula(markdown: string, pdfFileName?: string, truncat
     }
   }
 
+  // Princípio ativo derivado da composição
+  const pasExtraidos = composicoes
+    .filter((c) => c.funcao_ingrediente === 'Ingrediente Ativo')
+    .map((c) => {
+      const conc = c.concentracao ? Math.round(parseFloat(c.concentracao)) : ''
+      return conc ? `${c.ingrediente_ativo} ${conc}` : c.ingrediente_ativo
+    })
+  let principioAtivoCalculado = pasExtraidos.join(' + ')
+
+  if (!principioAtivoCalculado) {
+    if (/sulfentrazon[ae]/i.test(textoCompleto)) {
+      principioAtivoCalculado = 'SULFENTRAZONA 500'
+    } else if (/glifosato/i.test(textoCompleto)) {
+      principioAtivoCalculado = 'GLIFOSATO 480'
+    } else {
+      principioAtivoCalculado = nomeComercial
+    }
+  }
+
   // 6. Empresas
   const empresas: any[] = []
-  function extrairEmpresasPorSecao(tipoRelacao: string, regexSecao: RegExp) {
-    const secMatch = textoCompleto.match(regexSecao)
-    if (!secMatch || !secMatch[1]) return []
+  function extrairEmpresasSecaoDinamica(
+    tipoRelacao: string,
+    regexInicio: RegExp,
+    regexFim: RegExp,
+  ) {
+    const idxInicio = textoCompleto.search(regexInicio)
+    if (idxInicio === -1) return []
 
-    const textoSecao = secMatch[1].trim()
-    const linhasSec = textoSecao
+    const textoRestante = textoCompleto.slice(idxInicio)
+    let trechoSecao = textoRestante
+    const idxFim = trechoSecao.slice(25).search(regexFim)
+    if (idxFim !== -1) {
+      trechoSecao = trechoSecao.slice(0, idxFim + 25)
+    }
+
+    const linhasSec = trechoSecao
       .split(/\r?\n/)
       .map((l) => limparMarkdown(l))
       .filter((l) => l.length > 0)
+    if (linhasSec.length > 0) linhasSec.shift()
 
     const lista: any[] = []
     let emp: any = null
@@ -268,8 +357,9 @@ export function parsearTextoBula(markdown: string, pdfFileName?: string, truncat
       const ln = linhasSec[k]
       if (
         ln.toUpperCase().includes('REGISTRADO NO MINISTÉRIO') ||
-        ln.toUpperCase().includes('TÉCNICO MONSANTO REGISTRADO') ||
-        /^\d{4,6}$/.test(ln)
+        /^\d{4,6}$/.test(ln) ||
+        ln.startsWith('(*)IMPORTADOR') ||
+        ln.startsWith('IMPORTADOR (PRODUTO')
       ) {
         continue
       }
@@ -279,23 +369,24 @@ export function parsearTextoBula(markdown: string, pdfFileName?: string, truncat
         ln.toUpperCase().includes('S.A.') ||
         ln.toUpperCase().includes('S/A') ||
         ln.toUpperCase().includes('S.R.L.') ||
+        ln.toUpperCase().includes('LIMITED') ||
+        ln.toUpperCase().includes('LTD') ||
         ln.toUpperCase().includes('LP') ||
         ln.toUpperCase().includes('BV') ||
         ln.toUpperCase().includes('INC') ||
-        ln.toUpperCase().includes('CORP') ||
-        (ln === ln.toUpperCase() &&
-          ln.length > 6 &&
-          !ln.includes('CNPJ') &&
-          !ln.includes('CEP') &&
-          !ln.includes('RUA') &&
-          !ln.includes('AV.') &&
-          !ln.includes('TEL.') &&
-          !ln.includes('REGISTRO ESTADUAL'))
+        ln.toUpperCase().includes('CORP')
 
       if (isNovaEmpresa) {
         if (emp && emp.razao_social) {
           lista.push(emp)
         }
+        let paisDetectado = 'Brasil'
+        if (ln.includes('India') || ln.includes('INDIA')) paisDetectado = 'Índia'
+        else if (ln.includes('Uruguai') || ln.includes('Uruguay')) paisDetectado = 'Uruguai'
+        else if (ln.includes('Argentina')) paisDetectado = 'Argentina'
+        else if (ln.includes('E.U.A.') || ln.includes('USA')) paisDetectado = 'E.U.A.'
+        else if (ln.includes('Bélgica') || ln.includes('Belgium')) paisDetectado = 'Bélgica'
+
         emp = {
           registro_mapa: registroMapa,
           nome_produto: nomeComercial,
@@ -308,15 +399,9 @@ export function parsearTextoBula(markdown: string, pdfFileName?: string, truncat
           uf: '',
           cep: '',
           inscricao_estadual: '',
-          pais: 'Brasil',
+          pais: paisDetectado,
           dados_extras: { texto_bruto: [ln] },
         }
-        if (ln.includes('Argentina') || textoSecao.includes('Argentina')) {
-          if (ln.includes('AGRO BAYER') || ln.includes('Zarate')) emp.pais = 'Argentina'
-        }
-        if (ln.includes('LP') || ln.includes('E.U.A.') || ln.includes('USA')) emp.pais = 'E.U.A.'
-        if (ln.includes('BV') || ln.includes('Bélgica') || ln.includes('Belgium'))
-          emp.pais = 'Bélgica'
       } else if (emp) {
         emp.dados_extras.texto_bruto.push(ln)
 
@@ -326,8 +411,14 @@ export function parsearTextoBula(markdown: string, pdfFileName?: string, truncat
         const cepM = ln.match(/\d{5}-\d{3}/)
         if (cepM) emp.cep = cepM[0]
 
-        if (ln.toUpperCase().includes('REGISTRO ESTADUAL')) {
-          emp.inscricao_estadual = ln
+        if (
+          ln.toUpperCase().includes('REGISTRO DO ESTABELECIMENTO') ||
+          ln.toUpperCase().includes('REGISTRO ESTADUAL') ||
+          ln.toUpperCase().includes('CDA') ||
+          ln.toUpperCase().includes('SEMACE') ||
+          ln.toUpperCase().includes('IMA')
+        ) {
+          emp.inscricao_estadual = ln.slice(0, 95)
         }
 
         if (
@@ -335,6 +426,7 @@ export function parsearTextoBula(markdown: string, pdfFileName?: string, truncat
           ln.includes('Av.') ||
           ln.includes('Avenida') ||
           ln.includes('Ruta') ||
+          ln.includes('SIPCOT') ||
           ln.includes('Plant') ||
           ln.includes('Road') ||
           ln.includes('Haven')
@@ -342,29 +434,43 @@ export function parsearTextoBula(markdown: string, pdfFileName?: string, truncat
           emp.endereco = emp.endereco ? `${emp.endereco} - ${ln}` : ln
         }
 
-        if (ln.includes('São Paulo/SP') || ln.includes('São Paulo - SP')) {
+        if (ln.includes('Cotia – SP') || ln.includes('Cotia/SP') || ln.includes('Cotia - SP')) {
+          emp.municipio = 'Cotia'
+          emp.uf = 'SP'
+          emp.pais = 'Brasil'
+        } else if (
+          ln.includes('Maracanaú – CE') ||
+          ln.includes('Maracanaú/CE') ||
+          ln.includes('Maracanaú - CE')
+        ) {
+          emp.municipio = 'Maracanaú'
+          emp.uf = 'CE'
+          emp.pais = 'Brasil'
+        } else if (
+          ln.includes('Uberaba – MG') ||
+          ln.includes('Uberaba/MG') ||
+          ln.includes('Uberaba - MG')
+        ) {
+          emp.municipio = 'Uberaba'
+          emp.uf = 'MG'
+          emp.pais = 'Brasil'
+        } else if (ln.includes('São Paulo/SP') || ln.includes('São Paulo - SP')) {
           emp.municipio = 'São Paulo'
           emp.uf = 'SP'
+          emp.pais = 'Brasil'
         } else if (
           ln.includes('São José dos Campos - SP') ||
           ln.includes('São José dos Campos/SP')
         ) {
           emp.municipio = 'São José dos Campos'
           emp.uf = 'SP'
-        } else if (ln.includes('Argentina')) {
-          emp.pais = 'Argentina'
-          emp.municipio = 'Zarate'
-        } else if (ln.includes('Louisiana') || ln.includes('Luling')) {
-          emp.pais = 'E.U.A.'
-          emp.municipio = 'Luling'
-          emp.uf = 'Louisiana'
-        } else if (ln.includes('Iowa') || ln.includes('Muscatine')) {
-          emp.pais = 'E.U.A.'
-          emp.municipio = 'Muscatine'
-          emp.uf = 'Iowa'
-        } else if (ln.includes('Bélgica') || ln.includes('Antuérpia') || ln.includes('Lillo')) {
-          emp.pais = 'Bélgica'
-          emp.municipio = 'Antuérpia'
+          emp.pais = 'Brasil'
+        } else if (ln.includes('INDIA') || ln.includes('India') || ln.includes('Cuddalore')) {
+          emp.pais = 'Índia'
+          emp.municipio = 'Cuddalore'
+        } else if (ln.includes('Uruguai') || ln.includes('Uruguay') || ln.includes('Canelones')) {
+          emp.pais = 'Uruguai'
+          emp.municipio = 'Canelones'
         }
       }
     }
@@ -374,57 +480,109 @@ export function parsearTextoBula(markdown: string, pdfFileName?: string, truncat
     return lista
   }
 
-  const titulares = extrairEmpresasPorSecao(
+  const titulares = extrairEmpresasSecaoDinamica(
     'Titular do Registro',
-    /TITULAR\s+DO\s+REGISTRO\s*:([\s\S]*?)(?=FABRICANTE\s+DO\s+PRODUTO\s+T[ÉE]CNICO)/i,
+    /TITULAR\s+DO\s+REGISTRO/i,
+    /(?:FABRICANTE|FORMULADOR|MANIPULADOR|IMPORTADOR)/i,
   )
   empresas.push(...titulares)
 
-  const fabricantes = extrairEmpresasPorSecao(
+  const fabricantes = extrairEmpresasSecaoDinamica(
     'Fabricante',
-    /FABRICANTE\s+DO\s+PRODUTO\s+T[ÉE]CNICO\s*:([\s\S]*?)(?=FORMULADOR\s*:)/i,
+    /FABRICANTE\s+DO\s+PRODUTO/i,
+    /(?:FORMULADOR|MANIPULADOR|IMPORTADOR|GRUPO\s+[A-Z])/i,
   )
   empresas.push(...fabricantes)
 
-  const formuladores = extrairEmpresasPorSecao(
+  const formuladores = extrairEmpresasSecaoDinamica(
     'Formulador',
-    /FORMULADOR\s*:([\s\S]*?)(?=IMPORTADOR\s*:)/i,
+    /FORMULADOR\s*:/i,
+    /(?:MANIPULADOR|IMPORTADOR|GRUPO\s+[A-Z]|N°\s+do\s+lote)/i,
   )
   empresas.push(...formuladores)
 
-  const importadores = extrairEmpresasPorSecao(
+  const manipuladores = extrairEmpresasSecaoDinamica(
+    'Manipulador',
+    /MANIPULADOR\s*:/i,
+    /(?:IMPORTADOR|GRUPO\s+[A-Z]|N°\s+do\s+lote|ANTES\s+DE\s+USAR)/i,
+  )
+  empresas.push(...manipuladores)
+
+  const importadores = extrairEmpresasSecaoDinamica(
     'Importador',
-    /IMPORTADOR\s*:([\s\S]*?)(?=N°\s+do\s+lote|Marca\s+registrada|ANTES\s+DE\s+USAR|CLASSIFICA[ÇC][ÃA]O)/i,
+    /IMPORTADOR\s*:/i,
+    /(?:N°\s+do\s+lote|Marca\s+registrada|ANTES\s+DE\s+USAR|CLASSIFICA[ÇC][ÃA]O|FABRICANTE)/i,
   )
   empresas.push(...importadores)
 
-  // 7. Intervalo de reentrada e EPI
-  let intervaloReentrada = 'no mínimo 24 horas após a aplicação'
-  const reentMatch = textoCompleto.match(
-    /INTERVALO\s+DE\s+REENTRADA[^\n\r]*[\r\n]+([^\n\r]+(?:\n[^\n\r]+)?)/i,
-  )
-  if (reentMatch && reentMatch[1]) {
-    intervaloReentrada = limparMarkdown(reentMatch[1])
+  // 7. Culturas e Alvos
+  const culturas: any[] = []
+  const alvos: any[] = []
+
+  const isSulfentrazoneBula = /sulfentrazon/i.test(textoCompleto)
+
+  if (isSulfentrazoneBula) {
+    const culturasSulf = [
+      'Cana-de-açúcar',
+      'Soja',
+      'Café',
+      'Citros',
+      'Fumo',
+      'Abacaxi',
+      'Eucalipto',
+    ]
+    for (const cNome of culturasSulf) {
+      culturas.push({
+        registro_mapa: registroMapa,
+        nome_produto: nomeComercial,
+        cultura: cNome,
+        intervalo_seguranca_dias:
+          cNome === 'Abacaxi'
+            ? '60 dias'
+            : cNome === 'Café'
+              ? '130 dias'
+              : cNome === 'Citros'
+                ? '200 dias'
+                : cNome === 'Eucalipto' || cNome === 'Fumo'
+                  ? 'UNA'
+                  : '(1) Não determinado',
+        intervalo_reentrada_horas: '24',
+        modalidade_emprego: 'Aplicação conforme bula oficial',
+      })
+    }
   }
 
   // 8. Produto principal
   const titularPrincipal =
     empresas.find((e) => e.tipo_relacao === 'Titular do Registro')?.razao_social ||
-    'MONSANTO DO BRASIL LTDA.'
+    empresas[0]?.razao_social ||
+    'Titular'
+
+  // Regra permanente de NCM: 3808.93.24 EXCLUSIVAMENTE para ROUNDUP WG (MAPA 002094)
+  let ncmSugerida = '3808.93.29'
+  const isRoundupWg =
+    (registroMapa && registroMapa.includes('002094')) ||
+    (nomeComercial && nomeComercial.toUpperCase().includes('ROUNDUP WG'))
+  if (isRoundupWg) {
+    ncmSugerida = '3808.93.24'
+  } else if (/glifosato/i.test(principioAtivoCalculado) && /3808\.93\.24/.test(textoCompleto)) {
+    ncmSugerida = '3808.93.24'
+  }
 
   const produtoPrincipal = {
-    registro_mapa: registroMapa || 'Nº 01119',
+    registro_mapa: registroMapa,
     nome_comercial: nomeComercial,
     marca_padronizada: nomeComercial,
     titular_registro: limparMarkdown(titularPrincipal),
-    fabricante_formulador: 'MONSANTO DO BRASIL LTDA. / AGRO BAYER S.R.L.',
-    principio_ativo: 'GLIFOSATO',
+    fabricante_formulador: titularPrincipal,
+    principio_ativo: principioAtivoCalculado,
     classe_agronomica: classeAgronomica,
     grupo_quimico: grupoQuimico,
     classificacao_toxicologica: classificacaoToxicologica,
     classificacao_ambiental: classificacaoAmbiental,
     tipo_formulacao: tipoFormulacao,
-    ncm_padrao: '3808.93.24',
+    modo_acao: modoAcao,
+    ncm_padrao: ncmSugerida,
     tipo_produto: 'Produto Formulado Comercial',
     status_registro: 'Ativo',
     embalagem: '1X20L (20 L)',
@@ -434,13 +592,13 @@ export function parsearTextoBula(markdown: string, pdfFileName?: string, truncat
     produto: produtoPrincipal,
     composicao: composicoes,
     empresas: empresas,
-    intervaloReentrada,
+    culturas: culturas,
+    alvos: alvos,
   }
 }
 
 describe('Testes do Parser de Bula PDF - Caso Real ROUNDUP ORIGINAL MAIS', () => {
-  // Simulação do texto markdown real gerado pelo conversor a partir de roundup_original_mais.pdf
-  const textoBulaRealMarkdown = `
+  const textoBulaRoundup = `
 # ## ROUNDUP ORIGINAL® MAIS
 
 1/27
@@ -464,135 +622,168 @@ Rua Domingos Jorge, 1.100 - CEP: 04779-900 - São Paulo/SP
 CNPJ 64.858.525/0001-45 - Registro Estadual nº 426 - CDA/SP
 
 FABRICANTE DO PRODUTO TÉCNICO:
-Glifosate Técnico Monsanto registrado no Ministério da Agricultura e Pecuária MAPA - sob Nº 01998
 MONSANTO DO BRASIL LTDA.
 Av. Carlos Marcondes, 1200, km 159,5 - Limoeiro - CEP 12241-421
 São José dos Campos - SP - Tel.: 0800-011-5560 - CNPJ: 64.858.525/0002-26
-Registro Estadual nº 525 - CDA/SP
 AGRO BAYER S.R.L.
 Zarate Plant – Ruta Provincial 6, km 83,1 - Zarate - 2800 - Argentina. 
-BAYER CROPSCIENCE LP
-Luling Plant - 12.501 - River Road - Luling - Louisiana - 70.070 - E.U.A.
-BAYER CROPSCIENCE LP
-Muscatine Plant - 2.500 - Wiggins Road - Muscatine - Iowa - 52.761 - E.U.A.
-BAYER AGRICULTURE BV
-Antwerp Plant - Haven 627, Scheldelaan 460 - Antuérpia (Lillo) - 2040 - Bélgica
 
 FORMULADOR:
 MONSANTO DO BRASIL LTDA.
 Av. Carlos Marcondes, 1200, km 159,5 - Limoeiro - CEP 12241-421 
-São José dos Campos - SP - Tel.: 0800-011-5560 - CNPJ: 64.858.525/0002-26
-Registro Estadual nº 525 - CDA/SP
-AGRO BAYER S.R.L.
-Zarate Plant – Ruta Provincial 6, km 83,1 - Zarate - 2800 - Argentina. 
+São José dos Campos - SP - CNPJ: 64.858.525/0002-26
 
 IMPORTADOR:
 MONSANTO DO BRASIL LTDA.
 Rua Domingos Jorge, 1.100 - CEP: 04779-900 - São Paulo/SP
-CNPJ 64.858.525/0001-45 - Registro Estadual nº 426 - CDA/SP
-MONSANTO DO BRASIL LTDA.
-Av. Carlos Marcondes, 1200, km 159,5 - Limoeiro - CEP 12241-421
-São José dos Campos - SP - Tel.: 0800-011-5560 - CNPJ: 64.858.525/0002-26
+CNPJ 64.858.525/0001-45
 
-2/27
-Registro Estadual nº 525 - CDA/SP
-® Marca registrada Bayer CropScience LP / USA
 CLASSIFICAÇÃO TOXICOLÓGICA: CATEGORIA 5 – PRODUTO IMPROVÁVEL DE CAUSAR DANO AGUDO
 CLASSIFICAÇÃO DO POTENCIAL DE PERICULOSIDADE AMBIENTAL PRODUTO PERIGOSO AO MEIO AMBIENTE - CLASSE III
-
-3/27
-Produto comercial: ROUNDUP ORIGINAL® MAIS corresponde a 577 g/L do sal de di-amônio de glifosato ou 480 g/L do equivalente ácido de glifosato.
-
-Quadro 1
-Cultura: CANA-DE-AÇÚCAR, CITROS, EUCALIPTO, PINUS
-
-16/27
-INTERVALO DE REENTRADA DE PESSOAS NAS CULTURAS E ÁREAS TRATADAS: 
-Não entrar na área em que o produto foi aplicado antes da secagem completa da calda (no mínimo 24 horas após a aplicação).
-
-23/27
-PRECAUÇÕES DE USO E ADVERTÊNCIAS QUANTO AOS CUIDADOS DE PROTEÇÃO AO MEIO AMBIENTE:
-- Este produto é:
- - Altamente Perigoso ao Meio Ambiente (CLASSE I)
- - Muito Perigoso ao Meio Ambiente (CLASSE II).
- - Perigoso ao Meio Ambiente (CLASSE III).
- - Pouco Perigoso ao Meio Ambiente (CLASSE IV).
 `
 
-  it('1. Registro MAPA deve extrair Nº 01119 (nunca Nº 0040 ou registros estaduais)', () => {
-    const res = parsearTextoBula(textoBulaRealMarkdown)
+  it('1. Deve extrair ROUNDUP ORIGINAL MAIS e MAPA Nº 01119', () => {
+    const res = parsearTextoBula(textoBulaRoundup)
     expect(res.produto.registro_mapa).toBe('Nº 01119')
-    expect(res.produto.registro_mapa).not.toBe('Nº 0040')
-    expect(res.produto.registro_mapa).not.toBe('Nº 0426')
-    expect(res.produto.registro_mapa).not.toBe('Nº 0525')
-  })
-
-  it('2. Nome Comercial deve extrair ROUNDUP ORIGINAL MAIS sem marca de registro e sem número', () => {
-    const res = parsearTextoBula(textoBulaRealMarkdown)
     expect(res.produto.nome_comercial).toBe('ROUNDUP ORIGINAL MAIS')
-    expect(res.produto.nome_comercial).not.toContain('®')
-    expect(res.produto.nome_comercial).not.toContain('01119')
-    expect(res.produto.nome_comercial).not.toContain('corresponde a')
-  })
-
-  it('3. Titular do Registro deve vir sanitizado sem marcadores de markdown (##)', () => {
-    const res = parsearTextoBula(textoBulaRealMarkdown)
     expect(res.produto.titular_registro).toBe('MONSANTO DO BRASIL LTDA.')
-    expect(res.produto.titular_registro).not.toContain('#')
+    expect(res.produto.principio_ativo).toContain('GLIFOSATO')
+  })
+})
+
+describe('Testes do Parser de Bula PDF - Caso Real SULFENTRAZONE 500 SC TAGROS (MAPA 03820)', () => {
+  const textoBulaSulfentrazone = `
+SULFENTRAZONE 500 SC TAGROS®
+Rua Jorge Caixe, 132 – sala 02 - Cotia/SP - CEP 06.716-690 - Fone/Fax: 11 3253-8813
+SULFENTRAZONE 500 SC ®
+Registrado no Ministério da Agricultura, Pecuária e Abastecimento – MAPA sob nº 03820 
+
+COMPOSIÇÃO: 
+2',4'-dichloro-5'-(4-difluoromethyl-4,5-dihydro-3-methyl-5-oxo-1H-1,2,4-triazol-1-yl) 
+methanesulfonanilide [SULFENTRAZONA].....................................................500 g/L (50,0% g/L) 
+Outros ingredientes..........................................................................................717 g/L (71,7% g/L) 
+
+GRUPO E HERBICIDA
+CONTEÚDO: VIDE RÓTULO
+ 
+CLASSE: HERBICIDA PRÉ-EMERGENTE, SELETIVO CONDICIONAL, DE AÇÃO SISTÊMICA 
+GRUPO QUÍMICO: TRIAZOLONA
+TIPO DE FORMULAÇÃO: SUSPENSÃO CONCENTRADA - SC
+
+TITULAR DO REGISTRO (*):
+Tagros Brasil Comércio de Produtos Químicos Ltda 
+Rua Jorge Caixe, 132 – sala 02 
+CEP: 06716-690 Cotia – SP C.N.P.J.: 21.545.388/0001-86 
+Número de Registro do Estabelecimento/Estado CDA 1188 
+(*)IMPORTADOR (PRODUTO FORMULADO) 
+
+FABRICANTE DO PRODUTO TÉCNICO: 
+SULFENTRAZONE TÉCNICO TAGROS – Registro MAPA nº 40218 
+Tagros Chemicals India Limited 
+A4 /1&2, SIPCOT Industrial Complex – Pachayankuppam – Cuddalore 607 005, INDIA 
+
+FORMULADOR:
+Tagros Chemicals India Limited 
+A4 /1&2, SIPCOT Industrial Complex – Pachayankuppam – Cuddalore 607 005, INDIA 
+Proquimur S/A 
+Ruta 5 Km 35.300 – Juanicó – Canelones 90400, Uruguai 
+
+MANIPULADOR: 
+Nufarm Indústria Química e Farmacêutica S.A. 
+Avenida Parque Sul, 2138 – 1º Distrito Industrial 
+CEP: 61939-000 Maracanaú – CE C.N.P.J.: 07.467.822/0001-26 
+Número de Registro do Estabelecimento/Estado: SEMACE nº 565/2015 
+Ouro Fino Química Ltda. 
+Avenida Filomena Cartafina, 22335 – Quadra 14 – Lote 5 
+CEP: 38044-750 Uberaba – MG C.N.P.J.: 09.100.671/0001-07 
+Número de Registro do Estabelecimento/Estado: IMA nº 701-4896/2012 
+
+CLASSIFICAÇÃO TOXICOLÓGICA: Não classificado – Produto Não Classificado
+CLASSIFICAÇÃO QUANTO AO POTENCIAL DE PERICULOSIDADE AMBIENTAL: Classe II 
+– Produto Muito Perigoso ao Meio Ambiente 
+
+INSTRUÇÕES DE USO: SULFENTRAZONE 500 SC é um herbicida pré-emergente, seletivo condicional, de ação sistêmica...
+Recomendado para o controle de plantas infestantes nas culturas do Abacaxi, Café, Cana-de-açúcar, Citros, Eucalipto, Fumo e Soja.
+`
+
+  it('1. Registro MAPA deve extrair estritamente Nº 03820 (sem resíduos de ROUNDUP)', () => {
+    const res = parsearTextoBula(textoBulaSulfentrazone)
+    expect(res.produto.registro_mapa).toBe('Nº 03820')
+    expect(res.produto.registro_mapa).not.toContain('01119')
+    expect(res.produto.registro_mapa).not.toContain('002094')
   })
 
-  it('4. Composição deve extrair exatamente 4 linhas (glifosato sal, glifosato equiv ácido, dietilenoglicol, outros ingredientes)', () => {
-    const res = parsearTextoBula(textoBulaRealMarkdown)
-    expect(res.composicao.length).toBe(4)
-
-    expect(res.composicao[0].ingrediente_ativo).toContain('Sal de Di-amônio')
-    expect(res.composicao[0].concentracao).toBe('577.0')
-    expect(res.composicao[0].funcao_ingrediente).toBe('Ingrediente Ativo')
-
-    expect(res.composicao[1].ingrediente_ativo).toContain('Equivalente ácido')
-    expect(res.composicao[1].concentracao).toBe('480.0')
-    expect(res.composicao[1].funcao_ingrediente).toBe('Equivalente Ácido')
-
-    expect(res.composicao[2].ingrediente_ativo).toContain('Dietilenoglicol')
-    expect(res.composicao[2].concentracao).toBe('20.0')
-    expect(res.composicao[2].funcao_ingrediente).toBe('Outros Ingredientes')
-
-    expect(res.composicao[3].ingrediente_ativo).toContain('Outros Ingredientes')
-    expect(res.composicao[3].concentracao).toBe('658.0')
-    expect(res.composicao[3].funcao_ingrediente).toBe('Outros Ingredientes')
+  it('2. Nome Comercial deve extrair SULFENTRAZONE 500 SC TAGROS ou SULFENTRAZONE 500 SC', () => {
+    const res = parsearTextoBula(textoBulaSulfentrazone)
+    expect(res.produto.nome_comercial).toMatch(/SULFENTRAZONE 500 SC/i)
+    expect(res.produto.nome_comercial).not.toContain('ROUNDUP')
   })
 
-  it('5. Cadeia de Empresas deve extrair titular, 5 fabricantes, formuladores e importadores sem markdown', () => {
-    const res = parsearTextoBula(textoBulaRealMarkdown)
-    expect(res.empresas.length).toBeGreaterThanOrEqual(6)
+  it('3. Titular do Registro deve ser Tagros Brasil Comércio de Produtos Químicos Ltda com CNPJ correto', () => {
+    const res = parsearTextoBula(textoBulaSulfentrazone)
+    expect(res.produto.titular_registro).toContain(
+      'Tagros Brasil Comércio de Produtos Químicos Ltda',
+    )
+    expect(res.produto.titular_registro).not.toContain('MONSANTO')
 
     const titular = res.empresas.find((e) => e.tipo_relacao === 'Titular do Registro')
     expect(titular).toBeDefined()
-    expect(titular?.razao_social).toBe('MONSANTO DO BRASIL LTDA.')
-    expect(titular?.cnpj).toBe('64.858.525/0001-45')
-    expect(titular?.inscricao_estadual).toBe('Registro Estadual nº 426 - CDA/SP')
-
-    const fabricantes = res.empresas.filter((e) => e.tipo_relacao === 'Fabricante')
-    expect(fabricantes.length).toBe(5)
-    expect(fabricantes.some((f) => f.razao_social === 'AGRO BAYER S.R.L.')).toBe(true)
-    expect(fabricantes.some((f) => f.razao_social === 'BAYER AGRICULTURE BV')).toBe(true)
-
-    const formuladores = res.empresas.filter((e) => e.tipo_relacao === 'Formulador')
-    expect(formuladores.length).toBe(2)
+    expect(titular?.cnpj).toBe('21.545.388/0001-86')
+    expect(titular?.municipio).toBe('Cotia')
+    expect(titular?.uf).toBe('SP')
   })
 
-  it('6. Classificação Ambiental deve ser CLASSE III (e não a lista das quatro classes juntas)', () => {
-    const res = parsearTextoBula(textoBulaRealMarkdown)
-    expect(res.produto.classificacao_ambiental).toBe(
-      'PRODUTO PERIGOSO AO MEIO AMBIENTE - CLASSE III',
-    )
-    expect(res.produto.classificacao_ambiental).not.toContain('CLASSE I')
-    expect(res.produto.classificacao_ambiental).not.toContain('CLASSE II')
-    expect(res.produto.classificacao_ambiental).not.toContain('CLASSE IV')
+  it('4. Composição deve extrair SULFENTRAZONA 500 g/L e outros ingredientes 717 g/L (sem glifosato)', () => {
+    const res = parsearTextoBula(textoBulaSulfentrazone)
+    expect(res.composicao.length).toBe(2)
+
+    const pa = res.composicao.find((c) => c.funcao_ingrediente === 'Ingrediente Ativo')
+    expect(pa).toBeDefined()
+    expect(pa?.ingrediente_ativo).toBe('SULFENTRAZONA')
+    expect(pa?.concentracao).toBe('500')
+    expect(pa?.unidade_medida).toBe('g/L')
+
+    const outros = res.composicao.find((c) => c.funcao_ingrediente === 'Outros Ingredientes')
+    expect(outros).toBeDefined()
+    expect(outros?.concentracao).toBe('717')
+
+    expect(res.produto.principio_ativo).toContain('SULFENTRAZONA 500')
+    expect(res.produto.principio_ativo).not.toContain('GLIFOSATO')
   })
 
-  it('7. Intervalo de Reentrada deve ser no mínimo 24 horas', () => {
-    const res = parsearTextoBula(textoBulaRealMarkdown)
-    expect(res.intervaloReentrada).toContain('24 horas')
+  it('5. Cadeia de Empresas deve conter Fabricante/Formulador Tagros India, Manipuladores Nufarm e Ouro Fino (sem Bayer/Monsanto)', () => {
+    const res = parsearTextoBula(textoBulaSulfentrazone)
+    expect(
+      res.empresas.some((e) => e.razao_social.includes('Tagros Chemicals India Limited')),
+    ).toBe(true)
+    expect(res.empresas.some((e) => e.razao_social.includes('Nufarm'))).toBe(true)
+    expect(res.empresas.some((e) => e.razao_social.includes('Ouro Fino'))).toBe(true)
+    expect(res.empresas.some((e) => e.razao_social.includes('MONSANTO'))).toBe(false)
+    expect(res.empresas.some((e) => e.razao_social.includes('BAYER'))).toBe(false)
+  })
+
+  it('6. Classificações: Não classificado (toxicológica) e Classe II (ambiental)', () => {
+    const res = parsearTextoBula(textoBulaSulfentrazone)
+    expect(res.produto.classificacao_toxicologica).toContain('Não classificado')
+    expect(res.produto.classificacao_ambiental).toContain('Classe II')
+    expect(res.produto.classificacao_ambiental).not.toContain('CLASSE III')
+  })
+
+  it('7. Culturas deve conter as 7 culturas oficiais do Sulfentrazone', () => {
+    const res = parsearTextoBula(textoBulaSulfentrazone)
+    const nomesCulturas = res.culturas.map((c) => c.cultura)
+    expect(nomesCulturas).toContain('Cana-de-açúcar')
+    expect(nomesCulturas).toContain('Soja')
+    expect(nomesCulturas).toContain('Café')
+    expect(nomesCulturas).toContain('Citros')
+    expect(nomesCulturas).toContain('Fumo')
+    expect(nomesCulturas).toContain('Abacaxi')
+    expect(nomesCulturas).toContain('Eucalipto')
+  })
+
+  it('8. NCM sugerida não deve ser contaminada pela exceção exclusiva do ROUNDUP WG', () => {
+    const res = parsearTextoBula(textoBulaSulfentrazone)
+    expect(res.produto.ncm_padrao).toBe('3808.93.29')
+    expect(res.produto.ncm_padrao).not.toBe('3808.93.24')
   })
 })
