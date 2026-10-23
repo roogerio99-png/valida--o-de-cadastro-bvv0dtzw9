@@ -54,7 +54,11 @@ export function parsearTextoBula(markdown: string, pdfFileName?: string, _trunca
   // NUNCA aceitar o registro do produto técnico ("Glifosate Técnico Monsanto registrado... sob Nº 01998").
   let registroMapa = ''
 
-  const cabecalhoTexto = textoCompleto.slice(0, 4000)
+  let cabecalhoTexto = textoCompleto.slice(0, 4000)
+  const idxTecnico = cabecalhoTexto.search(/FABRICANTE\s+DO\s+PRODUTO\s+T[ÉE]CNICO/i)
+  if (idxTecnico !== -1) {
+    cabecalhoTexto = cabecalhoTexto.slice(0, idxTecnico)
+  }
 
   const mCabecalhoCompleto = cabecalhoTexto.match(
     /REGISTRADO\s+NO\s+MINIST[ÉE]RIO\s+DA\s+AGRICULTURA[^\n\r.;]*?[\r\n\s]+(?:#*\s*)*(?:MAPA\s+)?SOB\s+N[°ºoO?]?\s*[:.]?\s*([0-9]{3,7})/i,
@@ -68,6 +72,9 @@ export function parsearTextoBula(markdown: string, pdfFileName?: string, _trunca
   const mCabecalhoGenerico = cabecalhoTexto.match(
     /REGISTRO\s+(?:NO\s+)?MAPA\s*(?:SOB\s+)?N?[°ºoO?]?\s*[:.]?\s*([0-9]{3,7})/i,
   )
+  const mCabecalhoSobNo = cabecalhoTexto.match(
+    /MINIST[ÉE]RIO\s+DA\s+AGRICULTURA[\s\S]{1,120}?SOB\s+N[°ºoO?]?\s*[:.]?\s*([0-9]{3,7})/i,
+  )
 
   if (mCabecalhoCompleto && mCabecalhoCompleto[1]) {
     registroMapa = sanitizarRegistroMapa(mCabecalhoCompleto[1])
@@ -77,6 +84,8 @@ export function parsearTextoBula(markdown: string, pdfFileName?: string, _trunca
     registroMapa = sanitizarRegistroMapa(mCabecalhoLinha[1])
   } else if (mCabecalhoGenerico && mCabecalhoGenerico[1]) {
     registroMapa = sanitizarRegistroMapa(mCabecalhoGenerico[1])
+  } else if (mCabecalhoSobNo && mCabecalhoSobNo[1]) {
+    registroMapa = sanitizarRegistroMapa(mCabecalhoSobNo[1])
   }
 
   if (!registroMapa) {
@@ -85,7 +94,8 @@ export function parsearTextoBula(markdown: string, pdfFileName?: string, _trunca
         /FABRICANTE\s+DO\s+PRODUTO\s+T[ÉE]CNICO[\s\S]*?(?=FORMULADOR|MANIPULADOR|IMPORTADOR|TITULAR|$)/gi,
         '',
       )
-      .replace(/[^\n\r]+t[ée]cnico[^\n\r]+sob\s+n[°ºoO?]?\s*[:.]?\s*[0-9]{3,7}/gi, '')
+      .replace(/[^\n\r]*t[ée]cnico[^\n\r]*sob\s+n[°ºoO?]?\s*[:.]?\s*[0-9]{3,7}/gi, '')
+      .replace(/[^\n\r]*t[ée]cnico[^\n\r]*mapa[^\n\r]*[0-9]{3,7}/gi, '')
 
     const m1 = textoSemProdutoTecnico.match(
       /REGISTRADO\s+NO\s+MINIST[ÉE]RIO\s+DA\s+AGRICULTURA[^\n\r]*?[\r\n\s]+(?:#*\s*)*(?:MAPA\s+)?SOB\s+N[°ºoO?]?\s*[:.]?\s*([0-9]{3,7})/i,
@@ -712,6 +722,19 @@ Produto comercial: ROUNDUP ORIGINAL® MAIS corresponde a 577 g/L do sal de di-am
     const res = parsearTextoBula(textoBulaRoundup)
     expect(res.produto.ncm_padrao).toBe('3808.93.29')
     expect(res.produto.ncm_padrao).not.toBe('3808.93.24')
+  })
+
+  it('5. Mesmo que o cabeçalho cite texto de produto técnico antes do fim do documento, o registro do produto técnico 01998 nunca deve ser extraído', () => {
+    const textoComVariacao = `
+1/30
+REGISTRADO NO MINISTÉRIO DA AGRICULTURA E PECUÁRIA - MAPA SOB N° 01119
+Produto comercial: ROUNDUP ORIGINAL® MAIS
+FABRICANTE DO PRODUTO TÉCNICO:
+Glifosate Técnico Monsanto registrado no Ministério da Agricultura e Pecuária MAPA - sob Nº 01998
+`
+    const res = parsearTextoBula(textoComVariacao)
+    expect(res.produto.registro_mapa).toBe('Nº 01119')
+    expect(res.produto.nome_comercial).toBe('ROUNDUP ORIGINAL MAIS')
   })
 })
 

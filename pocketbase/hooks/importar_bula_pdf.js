@@ -133,18 +133,22 @@ routerAdd('POST', '/backend/v1/bula/analisar-pdf', (e) => {
     // 1. REGISTRO MAPA
     // Prioridade máxima: frase canônica do cabeçalho da bula (produto formulado comercial).
     // NUNCA aceitar registros de produto técnico (seções "FABRICANTE DO PRODUTO TÉCNICO", "TÉCNICO... SOB Nº").
+    // Qualquer número citado em contexto de produto técnico DEVE ser categoricamente ignorado.
     let registroMapa = ''
 
-    // Procuramos primeiro apenas nas primeiras linhas/primeiro terço da bula (onde fica o cabeçalho oficial)
-    const cabecalhoTexto = textoCompleto.slice(0, 4000)
+    // Procuramos primeiro antes de qualquer menção a FABRICANTE DO PRODUTO TÉCNICO ou COMPOSIÇÃO
+    let cabecalhoTexto = textoCompleto.slice(0, 4000)
+    const idxTecnico = cabecalhoTexto.search(/FABRICANTE\s+DO\s+PRODUTO\s+T[ÉE]CNICO/i)
+    if (idxTecnico !== -1) {
+      cabecalhoTexto = cabecalhoTexto.slice(0, idxTecnico)
+    }
 
-    // Regex 1 (canônica explícita com quebras de linha e markdown flexíveis):
-    // "REGISTRADO NO MINISTÉRIO DA AGRICULTURA ... MAPA SOB N° 01119"
+    // Regex 1: "REGISTRADO NO MINISTÉRIO DA AGRICULTURA ... MAPA SOB N° 01119" (quebra de linha e markdown flexíveis)
     const mCabecalhoCompleto = cabecalhoTexto.match(
       /REGISTRADO\s+NO\s+MINIST[ÉE]RIO\s+DA\s+AGRICULTURA[^\n\r.;]*?[\r\n\s]+(?:#*\s*)*(?:MAPA\s+)?SOB\s+N[°ºoO\?]?\s*[:.]?\s*([0-9]{3,7})/i,
     )
 
-    // Regex 2: "MAPA SOB N° 01119" no cabeçalho
+    // Regex 2: "MAPA SOB N° 01119" no cabeçalho antes de qualquer produto técnico
     const mCabecalhoMapa = cabecalhoTexto.match(
       /(?:^|[\r\n\s])MAPA\s+SOB\s+N[°ºoO\?]?\s*[:.]?\s*([0-9]{3,7})/i,
     )
@@ -159,6 +163,11 @@ routerAdd('POST', '/backend/v1/bula/analisar-pdf', (e) => {
       /REGISTRO\s+(?:NO\s+)?MAPA\s*(?:SOB\s+)?N?[°ºoO\?]?\s*[:.]?\s*([0-9]{3,7})/i,
     )
 
+    // Regex 5: "sob nº 01119" ou "sob n° 01119" nas primeiras 50 linhas se estiver logo após MINISTÉRIO
+    const mCabecalhoSobNo = cabecalhoTexto.match(
+      /MINIST[ÉE]RIO\s+DA\s+AGRICULTURA[\s\S]{1,120}?SOB\s+N[°ºoO\?]?\s*[:.]?\s*([0-9]{3,7})/i,
+    )
+
     if (mCabecalhoCompleto && mCabecalhoCompleto[1]) {
       registroMapa = sanitizarRegistroMapa(mCabecalhoCompleto[1])
     } else if (mCabecalhoMapa && mCabecalhoMapa[1]) {
@@ -167,6 +176,8 @@ routerAdd('POST', '/backend/v1/bula/analisar-pdf', (e) => {
       registroMapa = sanitizarRegistroMapa(mCabecalhoLinha[1])
     } else if (mCabecalhoGenerico && mCabecalhoGenerico[1]) {
       registroMapa = sanitizarRegistroMapa(mCabecalhoGenerico[1])
+    } else if (mCabecalhoSobNo && mCabecalhoSobNo[1]) {
+      registroMapa = sanitizarRegistroMapa(mCabecalhoSobNo[1])
     }
 
     // Se ainda não encontrou no cabeçalho, procura no texto inteiro com exclusão estrita de produto técnico
@@ -177,7 +188,8 @@ routerAdd('POST', '/backend/v1/bula/analisar-pdf', (e) => {
           /FABRICANTE\s+DO\s+PRODUTO\s+T[ÉE]CNICO[\s\S]*?(?=FORMULADOR|MANIPULADOR|IMPORTADOR|TITULAR|$)/gi,
           '',
         )
-        .replace(/[^\n\r]+t[ée]cnico[^\n\r]+sob\s+n[°ºoO\?]?\s*[:.]?\s*[0-9]{3,7}/gi, '')
+        .replace(/[^\n\r]*t[ée]cnico[^\n\r]*sob\s+n[°ºoO\?]?\s*[:.]?\s*[0-9]{3,7}/gi, '')
+        .replace(/[^\n\r]*t[ée]cnico[^\n\r]*mapa[^\n\r]*[0-9]{3,7}/gi, '')
 
       const m1 = textoSemProdutoTecnico.match(
         /REGISTRADO\s+NO\s+MINIST[ÉE]RIO\s+DA\s+AGRICULTURA[^\n\r]*?[\r\n\s]+(?:#*\s*)*(?:MAPA\s+)?SOB\s+N[°ºoO\?]?\s*[:.]?\s*([0-9]{3,7})/i,
