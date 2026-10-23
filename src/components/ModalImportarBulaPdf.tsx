@@ -12,6 +12,7 @@ import { Badge } from '@/components/ui/badge'
 import { Card } from '@/components/ui/card'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { useToast } from '@/hooks/use-toast'
+import { getErrorMessage } from '@/lib/pocketbase/errors'
 import {
   analisarBulaPdf,
   gravarBulaPdf,
@@ -111,17 +112,23 @@ export function ModalImportarBulaPdf({
           description: `Identificado: ${res.dados_extraidos.produto.nome_comercial} (${res.dados_extraidos.produto.registro_mapa}). Verifique os dados antes de gravar.`,
         })
       } else {
+        const msgErro =
+          res.error || 'Não foi possível interpretar o conteúdo da bula. Tente novamente.'
         toast({
-          title: 'Não foi possível analisar a bula',
-          description: res.error || 'Erro desconhecido ao processar o PDF.',
+          title: 'Falha na análise da bula',
+          description: `Erro ao analisar bula: ${msgErro}`,
           variant: 'destructive',
         })
       }
     } catch (err: any) {
       console.error('Erro na análise da bula PDF:', err)
+      const motivo = getErrorMessage(
+        err,
+        'Erro ao processar o arquivo PDF no servidor. Por favor, tente novamente.',
+      )
       toast({
         title: 'Falha na leitura do PDF',
-        description: err.message || 'Erro ao conectar com o serviço de extração de bula.',
+        description: `Erro ao analisar bula: ${motivo}`,
         variant: 'destructive',
       })
     } finally {
@@ -145,17 +152,22 @@ export function ModalImportarBulaPdf({
           onSucessoGravacao(res)
         }
       } else {
+        const msgErro = res.error || 'Falha na gravação dos registros no banco. Tente novamente.'
         toast({
-          title: 'Falha ao salvar no banco',
-          description: res.error || 'Erro desconhecido ao gravar dados.',
+          title: 'Erro ao gravar bula',
+          description: `Erro ao gravar bula: ${msgErro}`,
           variant: 'destructive',
         })
       }
     } catch (err: any) {
       console.error('Erro na gravação atômica da bula:', err)
+      const motivo = getErrorMessage(
+        err,
+        'Falha de comunicação com o servidor ao persistir a bula. Por favor, tente novamente.',
+      )
       toast({
         title: 'Erro ao gravar bula',
-        description: err.message || 'Falha de comunicação com o servidor.',
+        description: `Erro ao gravar bula: ${motivo}`,
         variant: 'destructive',
       })
     } finally {

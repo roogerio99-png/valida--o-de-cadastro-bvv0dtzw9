@@ -731,17 +731,37 @@ export async function analisarBulaPdf(arquivoPdf: File): Promise<RespostaAnalise
   const formData = new FormData()
   formData.append('arquivo', arquivoPdf)
 
-  return pb.send<RespostaAnaliseBulaPdf>('/backend/v1/bula/analisar-pdf', {
-    method: 'POST',
-    body: formData,
-  })
+  try {
+    return await pb.send<RespostaAnaliseBulaPdf>('/backend/v1/bula/analisar-pdf', {
+      method: 'POST',
+      body: formData,
+    })
+  } catch (err: any) {
+    const errorMsg =
+      err?.response?.data?.error ||
+      err?.data?.error ||
+      err?.response?.data?.message ||
+      (err?.message && !/^Something went wrong/i.test(err.message) ? err.message : '') ||
+      'Falha na análise do arquivo PDF de bula. Tente novamente.'
+    throw new Error(errorMsg)
+  }
 }
 
 export async function gravarBulaPdf(
   dadosExtraidos: RespostaAnaliseBulaPdf['dados_extraidos'],
 ): Promise<RespostaGravacaoBulaPdf> {
-  return pb.send<RespostaGravacaoBulaPdf>('/backend/v1/bula/gravar-pdf', {
-    method: 'POST',
-    body: { dados: dadosExtraidos },
-  })
+  try {
+    return await pb.send<RespostaGravacaoBulaPdf>('/backend/v1/bula/gravar-pdf', {
+      method: 'POST',
+      body: { dados: dadosExtraidos },
+    })
+  } catch (err: any) {
+    const errorMsg =
+      err?.response?.data?.error ||
+      err?.data?.error ||
+      err?.response?.data?.message ||
+      (err?.message && !/^Something went wrong/i.test(err.message) ? err.message : '') ||
+      'Falha ao gravar os dados da bula no banco de dados. Tente novamente.'
+    throw new Error(errorMsg)
+  }
 }
