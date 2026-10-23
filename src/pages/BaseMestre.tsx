@@ -589,13 +589,20 @@ export function BaseMestre() {
       {/* Top Header */}
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
         <div>
-          <h2 className="text-xl font-bold text-[#1C2B1C] flex items-center gap-2">
-            <Database className="w-6 h-6 text-[#1B5E20]" />
-            <span>Base Mestre Canônica de Produtos (28 Campos)</span>
-          </h2>
-          <p className="text-xs text-[#5A6D5A] mt-0.5">
-            Base consolidada oficial de insumos agropecuários homologada no Contrato Canônico v2.4.0
-            ({totalCount} produtos cadastrados).
+          <div className="flex items-center gap-2 flex-wrap">
+            <h2 className="text-xl font-bold text-[#1C2B1C] flex items-center gap-2">
+              <Database className="w-6 h-6 text-[#1B5E20]" />
+              <span>Base Mestre de Produtos (Fins Tributários)</span>
+            </h2>
+            <Badge className="bg-emerald-100 text-emerald-900 border border-emerald-300 font-medium text-[11px] py-0.5 px-2">
+              Espelho Tributário Oficial
+            </Badge>
+          </div>
+          <p className="text-xs text-[#5A6D5A] mt-1">
+            Espelho cadastral com os parâmetros determinantes da tributação dos produtos (NCM padrão
+            e por faixas de embalagem, princípio ativo, fabricante, alíquotas PIS/COFINS temporais
+            LC 224/2025, CSTs e reforma IBS/CBS LC 214/2025) — alimentado automaticamente pelas
+            importações de bula e pela base consolidada ({totalCount} produtos cadastrados).
           </p>
         </div>
 
@@ -1232,8 +1239,8 @@ export function BaseMestre() {
                             <div className="space-y-4 text-xs">
                               <div className="flex items-center justify-between border-b border-[#DCE5DC] pb-2">
                                 <span className="font-bold text-sm text-[#1C2B1C] flex items-center gap-2">
-                                  <Layers className="w-4 h-4 text-[#1B5E20]" />
-                                  Detalhamento Completo do Contrato Canônico de 28 Campos (v2.4.0)
+                                  <Scale className="w-4 h-4 text-[#1B5E20]" />
+                                  Espelho Tributário Canônico do Produto (Parâmetros Fiscais)
                                 </span>
                                 <div className="flex items-center gap-2">
                                   {p.url_oficial && (

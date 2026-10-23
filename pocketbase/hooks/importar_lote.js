@@ -250,6 +250,7 @@ routerAdd('POST', '/backend/v1/importar-lote', (e) => {
     let inseridos = 0
     let atualizados = 0
     let ignorados = 0
+    let espelhadosBaseMestre = 0
     const erros = []
     const resumoCategorias = {}
 
@@ -1348,6 +1349,7 @@ routerAdd('POST', '/backend/v1/importar-lote', (e) => {
             )
 
             txApp.save(recMestre)
+            espelhadosBaseMestre++
           } catch (errMestre) {
             console.log(
               'Aviso: falha ao atualizar espelho tributário na base_mestre (importar_lote):',
@@ -1893,6 +1895,7 @@ routerAdd('POST', '/backend/v1/importar-lote', (e) => {
       inseridos: inseridos,
       atualizados: atualizados,
       ignorados: ignorados,
+      espelhadosBaseMestre: espelhadosBaseMestre,
       erros: erros,
       resumoCategorias: resumoCategorias,
     })

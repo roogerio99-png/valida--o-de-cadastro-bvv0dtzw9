@@ -233,42 +233,65 @@ export function ModalImportarBulaPdf({
               </div>
 
               {resultadoGravacao.contadores && (
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 pt-2 border-t border-emerald-200 text-xs">
-                  <div className="bg-white p-2.5 rounded-xl border border-emerald-100">
-                    <span className="text-[#5A6D5A] block text-[11px]">Produto Principal</span>
-                    <strong className="text-emerald-900 text-sm">
-                      {resultadoGravacao.contadores.bula_produtos.inseridos +
-                        resultadoGravacao.contadores.bula_produtos.atualizados}{' '}
-                      item
-                    </strong>
+                <div className="space-y-2 pt-2 border-t border-emerald-200 text-xs">
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                    <div className="bg-white p-2.5 rounded-xl border border-emerald-100">
+                      <span className="text-[#5A6D5A] block text-[11px]">Produto Principal</span>
+                      <strong className="text-emerald-900 text-sm">
+                        {resultadoGravacao.contadores.bula_produtos.inseridos +
+                          resultadoGravacao.contadores.bula_produtos.atualizados}{' '}
+                        item
+                      </strong>
+                    </div>
+                    <div className="bg-white p-2.5 rounded-xl border border-emerald-100">
+                      <span className="text-[#5A6D5A] block text-[11px]">Composição</span>
+                      <strong className="text-emerald-900 text-sm">
+                        {resultadoGravacao.contadores.bula_composicao.inseridos +
+                          resultadoGravacao.contadores.bula_composicao.atualizados}{' '}
+                        itens
+                      </strong>
+                    </div>
+                    <div className="bg-white p-2.5 rounded-xl border border-emerald-100">
+                      <span className="text-[#5A6D5A] block text-[11px]">Empresas da Cadeia</span>
+                      <strong className="text-emerald-900 text-sm">
+                        {resultadoGravacao.contadores.bula_empresas.inseridos +
+                          resultadoGravacao.contadores.bula_empresas.atualizados}{' '}
+                        empresas
+                      </strong>
+                    </div>
+                    <div className="bg-white p-2.5 rounded-xl border border-emerald-100">
+                      <span className="text-[#5A6D5A] block text-[11px]">Culturas / Alvos</span>
+                      <strong className="text-emerald-900 text-sm">
+                        {resultadoGravacao.contadores.bula_culturas.inseridos +
+                          resultadoGravacao.contadores.bula_culturas.atualizados}{' '}
+                        cult. /{' '}
+                        {resultadoGravacao.contadores.bula_alvos.inseridos +
+                          resultadoGravacao.contadores.bula_alvos.atualizados}{' '}
+                        alvos
+                      </strong>
+                    </div>
                   </div>
-                  <div className="bg-white p-2.5 rounded-xl border border-emerald-100">
-                    <span className="text-[#5A6D5A] block text-[11px]">Composição</span>
-                    <strong className="text-emerald-900 text-sm">
-                      {resultadoGravacao.contadores.bula_composicao.inseridos +
-                        resultadoGravacao.contadores.bula_composicao.atualizados}{' '}
-                      itens
-                    </strong>
-                  </div>
-                  <div className="bg-white p-2.5 rounded-xl border border-emerald-100">
-                    <span className="text-[#5A6D5A] block text-[11px]">Empresas da Cadeia</span>
-                    <strong className="text-emerald-900 text-sm">
-                      {resultadoGravacao.contadores.bula_empresas.inseridos +
-                        resultadoGravacao.contadores.bula_empresas.atualizados}{' '}
-                      empresas
-                    </strong>
-                  </div>
-                  <div className="bg-white p-2.5 rounded-xl border border-emerald-100">
-                    <span className="text-[#5A6D5A] block text-[11px]">Culturas / Alvos</span>
-                    <strong className="text-emerald-900 text-sm">
-                      {resultadoGravacao.contadores.bula_culturas.inseridos +
-                        resultadoGravacao.contadores.bula_culturas.atualizados}{' '}
-                      cult. /{' '}
-                      {resultadoGravacao.contadores.bula_alvos.inseridos +
-                        resultadoGravacao.contadores.bula_alvos.atualizados}{' '}
-                      alvos
-                    </strong>
-                  </div>
+
+                  {resultadoGravacao.contadores.base_mestre && (
+                    <div className="bg-emerald-100/70 p-2.5 rounded-xl border border-emerald-300 flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <Check className="w-4 h-4 text-emerald-700" />
+                        <span className="text-emerald-950 font-medium text-xs">
+                          Espelhado na Base Mestre (fins tributários):
+                        </span>
+                      </div>
+                      <Badge className="bg-[#1B5E20] text-white text-xs font-bold px-2 py-0.5">
+                        {resultadoGravacao.contadores.base_mestre.inseridos +
+                          resultadoGravacao.contadores.base_mestre.atualizados}{' '}
+                        produto
+                        {resultadoGravacao.contadores.base_mestre.inseridos +
+                          resultadoGravacao.contadores.base_mestre.atualizados ===
+                        1
+                          ? ' espelhado'
+                          : 's espelhados'}
+                      </Badge>
+                    </div>
+                  )}
                 </div>
               )}
 

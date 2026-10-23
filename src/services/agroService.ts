@@ -380,6 +380,7 @@ export interface ResultadoImportacaoLote {
   inseridos: number
   atualizados?: number
   ignorados: number
+  espelhadosBaseMestre?: number
   erros: ItemErroImportacao[]
   resumoCategorias: Record<string, number>
 }
@@ -429,12 +430,20 @@ export async function importarEmLote<T extends Record<string, unknown>>(
   let inseridos = 0
   let atualizados = 0
   let ignorados = 0
+  let espelhadosBaseMestre = 0
   const erros: ItemErroImportacao[] = []
   const resumoCategorias: Record<string, number> = {}
   const total = records.length
 
   if (total === 0) {
-    return { inseridos: 0, atualizados: 0, ignorados: 0, erros: [], resumoCategorias: {} }
+    return {
+      inseridos: 0,
+      atualizados: 0,
+      ignorados: 0,
+      espelhadosBaseMestre: 0,
+      erros: [],
+      resumoCategorias: {},
+    }
   }
 
   const token = pb.authStore.token
@@ -457,6 +466,7 @@ export async function importarEmLote<T extends Record<string, unknown>>(
       inseridos: number
       atualizados: number
       ignorados: number
+      espelhadosBaseMestre?: number
       erros: ItemErroImportacao[]
       resumoCategorias: Record<string, number>
       error?: string
@@ -536,6 +546,7 @@ export async function importarEmLote<T extends Record<string, unknown>>(
       inseridos += respostaChunk.inseridos || 0
       atualizados += respostaChunk.atualizados || 0
       ignorados += respostaChunk.ignorados || 0
+      espelhadosBaseMestre += respostaChunk.espelhadosBaseMestre || 0
 
       if (Array.isArray(respostaChunk.erros)) {
         respostaChunk.erros.forEach((err) => {
@@ -552,7 +563,7 @@ export async function importarEmLote<T extends Record<string, unknown>>(
     }
   }
 
-  return { inseridos, atualizados, ignorados, erros, resumoCategorias }
+  return { inseridos, atualizados, ignorados, espelhadosBaseMestre, erros, resumoCategorias }
 }
 
 // -----------------------------------------------------------------------------
@@ -724,6 +735,7 @@ export interface RespostaGravacaoBulaPdf {
     bula_culturas: { inseridos: number; atualizados: number }
     bula_alvos: { inseridos: number; atualizados: number }
     bula_aplicacao: { inseridos: number; atualizados: number }
+    base_mestre?: { inseridos: number; atualizados: number }
   }
 }
 

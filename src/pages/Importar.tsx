@@ -2148,7 +2148,15 @@ export function Importar() {
                 </div>
 
                 {/* Cards de Métricas */}
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs">
+                <div
+                  className={`grid grid-cols-1 ${
+                    activeZone.targetCollection === 'bula_produtos' ||
+                    (importSummary.espelhadosBaseMestre !== undefined &&
+                      importSummary.espelhadosBaseMestre > 0)
+                      ? 'sm:grid-cols-4'
+                      : 'sm:grid-cols-3'
+                  } gap-3 text-xs`}
+                >
                   <div className="p-3 rounded-xl bg-emerald-50 text-emerald-900 border border-emerald-200">
                     <span className="block text-[11px] text-emerald-700 font-medium">
                       Novos Inseridos
@@ -2175,6 +2183,21 @@ export function Importar() {
                         : 'Dados complementados'}
                     </span>
                   </div>
+                  {(activeZone.targetCollection === 'bula_produtos' ||
+                    (importSummary.espelhadosBaseMestre !== undefined &&
+                      importSummary.espelhadosBaseMestre > 0)) && (
+                    <div className="p-3 rounded-xl bg-amber-50 text-amber-950 border border-amber-300 shadow-xs">
+                      <span className="block text-[11px] text-amber-800 font-medium">
+                        Espelhados na Base Mestre
+                      </span>
+                      <strong className="text-xl font-bold text-amber-900">
+                        {importSummary.espelhadosBaseMestre ?? 0}
+                      </strong>
+                      <span className="block text-[10px] text-amber-700 mt-0.5">
+                        Espelho tributário atualizado
+                      </span>
+                    </div>
+                  )}
                   <div className="p-3 rounded-xl bg-slate-50 text-slate-900 border border-slate-200">
                     <span className="block text-[11px] text-slate-700 font-medium">
                       {importSummary.erros.length > 0

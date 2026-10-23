@@ -45,7 +45,7 @@ const navItems = [
   { path: '/sincronizacao', label: 'Sincronização de Produtos', icon: CloudSync },
   { path: '/regras', label: 'Regras NCM × Embalagem', icon: FileSpreadsheet },
   { path: '/principios-ativos', label: 'Princípios Ativos', icon: FlaskConical },
-  { path: '/base-mestre', label: 'Base Mestre', icon: Database },
+  { path: '/base-mestre', label: 'Base Mestre (Tributária)', icon: Database },
   { path: '/bula', label: 'Cadastro de Bula', icon: FileText },
   { path: '/travas', label: 'Travas de Auditoria', icon: ShieldAlert },
   { path: '/parametrizacao', label: 'Parametrização Fiscal', icon: Percent },
