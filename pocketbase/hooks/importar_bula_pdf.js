@@ -249,10 +249,10 @@ routerAdd('POST', '/backend/v1/bula/analisar-pdf', (e) => {
     // Diagnóstico dos candidatos a registro MAPA
     const candidatosRegistro = []
 
-    // REGEXES ROBUSTAS DE CABEÇALHO (tolerantes a quebras duras, acentos, caixa e variações de Nº/N°/NÂº/N?/N)
+    // REGEXES ROBUSTAS DE CABEÇALHO (tolerantes a quebras duras, acentos, caixa e variações de N / Nº / N° / NÂº / N? / N o com espaços opcionais)
     // 1. Principal: "MINISTÉRIO DA AGRICULTURA ... SOB (O) Nº 01119" (espaços colapsados, [ÉE] e tolerância até 240 chars)
     const mPrincipal = cabecalhoLinhaUnica.match(
-      /MINIST[ÉE]RIO[\s\S]{0,240}?SOB\s+(?:O\s+)?N[º°oO\?]?\s*[:.]?\s*([0-9]{3,7})/i,
+      /MINIST[ÉE]RIO[\s\S]{0,240}?SOB\s+(?:O\s+)?N\s*[º°oO\?]?\s*[:.]?\s*([0-9]{3,7})/i,
     )
     if (mPrincipal && mPrincipal[1]) {
       candidatosRegistro.push({ fonte: 'mPrincipal', num: mPrincipal[1] })
@@ -260,7 +260,7 @@ routerAdd('POST', '/backend/v1/bula/analisar-pdf', (e) => {
 
     // 2. Secundária: "MAPA ... SOB (O) Nº 01119"
     const mSecundaria = cabecalhoLinhaUnica.match(
-      /MAPA[\s\S]{0,120}?SOB\s+(?:O\s+)?N[º°oO\?]?\s*[:.]?\s*([0-9]{3,7})/i,
+      /MAPA[\s\S]{0,120}?SOB\s+(?:O\s+)?N\s*[º°oO\?]?\s*[:.]?\s*([0-9]{3,7})/i,
     )
     if (mSecundaria && mSecundaria[1]) {
       candidatosRegistro.push({ fonte: 'mSecundaria', num: mSecundaria[1] })
@@ -268,7 +268,7 @@ routerAdd('POST', '/backend/v1/bula/analisar-pdf', (e) => {
 
     // 3. Registrado no ... sob (o) nº
     const mRegistrado = cabecalhoLinhaUnica.match(
-      /REGISTRAD[OA][\s\S]{0,180}?SOB\s+(?:O\s+)?N[º°oO\?]?\s*[:.]?\s*([0-9]{3,7})/i,
+      /REGISTRAD[OA][\s\S]{0,180}?SOB\s+(?:O\s+)?N\s*[º°oO\?]?\s*[:.]?\s*([0-9]{3,7})/i,
     )
     if (mRegistrado && mRegistrado[1]) {
       candidatosRegistro.push({ fonte: 'mRegistrado', num: mRegistrado[1] })
@@ -276,7 +276,7 @@ routerAdd('POST', '/backend/v1/bula/analisar-pdf', (e) => {
 
     // 4. "REGISTRO (NO) MAPA ... SOB (O) Nº"
     const mRegistroMapa = cabecalhoLinhaUnica.match(
-      /REGISTRO\s+(?:NO\s+)?MAPA[\s\S]{0,80}?(?:SOB\s+(?:O\s+)?)?N[º°oO\?]?\s*[:.]?\s*([0-9]{3,7})/i,
+      /REGISTRO\s+(?:NO\s+)?MAPA[\s\S]{0,80}?(?:SOB\s+(?:O\s+)?)?N\s*[º°oO\?]?\s*[:.]?\s*([0-9]{3,7})/i,
     )
     if (mRegistroMapa && mRegistroMapa[1]) {
       candidatosRegistro.push({ fonte: 'mRegistroMapa', num: mRegistroMapa[1] })
@@ -284,7 +284,7 @@ routerAdd('POST', '/backend/v1/bula/analisar-pdf', (e) => {
 
     // 5. "MINISTÉRIO DA AGRICULTURA ... Nº 01119"
     const mMinAgri = cabecalhoLinhaUnica.match(
-      /MINIST[ÉE]RIO\s+DA\s+AGRICULTURA[\s\S]{0,180}?(?:N[º°oO\?]?|N[ÚU]MERO)\s*[:.]?\s*([0-9]{3,7})/i,
+      /MINIST[ÉE]RIO\s+DA\s+AGRICULTURA[\s\S]{0,180}?(?:N\s*[º°oO\?]?|N[ÚU]MERO)\s*[:.]?\s*([0-9]{3,7})/i,
     )
     if (mMinAgri && mMinAgri[1]) {
       candidatosRegistro.push({ fonte: 'mMinAgri', num: mMinAgri[1] })
@@ -292,7 +292,7 @@ routerAdd('POST', '/backend/v1/bula/analisar-pdf', (e) => {
 
     // 6. "SOB (O) Nº 01119" no início do documento
     const mSobNo = cabecalhoLinhaUnica.match(
-      /(?:^|[\s|#*])SOB\s+(?:O\s+)?N[º°oO\?]?\s*[:.]?\s*([0-9]{3,7})/i,
+      /(?:^|[\s|#*])SOB\s+(?:O\s+)?N\s*[º°oO\?]?\s*[:.]?\s*([0-9]{3,7})/i,
     )
     if (mSobNo && mSobNo[1]) {
       candidatosRegistro.push({ fonte: 'mSobNo', num: mSobNo[1] })
@@ -306,21 +306,21 @@ routerAdd('POST', '/backend/v1/bula/analisar-pdf', (e) => {
     const textoSemTecnicaLinhaUnica = textoSemSecaoTecnica.replace(/\s+/g, ' ')
 
     const mFallPrinc = textoSemTecnicaLinhaUnica.match(
-      /MINIST[ÉE]RIO[\s\S]{0,240}?SOB\s+(?:O\s+)?N[º°oO\?]?\s*[:.]?\s*([0-9]{3,7})/i,
+      /MINIST[ÉE]RIO[\s\S]{0,240}?SOB\s+(?:O\s+)?N\s*[º°oO\?]?\s*[:.]?\s*([0-9]{3,7})/i,
     )
     if (mFallPrinc && mFallPrinc[1]) {
       candidatosRegistro.push({ fonte: 'mFallPrinc', num: mFallPrinc[1] })
     }
 
     const mFallSec = textoSemTecnicaLinhaUnica.match(
-      /MAPA[\s\S]{0,120}?SOB\s+(?:O\s+)?N[º°oO\?]?\s*[:.]?\s*([0-9]{3,7})/i,
+      /MAPA[\s\S]{0,120}?SOB\s+(?:O\s+)?N\s*[º°oO\?]?\s*[:.]?\s*([0-9]{3,7})/i,
     )
     if (mFallSec && mFallSec[1]) {
       candidatosRegistro.push({ fonte: 'mFallSec', num: mFallSec[1] })
     }
 
     const mFallReg = textoSemTecnicaLinhaUnica.match(
-      /REGISTRO\s+(?:NO\s+)?MAPA[\s\S]{0,80}?(?:SOB\s+(?:O\s+)?)?N[º°oO\?]?\s*[:.]?\s*([0-9]{3,7})/i,
+      /REGISTRO\s+(?:NO\s+)?MAPA[\s\S]{0,80}?(?:SOB\s+(?:O\s+)?)?N\s*[º°oO\?]?\s*[:.]?\s*([0-9]{3,7})/i,
     )
     if (mFallReg && mFallReg[1]) {
       candidatosRegistro.push({ fonte: 'mFallReg', num: mFallReg[1] })

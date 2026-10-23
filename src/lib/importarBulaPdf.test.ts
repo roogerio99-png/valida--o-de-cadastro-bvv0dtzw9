@@ -150,7 +150,7 @@ export function parsearTextoBula(markdown: string, pdfFileName?: string, _trunca
 
   // Regex Principal
   const mPrincipal = cabecalhoLinhaUnica.match(
-    /MINIST[ÉE]RIO[\s\S]{0,240}?SOB\s+(?:O\s+)?N[º°oO?]?\s*[:.]?\s*([0-9]{3,7})/i,
+    /MINIST[ÉE]RIO[\s\S]{0,240}?SOB\s+(?:O\s+)?N\s*[º°oO?]?\s*[:.]?\s*([0-9]{3,7})/i,
   )
   if (mPrincipal && mPrincipal[1]) {
     candidatosRegistro.push({ fonte: 'mPrincipal', num: mPrincipal[1] })
@@ -158,7 +158,7 @@ export function parsearTextoBula(markdown: string, pdfFileName?: string, _trunca
 
   // Regex Secundária
   const mSecundaria = cabecalhoLinhaUnica.match(
-    /MAPA[\s\S]{0,120}?SOB\s+(?:O\s+)?N[º°oO?]?\s*[:.]?\s*([0-9]{3,7})/i,
+    /MAPA[\s\S]{0,120}?SOB\s+(?:O\s+)?N\s*[º°oO?]?\s*[:.]?\s*([0-9]{3,7})/i,
   )
   if (mSecundaria && mSecundaria[1]) {
     candidatosRegistro.push({ fonte: 'mSecundaria', num: mSecundaria[1] })
@@ -166,7 +166,7 @@ export function parsearTextoBula(markdown: string, pdfFileName?: string, _trunca
 
   // Registrado no ... sob nº
   const mRegistrado = cabecalhoLinhaUnica.match(
-    /REGISTRAD[OA][\s\S]{0,180}?SOB\s+(?:O\s+)?N[º°oO?]?\s*[:.]?\s*([0-9]{3,7})/i,
+    /REGISTRAD[OA][\s\S]{0,180}?SOB\s+(?:O\s+)?N\s*[º°oO?]?\s*[:.]?\s*([0-9]{3,7})/i,
   )
   if (mRegistrado && mRegistrado[1]) {
     candidatosRegistro.push({ fonte: 'mRegistrado', num: mRegistrado[1] })
@@ -174,7 +174,7 @@ export function parsearTextoBula(markdown: string, pdfFileName?: string, _trunca
 
   // REGISTRO NO MAPA
   const mRegistroMapa = cabecalhoLinhaUnica.match(
-    /REGISTRO\s+(?:NO\s+)?MAPA[\s\S]{0,80}?(?:SOB\s+(?:O\s+)?)?N[º°oO?]?\s*[:.]?\s*([0-9]{3,7})/i,
+    /REGISTRO\s+(?:NO\s+)?MAPA[\s\S]{0,80}?(?:SOB\s+(?:O\s+)?)?N\s*[º°oO?]?\s*[:.]?\s*([0-9]{3,7})/i,
   )
   if (mRegistroMapa && mRegistroMapa[1]) {
     candidatosRegistro.push({ fonte: 'mRegistroMapa', num: mRegistroMapa[1] })
@@ -182,7 +182,7 @@ export function parsearTextoBula(markdown: string, pdfFileName?: string, _trunca
 
   // MINISTÉRIO DA AGRICULTURA ... Nº
   const mMinAgri = cabecalhoLinhaUnica.match(
-    /MINIST[ÉE]RIO\s+DA\s+AGRICULTURA[\s\S]{0,180}?(?:N[º°oO?]?|N[ÚU]MERO)\s*[:.]?\s*([0-9]{3,7})/i,
+    /MINIST[ÉE]RIO\s+DA\s+AGRICULTURA[\s\S]{0,180}?(?:N\s*[º°oO?]?|N[ÚU]MERO)\s*[:.]?\s*([0-9]{3,7})/i,
   )
   if (mMinAgri && mMinAgri[1]) {
     candidatosRegistro.push({ fonte: 'mMinAgri', num: mMinAgri[1] })
@@ -190,7 +190,7 @@ export function parsearTextoBula(markdown: string, pdfFileName?: string, _trunca
 
   // SOB Nº
   const mSobNo = cabecalhoLinhaUnica.match(
-    /(?:^|[\s|#*])SOB\s+(?:O\s+)?N[º°oO?]?\s*[:.]?\s*([0-9]{3,7})/i,
+    /(?:^|[\s|#*])SOB\s+(?:O\s+)?N\s*[º°oO?]?\s*[:.]?\s*([0-9]{3,7})/i,
   )
   if (mSobNo && mSobNo[1]) {
     candidatosRegistro.push({ fonte: 'mSobNo', num: mSobNo[1] })
@@ -204,21 +204,21 @@ export function parsearTextoBula(markdown: string, pdfFileName?: string, _trunca
   const textoSemTecnicaLinhaUnica = textoSemSecaoTecnica.replace(/\s+/g, ' ')
 
   const mFallPrinc = textoSemTecnicaLinhaUnica.match(
-    /MINIST[ÉE]RIO[\s\S]{0,240}?SOB\s+(?:O\s+)?N[º°oO?]?\s*[:.]?\s*([0-9]{3,7})/i,
+    /MINIST[ÉE]RIO[\s\S]{0,240}?SOB\s+(?:O\s+)?N\s*[º°oO?]?\s*[:.]?\s*([0-9]{3,7})/i,
   )
   if (mFallPrinc && mFallPrinc[1]) {
     candidatosRegistro.push({ fonte: 'mFallPrinc', num: mFallPrinc[1] })
   }
 
   const mFallSec = textoSemTecnicaLinhaUnica.match(
-    /MAPA[\s\S]{0,120}?SOB\s+(?:O\s+)?N[º°oO?]?\s*[:.]?\s*([0-9]{3,7})/i,
+    /MAPA[\s\S]{0,120}?SOB\s+(?:O\s+)?N\s*[º°oO?]?\s*[:.]?\s*([0-9]{3,7})/i,
   )
   if (mFallSec && mFallSec[1]) {
     candidatosRegistro.push({ fonte: 'mFallSec', num: mFallSec[1] })
   }
 
   const mFallReg = textoSemTecnicaLinhaUnica.match(
-    /REGISTRO\s+(?:NO\s+)?MAPA[\s\S]{0,80}?(?:SOB\s+(?:O\s+)?)?N[º°oO?]?\s*[:.]?\s*([0-9]{3,7})/i,
+    /REGISTRO\s+(?:NO\s+)?MAPA[\s\S]{0,80}?(?:SOB\s+(?:O\s+)?)?N\s*[º°oO?]?\s*[:.]?\s*([0-9]{3,7})/i,
   )
   if (mFallReg && mFallReg[1]) {
     candidatosRegistro.push({ fonte: 'mFallReg', num: mFallReg[1] })
@@ -960,6 +960,41 @@ Produto comercial: ROUNDUP ORIGINAL® MAIS corresponde a 577 g/L do sal de di-am
     expect(res.produto.registro_mapa).not.toBe('Nº 01998')
     expect(res.produto.nome_comercial).toBe('ROUNDUP ORIGINAL MAIS')
     expect(res.produto.titular_registro).toContain('MONSANTO')
+  })
+
+  it('12. Deve extrair registro Nº 01119 (e nunca 01998) com texto normalizado contendo espaço entre N e ordinal: "MAPA SOB N ° 01119"', () => {
+    const textoEvidenciaReal = `REGISTRADO NO MINISTÉRIO DA AGRICULTURA E PECUÁRIA MAPA SOB N ° 01119 COMPOSIÇÃO: Sal de Di-amônio de N-(phosphonomethyl)glycine (GLIFOSATO)..................577,0 g/L (57,7% m/v)
+Dietilenoglicol.......................................................................................................20,0 g/L (2,0% m/v)
+Outros Ingredientes..........................................................................................658,0 g/L (65,8% m/v)
+CLASSE: Herbicida seletivo condicional, de ação sistêmica, do grupo químico glicina substituída.
+TIPO DE FORMULAÇÃO: Concentrado solúvel (SL).
+TITULAR DO REGISTRO:
+MONSANTO DO BRASIL LTDA.
+Rua Domingos Jorge, 1.100 - CEP: 04779-900 - São Paulo/SP
+FABRICANTE DO PRODUTO TÉCNICO:
+Glifosate Técnico Monsanto registrado no Ministério da Agricultura e Pecuária MAPA - sob Nº 01998
+MONSANTO DO BRASIL LTDA.
+Produto comercial: ROUNDUP ORIGINAL® MAIS corresponde a 577 g/L do sal de di-amônio de glifosato`
+
+    const res = parsearTextoBula(textoEvidenciaReal)
+    expect(res.produto.registro_mapa).toBe('Nº 01119')
+    expect(res.produto.registro_mapa).not.toBe('Nº 01998')
+    expect(res.produto.nome_comercial).toBe('ROUNDUP ORIGINAL MAIS')
+    expect(res.produto.titular_registro).toContain('MONSANTO')
+  })
+
+  it('13. Deve casar variações com "SOB N o 01119", "SOB Nº 01119" e "sob n° 19917"', () => {
+    const textoNoComO = `REGISTRADO NO MINISTÉRIO DA AGRICULTURA E PECUÁRIA MAPA SOB N o 01119 COMPOSIÇÃO: Glifosato 480 g/L`
+    const resO = parsearTextoBula(textoNoComO)
+    expect(resO.produto.registro_mapa).toBe('Nº 01119')
+
+    const textoSobNo = `REGISTRADO NO MINISTÉRIO DA AGRICULTURA SOB Nº 01119 COMPOSIÇÃO: Glifosato 480 g/L`
+    const resSobNo = parsearTextoBula(textoSobNo)
+    expect(resSobNo.produto.registro_mapa).toBe('Nº 01119')
+
+    const textoSobNMinusculo = `REGISTRADO NO MINISTÉRIO DA AGRICULTURA E PECUÁRIA - MAPA sob n° 19917 COMPOSIÇÃO: Glifosato 480 g/L`
+    const resMinusculo = parsearTextoBula(textoSobNMinusculo)
+    expect(resMinusculo.produto.registro_mapa).toBe('Nº 19917')
   })
 })
 
