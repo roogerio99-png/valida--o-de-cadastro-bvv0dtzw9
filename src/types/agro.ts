@@ -217,6 +217,13 @@ export interface BaseMestreProduto extends RecordModel {
   nome_completo?: string
   marca_padronizada?: string
   tipo_produto?: TipoProdutoCanonico
+  // Campos refinados por Embalagem Comercial (SKU Final)
+  quantidade_embalagem_principal?: number
+  unidade_medida_principal?: string
+  forma_acondicionamento?: string
+  embalagem_original?: string
+  ncm_especifica?: string
+
   embalagem: string
   unidade?: UnidadeFisicaCanonica
   principio_ativo: string

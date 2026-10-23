@@ -1211,10 +1211,9 @@ routerAdd('POST', '/backend/v1/importar-lote', (e) => {
             )
           }
 
-          // Espelho Seletivo de Fins Tributários na BASE MESTRE (base_mestre)
-          // Copia apenas os campos que definem a tributação do produto:
-          // Identificação mínima + NCM, regra TIPI, alíquotas temporalidade, CST, status PIS/COFINS.
-          // Sem carregar dados analíticos da bula.
+          // REFORMULAÇÃO BASE MESTRE: UM registro por EMBALAGEM COMERCIAL (SKU Final)
+          // Granularidade: registro_mapa + quantidade_embalagem_principal + unidade + forma_acondicionamento
+          // A NCM é fiel e resolvida para a embalagem comercial.
           try {
             const colBaseMestre = txApp.findCollectionByNameOrId('base_mestre')
 
@@ -1248,21 +1247,83 @@ routerAdd('POST', '/backend/v1/importar-lote', (e) => {
                 ? String(data.nota_subpos_2).trim()
                 : 'NÃO'
 
-            const ncmMascara = fmtNcmMascara(
-              data.ncm_padrao || data.ncm || (isNota2 ? '3808.62.90' : '3808.93.24'),
-            )
-            const ncmLimpo = ncmMascara.replace(/\D/g, '')
-
             const marcaPad = String(data.marca_padronizada || sanitizarMarca(nomeFinal)).trim()
             const escMarcaPad = marcaPad.replace(/'/g, "\\'")
 
+            // Parser da embalagem comercial: quantidade principal + unidade + acondicionamento
+            const embTexto = String(data.embalagem || '1X20L (20 L)').trim()
+            const embUpper = embTexto.toUpperCase()
+
+            let qtdPrinc = 20
+            let unPrinc = 'L'
+            const mMultiplo = embUpper.match(
+              /(\d+)\s*[xX×]\s*(\d+(?:[.,]\d+)?)\s*(KG|KGS|KILOS?|QUILOS?|L\b|LT|LITROS?|ML)/,
+            )
+            if (mMultiplo) {
+              qtdPrinc = parseFloat(mMultiplo[2].replace(',', '.'))
+              const u = mMultiplo[3]
+              unPrinc =
+                u.startsWith('KG') || u.startsWith('QUILO') || u.startsWith('KILO') ? 'KG' : 'L'
+            } else {
+              const mDireto = embUpper.match(
+                /(\d+(?:[.,]\d+)?)\s*(KG|KGS|KILOS?|QUILOS?|G\b|L\b|LT|LITROS?|ML)\b/,
+              )
+              if (mDireto) {
+                let q = parseFloat(mDireto[1].replace(',', '.'))
+                const u = mDireto[2]
+                let fat = 1
+                if (u === 'G' || u === 'ML') fat = 0.001
+                qtdPrinc = q * fat
+                unPrinc =
+                  u.startsWith('KG') || u.startsWith('QUILO') || u.startsWith('KILO') || u === 'G'
+                    ? 'KG'
+                    : 'L'
+              }
+            }
+
+            // Forma de acondicionamento
+            let acond = 'Bombona'
+            if (embUpper.includes('SACO') || embUpper.includes('SACARIA')) acond = 'Saco'
+            else if (embUpper.includes('BIG BAG') || embUpper.includes('BIG-BAG')) acond = 'Big Bag'
+            else if (embUpper.includes('TAMBOR')) acond = 'Tambor'
+            else if (embUpper.includes('GALÃO') || embUpper.includes('GALAO')) acond = 'Galão'
+            else if (embUpper.includes('BALDE')) acond = 'Balde'
+            else if (embUpper.includes('FRASCO')) acond = 'Frasco'
+            else if (embUpper.includes('CONTAINER') || embUpper.includes('IBC'))
+              acond = 'Container / IBC'
+            else {
+              if (unPrinc === 'KG') acond = qtdPrinc > 25 ? 'Big Bag' : 'Saco'
+              else {
+                if (qtdPrinc <= 1) acond = 'Frasco'
+                else if (qtdPrinc <= 5) acond = 'Galão'
+                else if (qtdPrinc <= 50) acond = 'Bombona'
+                else if (qtdPrinc <= 250) acond = 'Tambor'
+                else acond = 'Container / IBC'
+              }
+            }
+
+            // Resolução fiel da NCM específica da embalagem comercial
+            let ncmEsp = data.ncm_especifica || data.ncm_padrao || data.ncm
+            if (regMapa.includes('002094') || marcaPad.toUpperCase().includes('ROUNDUP WG')) {
+              ncmEsp = '3808.93.24'
+            } else if (isNota2) {
+              if (qtdPrinc <= 0.3) ncmEsp = '3808.61.00'
+              else if (qtdPrinc <= 7.5) ncmEsp = '3808.62.90'
+              else ncmEsp = '3808.69.90'
+            } else if (!ncmEsp) {
+              ncmEsp = '3808.93.24'
+            }
+
+            const ncmMascara = fmtNcmMascara(ncmEsp)
+            const ncmLimpo = ncmMascara.replace(/\D/g, '')
+
+            // Chave natural idempotente do registro: MAPA + Quantidade principal + Unidade + Acondicionamento
+            const escAcond = acond.replace(/'/g, "\\'")
             let filtroMestre = ''
             if (regMapa && regMapa.indexOf('LINHA-') !== 0) {
-              filtroMestre = `registro_mapa = '${escMapa}'`
-            } else if (escCodigo) {
-              filtroMestre = `marca_padronizada = '${escMarcaPad}' && ncm = '${ncmLimpo}'`
+              filtroMestre = `registro_mapa = '${escMapa}' && quantidade_embalagem_principal = ${qtdPrinc} && forma_acondicionamento = '${escAcond}'`
             } else {
-              filtroMestre = `marca_padronizada = '${escMarcaPad}'`
+              filtroMestre = `marca_padronizada = '${escMarcaPad}' && quantidade_embalagem_principal = ${qtdPrinc} && forma_acondicionamento = '${escAcond}'`
             }
 
             const mestreExistentes =
@@ -1288,13 +1349,20 @@ routerAdd('POST', '/backend/v1/importar-lote', (e) => {
               'tipo_produto',
               String(data.tipo_produto || 'Produto Formulado Comercial').slice(0, 100),
             )
-            recMestre.set('embalagem', String(data.embalagem || '1X20L (20 L)').slice(0, 255))
-            recMestre.set('unidade', String(data.unidade || 'L').slice(0, 20))
+
+            // Novos campos divididos da embalagem comercial
+            recMestre.set('quantidade_embalagem_principal', qtdPrinc)
+            recMestre.set('unidade_medida_principal', unPrinc)
+            recMestre.set('forma_acondicionamento', acond)
+            recMestre.set('embalagem_original', embTexto)
+            recMestre.set('embalagem', `${qtdPrinc} ${unPrinc} (${acond})`)
+            recMestre.set('unidade', unPrinc)
             recMestre.set('origem_base', 'BULA_PRODUTOS_ESPELHO_TRIBUTARIO')
 
-            // Dados tributários essenciais
-            recMestre.set('ncm', ncmLimpo || '38089324')
-            recMestre.set('ncm_padrao', ncmMascara || '3808.93.24')
+            // NCM específica e fiel
+            recMestre.set('ncm_especifica', ncmMascara)
+            recMestre.set('ncm_padrao', ncmMascara)
+            recMestre.set('ncm', ncmLimpo)
             recMestre.set('nota_subpos_2', nota2Val)
 
             if (isNota2) {

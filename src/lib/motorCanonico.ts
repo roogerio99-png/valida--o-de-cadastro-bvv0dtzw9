@@ -108,6 +108,117 @@ export function verificarNotaSubpos2(principioAtivo?: string, nomeCompleto?: str
   return MOLECULAS_NOTA_SUBPOS_2.some((mol) => paUpper.includes(mol))
 }
 
+// -----------------------------------------------------------------------------
+// PARSEADOR DE EMBALAGEM COMERCIAL (SKU Final)
+// -----------------------------------------------------------------------------
+// Interpreta o texto da embalagem e extrai a QUANTIDADE da EMBALAGEM PRINCIPAL
+// (kg ou L) e a FORMA DE ACONDICIONAMENTO. Regra central do usuário:
+// "4x5L" => 5 L; "saco 20kg" => 20 KG; "bombona 200L" => 200 L; "12X1L" => 1 L.
+// A embalagem secundária/caixa mestre NÃO é usada como parâmetro.
+
+export interface EmbalagemParseada {
+  quantidade: number
+  unidade: 'L' | 'KG'
+  acondicionamento: string
+  textoOriginal: string
+}
+
+const FORMAS_ACONDICIONAMENTO = [
+  'BIG BAG',
+  'BIG-BAG',
+  'BOMBONA',
+  'TAMBOR',
+  'SACARIA',
+  'SACO',
+  'SACA',
+  'CAIXA',
+  'GALÃO',
+  'GALAO',
+  'BALDE',
+  'FRASCO',
+  'AMPOULA',
+  'SACHE',
+  'SACHET',
+  'POTE',
+  'BAG',
+  'IBC',
+  'CONTAINER',
+  'CONTÊINER',
+  'CARTUCHO',
+  'BISNAGA',
+  'TUBO',
+]
+
+export function parsearEmbalagemComercial(embalagem?: string): EmbalagemParseada {
+  const textoOriginal = String(embalagem || '').trim()
+  const upper = textoOriginal.toUpperCase()
+
+  let quantidade = 0
+  let unidade: 'L' | 'KG' = 'L'
+
+  // 1. Formato "N x Q un" (4x5L, 4 x 5 L, 12X1L) — embalagem principal = Q
+  const mMultiplo = upper.match(
+    /(\d+)\s*[xX×]\s*(\d+(?:[.,]\d+)?)\s*(KG|KGS|KILOS?|QUILOS?|L\b|LT|LITROS?|ML)/,
+  )
+  if (mMultiplo) {
+    quantidade = parseFloat(mMultiplo[2].replace(',', '.'))
+    const u = mMultiplo[3]
+    unidade = u.startsWith('KG') || u.startsWith('QUILO') || u.startsWith('KILO') ? 'KG' : 'L'
+  } else {
+    // 2. Formato direto "Q un" (20KG, 200L, 0.240 KG, 5L)
+    const mDireto = upper.match(
+      /(\d+(?:[.,]\d+)?)\s*(KG|KGS|KILOS?|QUILOS?|G\b|L\b|LT|LITROS?|ML)\b/,
+    )
+    if (mDireto) {
+      let qtd = parseFloat(mDireto[1].replace(',', '.'))
+      const u = mDireto[2]
+      let fator = 1
+      if (u === 'G') fator = 0.001
+      else if (u === 'ML') fator = 0.001
+      quantidade = qtd * fator
+      unidade =
+        u.startsWith('KG') || u.startsWith('KILO') || u.startsWith('QUILO') || u === 'G'
+          ? 'KG'
+          : 'L'
+    }
+  }
+
+  // 3. Forma de acondicionamento normalizada
+  let acond = ''
+  for (const forma of FORMAS_ACONDICIONAMENTO) {
+    if (upper.includes(forma)) {
+      if (forma === 'BIG-BAG') acond = 'Big Bag'
+      else if (forma === 'GALAO') acond = 'Galão'
+      else if (forma === 'CONTÊINER' || forma === 'CONTAINER' || forma === 'IBC')
+        acond = 'Container / IBC'
+      else if (forma === 'SACARIA' || forma === 'SACA') acond = 'Saco'
+      else if (forma === 'SACHET') acond = 'Sache'
+      else acond = forma.charAt(0) + forma.slice(1).toLowerCase()
+      break
+    }
+  }
+
+  // Fallback heurístico quando o texto não nomeia o vasilhame
+  if (!acond) {
+    if (unidade === 'KG') {
+      acond = quantidade > 25 ? 'Big Bag' : 'Saco'
+    } else {
+      if (quantidade <= 1) acond = 'Frasco'
+      else if (quantidade <= 5) acond = 'Galão'
+      else if (quantidade <= 50) acond = 'Bombona'
+      else if (quantidade <= 250) acond = 'Tambor'
+      else acond = 'Container / IBC'
+    }
+  }
+
+  return {
+    quantidade: quantidade > 0 ? quantidade : 0,
+    unidade,
+    acondicionamento: acond || 'Não Informado',
+    textoOriginal,
+  }
+}
+
 export function deduzirUnidade(
   embalagem?: string,
   unidadeInformada?: string,
@@ -139,6 +250,10 @@ export interface MotorInput {
   marca_padronizada?: string
   tipo_produto?: string
   embalagem?: string
+  quantidade_embalagem_principal?: number
+  unidade_medida_principal?: string
+  forma_acondicionamento?: string
+  embalagem_original?: string
   unidade?: string
   principio_ativo?: string
   principio_ativo_ou_garantia?: string
@@ -680,6 +795,39 @@ export function executarMotorCanonicoFrontend(
   ncmFaixa3 = formatarNcmMascara(ncmFaixa3)
   ncmFaixa4 = formatarNcmMascara(ncmFaixa4)
 
+  // 3.1 Resolução da NCM ESPECÍFICA para a Embalagem Comercial do cadastro
+  const embParse = parsearEmbalagemComercial(input.embalagem)
+  let ncmEspecifica = ncmPadrao
+
+  // Regra crítica do ROUNDUP WG (MAPA 002094): NCM 3808.93.24 (uso agrícola)
+  if (
+    registroMapaFormatado.includes('002094') ||
+    marcaUpper.includes('ROUNDUP WG') ||
+    nomeUpper.includes('ROUNDUP WG')
+  ) {
+    ncmEspecifica = '3808.93.24'
+  } else if (pertenceNotaSubpos2) {
+    // Escalonamento por capacidade da embalagem principal
+    const qtdKgs = embParse.unidade === 'KG' ? embParse.quantidade : embParse.quantidade // L ~ KG aprox. para defensivos líquidos
+    if (qtdKgs <= 0.3) {
+      ncmEspecifica = ncmFaixa1 // 3808.61.00
+    } else if (qtdKgs <= 7.5) {
+      ncmEspecifica = ncmFaixa2 // 3808.62.90
+    } else {
+      ncmEspecifica = ncmFaixa4 // 3808.69.90
+    }
+  } else if (tipoProduto === 'Fertilizante Mineral / Organomineral') {
+    if (embParse.quantidade <= 10 && embParse.unidade === 'KG') {
+      ncmEspecifica = '3105.10.00'
+    } else {
+      ncmEspecifica = ncmPadrao
+    }
+  } else {
+    ncmEspecifica = ncmPadrao
+  }
+
+  ncmEspecifica = formatarNcmMascara(ncmEspecifica)
+
   // 4. Motor Tributário Temporal
   let statusPisCofins = ''
   let aliquotaAteMar2026 = ''
@@ -755,9 +903,17 @@ export function executarMotorCanonicoFrontend(
     cst_entrada: cstEntrada,
     ibs_cbs_2027: ibsCbs2027,
     url_oficial: urlOficial,
+
+    // Novos campos da Embalagem Comercial (SKU Final)
+    quantidade_embalagem_principal: input.quantidade_embalagem_principal ?? embParse.quantidade,
+    unidade_medida_principal: input.unidade_medida_principal || embParse.unidade,
+    forma_acondicionamento: input.forma_acondicionamento || embParse.acondicionamento,
+    embalagem_original: input.embalagem_original || embParse.textoOriginal || embalagemBruta,
+    ncm_especifica: ncmEspecifica,
+
     // Campos de compatibilidade
     nome_produto: marcaPadronizada,
-    ncm: ncmPadrao.replace(/\D/g, ''),
+    ncm: ncmEspecifica.replace(/\D/g, ''),
     fabricante: titular,
     concentracao: 0,
     unidade_concentracao: '%',

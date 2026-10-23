@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-10-23T14:28:33.815Z",
+  "generatedAt": "2026-10-23T14:59:39.039Z",
   "collections": [
     {
       "name": "users",
@@ -529,6 +529,36 @@
           "required": false,
           "system": false,
           "collectionRef": "dicionario_principios_ativos"
+        },
+        {
+          "name": "quantidade_embalagem_principal",
+          "type": "number",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "unidade_medida_principal",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "forma_acondicionamento",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "embalagem_original",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "ncm_especifica",
+          "type": "text",
+          "required": false,
+          "system": false
         }
       ],
       "indexes": [
@@ -536,7 +566,8 @@
         "CREATE INDEX `idx_cadmestre_marca_pad` ON `base_mestre` (marca_padronizada)",
         "CREATE INDEX `idx_cadmestre_ncm_padrao` ON `base_mestre` (ncm_padrao)",
         "CREATE INDEX `idx_cadmestre_macro` ON `base_mestre` (macro_grupo)",
-        "CREATE INDEX `idx_cadmestre_pa_id` ON `base_mestre` (principio_ativo_id)"
+        "CREATE INDEX `idx_cadmestre_pa_id` ON `base_mestre` (principio_ativo_id)",
+        "CREATE INDEX `idx_cadmestre_sku_emb` ON `base_mestre` (registro_mapa, quantidade_embalagem_principal, forma_acondicionamento)"
       ]
     },
     {
