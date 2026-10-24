@@ -2262,7 +2262,39 @@ routerAdd('POST', '/backend/v1/importar-lote', (e) => {
           const data = itemWrapper.data || itemWrapper
           const rowNum = Number(itemWrapper.originalLine) || i + 1
 
-          const descricao = String(data.descricao || data.nome_produto || data.produto || '').trim()
+          // 1. Extrair extras brutos se vieram
+          let rawObj = {}
+          if (data.dados_extras) {
+            try {
+              rawObj =
+                typeof data.dados_extras === 'string'
+                  ? JSON.parse(data.dados_extras)
+                  : Object.assign({}, data.dados_extras)
+            } catch (_) {
+              rawObj = {}
+            }
+          }
+
+          // 2. Descrição: B1_DESC tem prioridade absoluta sobre BM_DESC
+          let descricao = String(
+            data.descricao ||
+              rawObj.B1_DESC ||
+              rawObj.b1_desc ||
+              data.nome_produto ||
+              data.produto ||
+              '',
+          ).trim()
+
+          const bmDesc = String(
+            rawObj.BM_DESC || rawObj.bm_desc || data.grupo || data.bm_desc || '',
+          ).trim()
+
+          // Se a descrição recebida for idêntica ao grupo BM_DESC e houver B1_DESC no rawObj, repara
+          const rawB1Desc = String(rawObj.B1_DESC || rawObj.b1_desc || '').trim()
+          if (rawB1Desc && normTxt(descricao) === normTxt(bmDesc)) {
+            descricao = rawB1Desc
+          }
+
           if (!descricao) {
             registrarErro(
               rowNum,
@@ -2276,32 +2308,90 @@ routerAdd('POST', '/backend/v1/importar-lote', (e) => {
             continue
           }
 
-          const codigo = String(data.codigo || data.cod || '').trim()
-          const ncm = fmtNcmMascara(data.ncm || '')
-          const unidade = normalizarUnidade(data.unidade, data.embalagem)
-          const tipoProduto = normalizarTipoProduto(data.tipo_produto, '', '')
+          // 3. Código
+          const codigo = String(
+            data.codigo || rawObj.B1_COD || rawObj.b1_cod || data.cod || '',
+          ).trim()
 
-          let origem = String(data.origem || '').trim()
-          if (!origem) {
-            origem =
-              String(data.embalagem || '')
-                .toUpperCase()
-                .includes('IMP') ||
-              String(data.descricao || '')
-                .toUpperCase()
-                .includes('(IMP)')
-                ? 'Importado'
-                : 'Nacional'
+          // 4. NCM canônico: formato 0000.00.00 a partir de data.ncm ou B1_POSIPI
+          const rawNcm = String(data.ncm || rawObj.B1_POSIPI || rawObj.b1_posipi || '').trim()
+          const ncm = fmtNcmMascara(rawNcm)
+
+          // 5. Embalagem: extrair ou derivar da descrição
+          let embalagem = String(data.embalagem || '').trim()
+          if (!embalagem && descricao) {
+            const mEmb = descricao.match(
+              /\b(\d+\s*[xX]\s*\d+(?:[.,]\d+)?\s*(?:L|LT|KG|G|ML|SC|DOSES)|\d+(?:[.,]\d+)?\s*(?:L|LT|KG|G|ML|SC|DOSES))\b/i,
+            )
+            if (mEmb) {
+              embalagem = mEmb[1].replace(/\s+/g, '').replace('X', 'x')
+            }
           }
 
-          const embalagem = String(data.embalagem || '').trim()
+          // 6. Unidade
+          const rawUnid = String(data.unidade || rawObj.B1_UM || rawObj.b1_um || '').trim()
+          const unidade = normalizarUnidade(rawUnid, embalagem)
+
+          // 7. Tipo de Produto
+          let tipoProduto = String(data.tipo_produto || '').trim()
+          if (!tipoProduto || tipoProduto === 'Produto Formulado Comercial') {
+            const b1Grupo = String(rawObj.B1_GRUPO || rawObj.b1_grupo || '').trim()
+            tipoProduto = normalizarTipoProduto(tipoProduto, bmDesc, `${b1Grupo} ${descricao}`)
+          }
+
+          // 8. Origem
+          let origem = String(data.origem || '').trim()
+          const x5Origem = String(
+            rawObj.X5_TABELA || rawObj.X5_DESC || rawObj.x5_tabela || '',
+          ).trim()
+          if (x5Origem) {
+            const x5Up = x5Origem.toUpperCase()
+            if (x5Up.includes('IMP') || x5Up.includes('ESTRANGEIR')) {
+              origem = 'Importado'
+            } else if (x5Up.includes('NAC')) {
+              origem = 'Nacional'
+            }
+          }
+          if (!origem) {
+            const descUp = descricao.toUpperCase()
+            const embUp = embalagem.toUpperCase()
+            if (
+              descUp.includes('(IMP)') ||
+              descUp.includes(' IMP ') ||
+              descUp.endsWith(' IMP') ||
+              descUp.includes('(SS)') ||
+              embUp.includes('IMP')
+            ) {
+              origem = 'Importado'
+            } else {
+              origem = 'Nacional'
+            }
+          }
+
+          // 9. Fabricante
+          let fabricante = String(data.fabricante || '').trim()
+          if (!fabricante && descricao) {
+            const mFab = descricao.match(
+              /[-–—]\s*([A-Za-z0-9&.\s]+?)\s*\((?:AGENCIADO|AGENC|DISTRIBUIDO)\)/i,
+            )
+            if (mFab) {
+              fabricante = mFab[1].trim()
+            }
+          }
+
+          // 10. Princípio Ativo
           const principioAtivo = String(data.principio_ativo || '').trim()
-          const fabricante = String(data.fabricante || '').trim()
+
+          // 11. Moeda e Preço
           const moeda = String(data.moeda || (origem.toLowerCase().includes('imp') ? 'USD' : 'BRL'))
             .trim()
             .toUpperCase()
-          const precoBase =
-            Number(data.preco_base_sugerido || data.preco_base || data.preco || 0) || 0
+
+          const rawPreco =
+            data.preco_base_sugerido !== undefined
+              ? data.preco_base_sugerido
+              : rawObj.B1_PRV1 || rawObj.b1_prv1 || data.preco_base || data.preco || 0
+          const precoBase = Number(rawPreco) || 0
 
           // Upsert por código (se houver) ou por descrição exata
           let record = null
@@ -2354,8 +2444,15 @@ routerAdd('POST', '/backend/v1/importar-lote', (e) => {
           record.set('fabricante', fabricante)
           record.set('moeda', moeda)
           record.set('preco_base_sugerido', precoBase)
+
+          // Preservar dados_extras íntegros
           if (data.dados_extras) {
-            record.set('dados_extras', data.dados_extras)
+            record.set(
+              'dados_extras',
+              typeof data.dados_extras === 'string'
+                ? data.dados_extras
+                : JSON.stringify(data.dados_extras),
+            )
           }
 
           try {

@@ -1757,44 +1757,180 @@ export function Importar() {
       // SIMULADOR: sim_produtos_base (Aba Produtos Base)
       // ------------------------------------------------------------------
       else if (targetCol === 'sim_produtos_base') {
-        const codigo = getFieldValue(row, ['codigo', 'cod', 'id_produto', 'id', 'item'])
-        const desc = getFieldValue(row, [
-          'descricao',
-          'descricao_produto',
-          'nome_produto',
-          'produto',
-          'nome',
-          'item',
+        // 1. Código do produto: B1_COD prioridade máxima
+        const codigo = getFieldValue(row, ['b1_cod', 'codigo', 'cod', 'id_produto', 'id', 'item'])
+
+        // 2. Descrição do produto: B1_DESC é a descrição real do produto; NUNCA BM_DESC (que é o grupo)
+        let desc = getFieldValue(row, ['b1_desc'])
+        if (!desc) {
+          const rawDesc = getFieldValue(row, [
+            'descricao_produto',
+            'nome_produto',
+            'descricao',
+            'produto',
+            'nome',
+            'item',
+          ])
+          const bmDesc = getFieldValue(row, ['bm_desc', 'desc_grupo', 'grupo_desc'])
+          // Se rawDesc for idêntico a BM_DESC, não utilizar como descrição do produto
+          if (rawDesc && (!bmDesc || normalize(rawDesc) !== normalize(bmDesc))) {
+            desc = rawDesc
+          }
+        }
+
+        // Grupo: BM_DESC / B1_GRUPO
+        const bmDesc = getFieldValue(row, ['bm_desc', 'desc_grupo', 'grupo_desc', 'grupo'])
+        const b1Grupo = getFieldValue(row, ['b1_grupo', 'cod_grupo'])
+
+        // Se desc ainda estiver vazia, como último fallback usa o que houver
+        if (!desc) {
+          desc = getFieldValue(row, ['descricao', 'produto', 'item'])
+        }
+
+        // 3. NCM: B1_POSIPI prioridade máxima
+        const rawNcm = getFieldValue(row, [
+          'b1_posipi',
+          'posipi',
+          'ncm',
+          'ncm_oficial',
+          'classificacao_fiscal',
         ])
-        const rawNcm = getFieldValue(row, ['ncm', 'ncm_oficial', 'classificacao_fiscal'])
-        const unid = getFieldValue(row, ['unidade', 'und', 'uom', 'unid'])
-        const tipoProd = getFieldValue(row, ['tipo_produto', 'tipo', 'categoria', 'classe'])
-        const origemRaw = getFieldValue(row, [
-          'origem',
-          'procedencia',
-          'pais_origem',
-          'tipo_origem',
-        ])
-        const emb = getFieldValue(row, [
+        const ncmLimpo = cleanNcm(rawNcm)
+        let ncmFormatado = ''
+        if (ncmLimpo && ncmLimpo.length === 8) {
+          ncmFormatado = `${ncmLimpo.slice(0, 4)}.${ncmLimpo.slice(4, 6)}.${ncmLimpo.slice(6, 8)}`
+        } else if (ncmLimpo && ncmLimpo.length > 0 && ncmLimpo.length < 8) {
+          const padded = ncmLimpo.padStart(8, '0')
+          ncmFormatado = `${padded.slice(0, 4)}.${padded.slice(4, 6)}.${padded.slice(6, 8)}`
+        }
+
+        // 4. Embalagem: coluna explícita ou dedução via regex da descrição (ex. "1X20L", "4X5L", "200L", "20KG")
+        let emb = getFieldValue(row, [
           'embalagem',
           'tipo_embalagem',
           'acondicionamento',
           'recipiente',
         ])
-        const pa = getFieldValue(row, ['principio_ativo', 'ativo', 'ingrediente_ativo', 'molecula'])
-        const fab = getFieldValue(row, ['fabricante', 'titular', 'empresa', 'fornecedor', 'marca'])
+        if (!emb && desc) {
+          const mEmb = desc.match(
+            /\b(\d+\s*[xX]\s*\d+(?:[.,]\d+)?\s*(?:L|LT|KG|G|ML|SC|DOSES)|\d+(?:[.,]\d+)?\s*(?:L|LT|KG|G|ML|SC|DOSES))\b/i,
+          )
+          if (mEmb) {
+            emb = mEmb[1].replace(/\s+/g, '').replace('X', 'x')
+          }
+        }
+
+        // 5. Unidade: coluna de unidade ou dedução pela embalagem
+        let unid = getFieldValue(row, ['b1_um', 'unidade', 'und', 'uom', 'unid'])
+        if (!unid && emb) {
+          const embUpper = emb.toUpperCase()
+          if (embUpper.includes('KG') || embUpper.includes('G')) unid = 'KG'
+          else if (embUpper.includes('SC')) unid = 'SC'
+          else if (embUpper.includes('DOSES')) unid = 'DOSES'
+          else unid = 'L'
+        }
+        if (!unid) unid = 'L'
+
+        // 6. Origem: coluna x5_tabela ou sufixo (IMP)/(SS)
+        const x5Origem = getFieldValue(row, [
+          'x5_tabela',
+          'x5_desc',
+          'x5',
+          'origem',
+          'procedencia',
+          'pais_origem',
+          'tipo_origem',
+        ])
+        let origem = ''
+        if (x5Origem) {
+          const x5Up = x5Origem.toUpperCase()
+          if (x5Up.includes('IMP') || x5Up.includes('ESTRANGEIR')) {
+            origem = 'Importado'
+          } else if (x5Up.includes('NAC')) {
+            origem = 'Nacional'
+          } else {
+            origem = x5Origem
+          }
+        }
+        if (!origem) {
+          const descUp = desc.toUpperCase()
+          if (
+            descUp.includes('(IMP)') ||
+            descUp.includes(' IMP ') ||
+            descUp.endsWith(' IMP') ||
+            descUp.includes('(SS)')
+          ) {
+            origem = 'Importado'
+          } else {
+            origem = 'Nacional'
+          }
+        }
+
+        // 7. Fabricante: extrair de padrão "PRODUTO - FABRICANTE (AGENCIADO)" ou coluna explícita
+        let fab = getFieldValue(row, ['fabricante', 'titular', 'empresa', 'fornecedor', 'marca'])
+        if (!fab && desc) {
+          const mFab = desc.match(
+            /[-–—]\s*([A-Za-z0-9&.\s]+?)\s*\((?:AGENCIADO|AGENC|DISTRIBUIDO)\)/i,
+          )
+          if (mFab) {
+            fab = mFab[1].trim()
+          }
+        }
+
+        // 8. Tipo de Produto: derivar de BM_DESC / B1_GRUPO
+        let tipoProd = getFieldValue(row, ['tipo_produto', 'tipo', 'categoria', 'classe'])
+        if (!tipoProd) {
+          const s = `${bmDesc} ${b1Grupo} ${desc}`.toUpperCase()
+          if (s.includes('FERTILIZANTE') || s.includes('NPK') || s.includes('ORGANOMINERAL')) {
+            tipoProd = 'Fertilizante Mineral / Organomineral'
+          } else if (
+            s.includes('ADJUVANTE') ||
+            s.includes('ESPALHANTE') ||
+            s.includes('OLEO MINERAL') ||
+            s.includes('ÓLEO MINERAL')
+          ) {
+            tipoProd = 'Adjuvante / Espalhante Adesivo'
+          } else if (
+            s.includes('BIOLOGICO') ||
+            s.includes('BIOLÓGICO') ||
+            s.includes('INOCULANTE')
+          ) {
+            tipoProd = 'Inoculante / Biológico'
+          } else if (
+            s.includes('CORRETIVO') ||
+            s.includes('CONDICIONADOR') ||
+            s.includes('CALCARIO') ||
+            s.includes('GESSO')
+          ) {
+            tipoProd = 'Corretivo / Condicionador de Solo'
+          } else if (s.includes('SEMENTE')) {
+            tipoProd = 'Semente Certificada'
+          } else if (s.includes('TECNICO') || s.includes('TÉCNICO')) {
+            tipoProd = 'Produto Técnico Industrial'
+          } else if (s.includes('PRE-MISTURA') || s.includes('PRÉ-MISTURA')) {
+            tipoProd = 'Pré-Mistura Industrial'
+          } else {
+            tipoProd = 'Produto Formulado Comercial'
+          }
+        }
+
+        // 9. Moeda e Preço
         const moeda =
-          getFieldValue(row, ['moeda', 'currency']) ||
-          (origemRaw.toLowerCase().includes('imp') ? 'USD' : 'BRL')
+          getFieldValue(row, ['moeda', 'currency']) || (origem === 'Importado' ? 'USD' : 'BRL')
         const precoBase = cleanNumber(
           getFieldValue(row, [
             'preco_base_sugerido',
             'preco_base',
             'preco',
+            'b1_prv1',
+            'prv1',
+            'preco_venda',
             'valor_unitario',
             'valor',
           ]),
         )
+
+        const pa = getFieldValue(row, ['principio_ativo', 'ativo', 'ingrediente_ativo', 'molecula'])
 
         const allText = Object.values(row).join(' ').trim()
         if (
@@ -1826,25 +1962,25 @@ export function Importar() {
           return
         }
 
-        const ncmLimpo = cleanNcm(rawNcm)
-
         validos.push({
           originalLine: originalLineNum,
           data: {
             codigo: codigo || `PROD-${originalLineNum}`,
             descricao: desc,
-            ncm: ncmLimpo
-              ? `${ncmLimpo.slice(0, 4)}.${ncmLimpo.slice(4, 6)}.${ncmLimpo.slice(6, 8)}`
-              : '',
-            unidade: unid || 'L',
-            tipo_produto: tipoProd || 'Produto Formulado Comercial',
-            origem: origemRaw || (desc.toUpperCase().includes('IMP') ? 'Importado' : 'Nacional'),
+            ncm: ncmFormatado,
+            unidade: unid,
+            tipo_produto: tipoProd,
+            origem: origem,
             embalagem: emb || '',
             principio_ativo: pa || '',
             fabricante: fab || '',
             moeda: moeda.toUpperCase(),
             preco_base_sugerido: precoBase,
-            dados_extras: row,
+            dados_extras: {
+              ...row,
+              ...(bmDesc ? { BM_DESC_ORIGINAL: bmDesc } : {}),
+              ...(b1Grupo ? { B1_GRUPO_ORIGINAL: b1Grupo } : {}),
+            },
           },
         })
       }
