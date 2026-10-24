@@ -886,3 +886,99 @@ export async function gravarBulaPdf(
     throw new Error(errorMsg)
   }
 }
+
+// -----------------------------------------------------------------------------
+// Simulador Comercial (Fase 1 - MVP)
+// -----------------------------------------------------------------------------
+
+export interface SimProdutoBaseItem {
+  id: string
+  codigo?: string
+  descricao: string
+  ncm?: string
+  unidade?: string
+  tipo_produto?: string
+  origem?: string
+  embalagem?: string
+  principio_ativo?: string
+  fabricante?: string
+  moeda?: string
+  preco_base_sugerido?: number
+  dados_extras?: Record<string, unknown>
+  created: string
+  updated: string
+}
+
+export interface SimRegraIcmsItem {
+  id: string
+  uf_origem: string
+  uf_destino: string
+  aliquota_icms: number
+  reducao_base?: number
+  aliquota_efetiva?: number
+  diferimento?: boolean
+  percentual_diferimento?: number
+  fundamentacao_legal?: string
+  tipo_operacao?: string
+  chave_origem_destino: string
+  dados_extras?: Record<string, unknown>
+  created: string
+  updated: string
+}
+
+export async function listarProdutosBaseSimulador(params?: {
+  page?: number
+  perPage?: number
+  filter?: string
+  sort?: string
+}) {
+  const page = params?.page || 1
+  const perPage = params?.perPage || 50
+  const sort = params?.sort || 'descricao'
+  return pb.collection('sim_produtos_base').getList<SimProdutoBaseItem>(page, perPage, {
+    filter: params?.filter,
+    sort,
+  })
+}
+
+export async function obterRegraIcmsSimulador(ufOrigem: string, ufDestino: string) {
+  const chave = `${ufOrigem.toUpperCase()}_${ufDestino.toUpperCase()}`
+  try {
+    const res = await pb.collection('sim_regras_icms').getList<SimRegraIcmsItem>(1, 1, {
+      filter: `chave_origem_destino = '${chave}'`,
+    })
+    return res.items[0] || null
+  } catch (_) {
+    return null
+  }
+}
+
+export async function executarSimulacaoServidor(payload: {
+  produto_id?: string
+  produto_nome?: string
+  ncm?: string
+  uf_origem: string
+  uf_destino: string
+  quantidade: number
+  preco_unitario: number
+  ptax_manual?: number
+  frete?: number
+  seguro?: number
+  outras_despesas?: number
+  margem_perc?: number
+}) {
+  return pb.send<{
+    sucesso: boolean
+    produto: any
+    operacao: any
+    cambio: any
+    valores_base: any
+    tributos: any
+    resultado_comercial: any
+    alertas: string[]
+    memoria_calculo: string[]
+  }>('/backend/v1/simulador/calcular', {
+    method: 'POST',
+    body: payload,
+  })
+}

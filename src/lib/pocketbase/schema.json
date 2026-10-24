@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-10-24T18:07:17.219Z",
+  "generatedAt": "2026-10-24T21:56:53.917Z",
   "collections": [
     {
       "name": "users",
@@ -1773,6 +1773,208 @@
         "CREATE INDEX IF NOT EXISTS idx_bula_apl_mapa ON bula_aplicacao (registro_mapa)",
         "CREATE INDEX IF NOT EXISTS idx_bula_apl_mapa_codigo ON bula_aplicacao (registro_mapa, codigo)",
         "CREATE INDEX IF NOT EXISTS idx_bula_apl_tipo ON bula_aplicacao (tipo_aplicacao)"
+      ]
+    },
+    {
+      "name": "sim_produtos_base",
+      "type": "base",
+      "apiRules": {
+        "list": "@request.auth.id != ''",
+        "view": "@request.auth.id != ''",
+        "create": "@request.auth.id != '' && @request.auth.role = 'admin'",
+        "update": "@request.auth.id != '' && @request.auth.role = 'admin'",
+        "delete": "@request.auth.id != '' && @request.auth.role = 'admin'"
+      },
+      "fields": [
+        {
+          "name": "codigo",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "descricao",
+          "type": "text",
+          "required": true,
+          "system": false
+        },
+        {
+          "name": "ncm",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "unidade",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "tipo_produto",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "origem",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "embalagem",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "principio_ativo",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "fabricante",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "moeda",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "preco_base_sugerido",
+          "type": "number",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "dados_extras",
+          "type": "json",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "created",
+          "type": "autodate",
+          "required": false,
+          "system": false,
+          "autodateTriggers": ["onCreate"]
+        },
+        {
+          "name": "updated",
+          "type": "autodate",
+          "required": false,
+          "system": false,
+          "autodateTriggers": ["onCreate", "onUpdate"]
+        }
+      ],
+      "indexes": [
+        "CREATE INDEX idx_sim_produtos_desc ON sim_produtos_base (descricao)",
+        "CREATE INDEX idx_sim_produtos_ncm ON sim_produtos_base (ncm)",
+        "CREATE INDEX idx_sim_produtos_codigo ON sim_produtos_base (codigo)"
+      ]
+    },
+    {
+      "name": "sim_regras_icms",
+      "type": "base",
+      "apiRules": {
+        "list": "@request.auth.id != ''",
+        "view": "@request.auth.id != ''",
+        "create": "@request.auth.id != '' && @request.auth.role = 'admin'",
+        "update": "@request.auth.id != '' && @request.auth.role = 'admin'",
+        "delete": "@request.auth.id != '' && @request.auth.role = 'admin'"
+      },
+      "fields": [
+        {
+          "name": "uf_origem",
+          "type": "text",
+          "required": true,
+          "system": false
+        },
+        {
+          "name": "uf_destino",
+          "type": "text",
+          "required": true,
+          "system": false
+        },
+        {
+          "name": "aliquota_icms",
+          "type": "number",
+          "required": true,
+          "system": false
+        },
+        {
+          "name": "reducao_base",
+          "type": "number",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "aliquota_efetiva",
+          "type": "number",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "diferimento",
+          "type": "bool",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "percentual_diferimento",
+          "type": "number",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "fundamentacao_legal",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "tipo_operacao",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "chave_origem_destino",
+          "type": "text",
+          "required": true,
+          "system": false
+        },
+        {
+          "name": "dados_extras",
+          "type": "json",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "created",
+          "type": "autodate",
+          "required": false,
+          "system": false,
+          "autodateTriggers": ["onCreate"]
+        },
+        {
+          "name": "updated",
+          "type": "autodate",
+          "required": false,
+          "system": false,
+          "autodateTriggers": ["onCreate", "onUpdate"]
+        }
+      ],
+      "indexes": [
+        "CREATE INDEX idx_sim_icms_chave ON sim_regras_icms (chave_origem_destino)",
+        "CREATE INDEX idx_sim_icms_origem ON sim_regras_icms (uf_origem)",
+        "CREATE INDEX idx_sim_icms_destino ON sim_regras_icms (uf_destino)"
       ]
     }
   ]

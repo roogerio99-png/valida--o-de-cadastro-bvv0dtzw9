@@ -23,6 +23,7 @@ import {
   Shield,
   Eye,
   FileText,
+  Calculator,
 } from 'lucide-react'
 import { useAuth } from '@/contexts/AuthContext'
 import { Button } from '@/components/ui/button'
@@ -49,6 +50,7 @@ const navItems = [
   { path: '/bula', label: 'Cadastro de Bula', icon: FileText },
   { path: '/travas', label: 'Travas de Auditoria', icon: ShieldAlert },
   { path: '/parametrizacao', label: 'Parametrização Fiscal', icon: Percent },
+  { path: '/simulador', label: 'Simulador Comercial', icon: Calculator },
   { path: '/tributacao', label: 'Tributação Agro', icon: Scale },
   { path: '/importar', label: 'Importar Planilhas', icon: UploadCloud },
   { path: '/configuracoes', label: 'Configurações', icon: User },

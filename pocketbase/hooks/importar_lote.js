@@ -84,6 +84,8 @@ routerAdd('POST', '/backend/v1/importar-lote', (e) => {
       'bula_culturas',
       'bula_alvos',
       'bula_aplicacao',
+      'sim_produtos_base',
+      'sim_regras_icms',
     ]
 
     if (!colecoesSuportadas.includes(collectionName)) {
@@ -2245,6 +2247,242 @@ routerAdd('POST', '/backend/v1/importar-lote', (e) => {
               `Falha ao salvar aplicação/EPI da bula: ${detalhe.motivo}`,
               detalhe.campo || 'tipo_aplicacao',
               tipoApl,
+              data,
+            )
+          }
+        }
+      }
+
+      // =======================================================================
+      // CASO 11: sim_produtos_base (Aba Produtos Base do Simulador Comercial)
+      // =======================================================================
+      if (collectionName === 'sim_produtos_base') {
+        for (let i = 0; i < records.length; i++) {
+          const itemWrapper = records[i]
+          const data = itemWrapper.data || itemWrapper
+          const rowNum = Number(itemWrapper.originalLine) || i + 1
+
+          const descricao = String(data.descricao || data.nome_produto || data.produto || '').trim()
+          if (!descricao) {
+            registrarErro(
+              rowNum,
+              i + 1,
+              'Campo Obrigatório Ausente',
+              'A descrição do produto base é obrigatória.',
+              'descricao',
+              '',
+              data,
+            )
+            continue
+          }
+
+          const codigo = String(data.codigo || data.cod || '').trim()
+          const ncm = fmtNcmMascara(data.ncm || '')
+          const unidade = normalizarUnidade(data.unidade, data.embalagem)
+          const tipoProduto = normalizarTipoProduto(data.tipo_produto, '', '')
+
+          let origem = String(data.origem || '').trim()
+          if (!origem) {
+            origem =
+              String(data.embalagem || '')
+                .toUpperCase()
+                .includes('IMP') ||
+              String(data.descricao || '')
+                .toUpperCase()
+                .includes('(IMP)')
+                ? 'Importado'
+                : 'Nacional'
+          }
+
+          const embalagem = String(data.embalagem || '').trim()
+          const principioAtivo = String(data.principio_ativo || '').trim()
+          const fabricante = String(data.fabricante || '').trim()
+          const moeda = String(data.moeda || (origem.toLowerCase().includes('imp') ? 'USD' : 'BRL'))
+            .trim()
+            .toUpperCase()
+          const precoBase =
+            Number(data.preco_base_sugerido || data.preco_base || data.preco || 0) || 0
+
+          // Upsert por código (se houver) ou por descrição exata
+          let record = null
+          let isUpdate = false
+
+          if (codigo) {
+            const escCod = codigo.replace(/'/g, "\\'")
+            const achados =
+              txApp.findRecordsByFilter(
+                'sim_produtos_base',
+                `codigo = '${escCod}'`,
+                '-created',
+                1,
+                0,
+              ) || []
+            if (achados.length > 0) {
+              record = achados[0]
+              isUpdate = true
+            }
+          }
+
+          if (!record) {
+            const escDesc = descricao.replace(/'/g, "\\'")
+            const achados =
+              txApp.findRecordsByFilter(
+                'sim_produtos_base',
+                `descricao = '${escDesc}'`,
+                '-created',
+                1,
+                0,
+              ) || []
+            if (achados.length > 0) {
+              record = achados[0]
+              isUpdate = true
+            }
+          }
+
+          if (!record) {
+            record = new Record(colTarget)
+          }
+
+          record.set('codigo', codigo)
+          record.set('descricao', descricao)
+          record.set('ncm', ncm)
+          record.set('unidade', unidade)
+          record.set('tipo_produto', tipoProduto)
+          record.set('origem', origem)
+          record.set('embalagem', embalagem)
+          record.set('principio_ativo', principioAtivo)
+          record.set('fabricante', fabricante)
+          record.set('moeda', moeda)
+          record.set('preco_base_sugerido', precoBase)
+          if (data.dados_extras) {
+            record.set('dados_extras', data.dados_extras)
+          }
+
+          try {
+            txApp.save(record)
+            if (isUpdate) {
+              atualizados++
+              ignorados++
+            } else {
+              inseridos++
+            }
+          } catch (err) {
+            const detalhe = extrairDetalhesErroDb(err)
+            registrarErro(
+              rowNum,
+              i + 1,
+              'Erro no Banco de Dados',
+              `Falha ao salvar produto base: ${detalhe.motivo}`,
+              detalhe.campo || 'sim_produtos_base',
+              descricao,
+              data,
+            )
+          }
+        }
+      }
+
+      // =======================================================================
+      // CASO 12: sim_regras_icms (Aba Regra ICMS do Simulador Comercial)
+      // =======================================================================
+      if (collectionName === 'sim_regras_icms') {
+        for (let i = 0; i < records.length; i++) {
+          const itemWrapper = records[i]
+          const data = itemWrapper.data || itemWrapper
+          const rowNum = Number(itemWrapper.originalLine) || i + 1
+
+          const ufOrigem = String(data.uf_origem || data.origem || '')
+            .trim()
+            .toUpperCase()
+          const ufDestino = String(data.uf_destino || data.destino || '')
+            .trim()
+            .toUpperCase()
+
+          if (!ufOrigem || !ufDestino || ufOrigem.length !== 2 || ufDestino.length !== 2) {
+            registrarErro(
+              rowNum,
+              i + 1,
+              'UF Inválida',
+              `Origem ("${ufOrigem}") e Destino ("${ufDestino}") devem ser siglas de estado válidas com 2 letras.`,
+              'uf_origem',
+              `${ufOrigem}->${ufDestino}`,
+              data,
+            )
+            continue
+          }
+
+          const chaveOrigemDestino = `${ufOrigem}_${ufDestino}`
+          const aliqIcms =
+            Number(data.aliquota_icms !== undefined ? data.aliquota_icms : data.aliquota || 0) || 0
+          const reducaoBase = Number(data.reducao_base || data.reducao || 0) || 0
+          const aliqEfetiva =
+            Number(
+              data.aliquota_efetiva !== undefined
+                ? data.aliquota_efetiva
+                : aliqIcms * (1 - reducaoBase / 100),
+            ) || aliqIcms
+          const diferimento = !!(
+            data.diferimento === true ||
+            String(data.diferimento).toLowerCase() === 'sim' ||
+            String(data.diferimento).toLowerCase() === 'true'
+          )
+          const percDiferimento = Number(data.percentual_diferimento || 0) || 0
+          const fundamentacao = String(data.fundamentacao_legal || data.fundamentacao || '').trim()
+          const tipoOperacao = String(
+            data.tipo_operacao || (ufOrigem === ufDestino ? 'Interna' : 'Interestadual'),
+          ).trim()
+
+          // Upsert por chave_origem_destino
+          const escChave = chaveOrigemDestino.replace(/'/g, "\\'")
+          const achados =
+            txApp.findRecordsByFilter(
+              'sim_regras_icms',
+              `chave_origem_destino = '${escChave}'`,
+              '-created',
+              1,
+              0,
+            ) || []
+
+          let record = null
+          let isUpdate = false
+
+          if (achados.length > 0) {
+            record = achados[0]
+            isUpdate = true
+          } else {
+            record = new Record(colTarget)
+          }
+
+          record.set('uf_origem', ufOrigem)
+          record.set('uf_destino', ufDestino)
+          record.set('aliquota_icms', aliqIcms)
+          record.set('reducao_base', reducaoBase)
+          record.set('aliquota_efetiva', aliqEfetiva)
+          record.set('diferimento', diferimento)
+          record.set('percentual_diferimento', percDiferimento)
+          record.set('fundamentacao_legal', fundamentacao)
+          record.set('tipo_operacao', tipoOperacao)
+          record.set('chave_origem_destino', chaveOrigemDestino)
+          if (data.dados_extras) {
+            record.set('dados_extras', data.dados_extras)
+          }
+
+          try {
+            txApp.save(record)
+            if (isUpdate) {
+              atualizados++
+              ignorados++
+            } else {
+              inseridos++
+            }
+          } catch (err) {
+            const detalhe = extrairDetalhesErroDb(err)
+            registrarErro(
+              rowNum,
+              i + 1,
+              'Erro no Banco de Dados',
+              `Falha ao salvar regra ICMS ${chaveOrigemDestino}: ${detalhe.motivo}`,
+              detalhe.campo || 'sim_regras_icms',
+              chaveOrigemDestino,
               data,
             )
           }

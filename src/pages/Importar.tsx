@@ -253,6 +253,44 @@ const DROP_ZONES: ZoneConfig[] = [
     expectedHeaders: ['NCM', 'DESCRICAO', 'EMBALAGENS PERMITIDAS'],
     sampleDescription: 'Popula as travas 1 e 2 de conformidade por classificação fiscal',
   },
+
+  // --- SIMULADOR COMERCIAL (PRODUTOS BASE E REGRAS ICMS) ---
+  {
+    id: 'sim_produtos_base',
+    sheetIndex: 2,
+    sheetKeywords: [
+      'produtos base',
+      'produtos_base',
+      'produtosbase',
+      'produtos',
+      'itens base',
+      'simulador produtos',
+    ],
+    title: 'Simulador: Produtos Base',
+    subtitle: 'Base de itens e insumos base para o Simulador Comercial (≈1.178 itens).',
+    targetCollection: 'sim_produtos_base',
+    expectedHeaders: ['CODIGO', 'DESCRICAO', 'NCM', 'UNIDADE', 'ORIGEM', 'TIPO PRODUTO'],
+    sampleDescription: 'Popula os produtos selecionáveis no Simulador Comercial',
+  },
+  {
+    id: 'sim_regras_icms',
+    sheetIndex: 3,
+    sheetKeywords: [
+      'regra icms',
+      'regras icms',
+      'regra_icms',
+      'regras_icms',
+      'icms',
+      'matriz icms',
+      'tabela icms',
+    ],
+    title: 'Simulador: Regras de ICMS',
+    subtitle:
+      'Matriz interestadual de alíquotas e benefícios de ICMS origem → destino (≈7.291 regras).',
+    targetCollection: 'sim_regras_icms',
+    expectedHeaders: ['ORIGEM', 'DESTINO', 'ALIQUOTA ICMS', 'REDUCAO BASE', 'DIFERIMENTO'],
+    sampleDescription: 'Popula a matriz interestadual de ICMS do Simulador Comercial',
+  },
 ]
 
 // Normalização de strings para comparação e busca flexível
@@ -1710,6 +1748,191 @@ export function Importar() {
             volume_calda_aplicacao: volCaldaApl || '',
             classe_toxicologica_aplicacao: toxApl || '',
             orientacoes_gerais: orientGerais || '',
+            dados_extras: row,
+          },
+        })
+      }
+
+      // ------------------------------------------------------------------
+      // SIMULADOR: sim_produtos_base (Aba Produtos Base)
+      // ------------------------------------------------------------------
+      else if (targetCol === 'sim_produtos_base') {
+        const codigo = getFieldValue(row, ['codigo', 'cod', 'id_produto', 'id', 'item'])
+        const desc = getFieldValue(row, [
+          'descricao',
+          'descricao_produto',
+          'nome_produto',
+          'produto',
+          'nome',
+          'item',
+        ])
+        const rawNcm = getFieldValue(row, ['ncm', 'ncm_oficial', 'classificacao_fiscal'])
+        const unid = getFieldValue(row, ['unidade', 'und', 'uom', 'unid'])
+        const tipoProd = getFieldValue(row, ['tipo_produto', 'tipo', 'categoria', 'classe'])
+        const origemRaw = getFieldValue(row, [
+          'origem',
+          'procedencia',
+          'pais_origem',
+          'tipo_origem',
+        ])
+        const emb = getFieldValue(row, [
+          'embalagem',
+          'tipo_embalagem',
+          'acondicionamento',
+          'recipiente',
+        ])
+        const pa = getFieldValue(row, ['principio_ativo', 'ativo', 'ingrediente_ativo', 'molecula'])
+        const fab = getFieldValue(row, ['fabricante', 'titular', 'empresa', 'fornecedor', 'marca'])
+        const moeda =
+          getFieldValue(row, ['moeda', 'currency']) ||
+          (origemRaw.toLowerCase().includes('imp') ? 'USD' : 'BRL')
+        const precoBase = cleanNumber(
+          getFieldValue(row, [
+            'preco_base_sugerido',
+            'preco_base',
+            'preco',
+            'valor_unitario',
+            'valor',
+          ]),
+        )
+
+        const allText = Object.values(row).join(' ').trim()
+        if (
+          allText.toLowerCase().includes('como usar') ||
+          allText.toLowerCase().includes('instruções')
+        ) {
+          rejeitados.push({
+            linhaOriginal: originalLineNum,
+            linhaLote: idx + 1,
+            motivo: 'Linha informativa ou instruções ignorada.',
+            categoria: 'Linha Informativa',
+            campo: 'Linha',
+            valor: allText.slice(0, 60),
+            dados: row,
+          })
+          return
+        }
+
+        if (!desc || /^\d+$/.test(desc.trim())) {
+          rejeitados.push({
+            linhaOriginal: originalLineNum,
+            linhaLote: idx + 1,
+            motivo: 'Descrição do produto é obrigatória e não pode ser número puro.',
+            categoria: 'Descrição Ausente ou Numérica',
+            campo: 'Descricao',
+            valor: desc || 'vazio',
+            dados: row,
+          })
+          return
+        }
+
+        const ncmLimpo = cleanNcm(rawNcm)
+
+        validos.push({
+          originalLine: originalLineNum,
+          data: {
+            codigo: codigo || `PROD-${originalLineNum}`,
+            descricao: desc,
+            ncm: ncmLimpo
+              ? `${ncmLimpo.slice(0, 4)}.${ncmLimpo.slice(4, 6)}.${ncmLimpo.slice(6, 8)}`
+              : '',
+            unidade: unid || 'L',
+            tipo_produto: tipoProd || 'Produto Formulado Comercial',
+            origem: origemRaw || (desc.toUpperCase().includes('IMP') ? 'Importado' : 'Nacional'),
+            embalagem: emb || '',
+            principio_ativo: pa || '',
+            fabricante: fab || '',
+            moeda: moeda.toUpperCase(),
+            preco_base_sugerido: precoBase,
+            dados_extras: row,
+          },
+        })
+      }
+
+      // ------------------------------------------------------------------
+      // SIMULADOR: sim_regras_icms (Aba Regra ICMS)
+      // ------------------------------------------------------------------
+      else if (targetCol === 'sim_regras_icms') {
+        const ufOrigem = getFieldValue(row, [
+          'uf_origem',
+          'origem',
+          'uf_orig',
+          'estado_origem',
+          'orig',
+        ])
+          .trim()
+          .toUpperCase()
+        const ufDestino = getFieldValue(row, [
+          'uf_destino',
+          'destino',
+          'uf_dest',
+          'estado_destino',
+          'dest',
+        ])
+          .trim()
+          .toUpperCase()
+        const aliqIcms = cleanNumber(
+          getFieldValue(row, ['aliquota_icms', 'aliquota', 'icms', 'aliq_icms', 'aliq']),
+        )
+        const redBase = cleanNumber(
+          getFieldValue(row, ['reducao_base', 'reducao', 'red_base', 'perc_reducao']),
+        )
+        const aliqEfetivaRaw = getFieldValue(row, [
+          'aliquota_efetiva',
+          'aliq_efetiva',
+          'icms_efetivo',
+        ])
+        const aliqEfetiva = aliqEfetivaRaw
+          ? cleanNumber(aliqEfetivaRaw)
+          : aliqIcms * (1 - redBase / 100)
+        const diferimentoRaw = getFieldValue(row, ['diferimento', 'diferido', 'possui_diferimento'])
+        const diferimento =
+          diferimentoRaw.toLowerCase() === 'sim' ||
+          diferimentoRaw.toLowerCase() === 's' ||
+          diferimentoRaw.toLowerCase() === 'true'
+        const percDif = cleanNumber(
+          getFieldValue(row, ['percentual_diferimento', 'perc_diferimento', 'diferimento_perc']),
+        )
+        const fundLegal = getFieldValue(row, [
+          'fundamentacao_legal',
+          'fundamentacao',
+          'base_legal',
+          'dispositivo',
+          'observacao',
+          'obs',
+        ])
+        const tipoOp =
+          getFieldValue(row, ['tipo_operacao', 'operacao']) ||
+          (ufOrigem === ufDestino ? 'Interna' : 'Interestadual')
+
+        if (!ufOrigem || !ufDestino || ufOrigem.length !== 2 || ufDestino.length !== 2) {
+          rejeitados.push({
+            linhaOriginal: originalLineNum,
+            linhaLote: idx + 1,
+            motivo: `Siglas de UF inválidas: Origem="${ufOrigem}", Destino="${ufDestino}". Devem conter 2 letras.`,
+            categoria: 'UF Inválida',
+            campo: 'UF',
+            valor: `${ufOrigem} -> ${ufDestino}`,
+            dados: row,
+          })
+          return
+        }
+
+        const chaveOrigemDestino = `${ufOrigem}_${ufDestino}`
+
+        validos.push({
+          originalLine: originalLineNum,
+          data: {
+            uf_origem: ufOrigem,
+            uf_destino: ufDestino,
+            aliquota_icms: aliqIcms,
+            reducao_base: redBase,
+            aliquota_efetiva: aliqEfetiva,
+            diferimento: diferimento,
+            percentual_diferimento: percDif,
+            fundamentacao_legal: fundLegal || '',
+            tipo_operacao: tipoOp,
+            chave_origem_destino: chaveOrigemDestino,
             dados_extras: row,
           },
         })
