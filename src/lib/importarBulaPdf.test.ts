@@ -541,14 +541,14 @@ export function parsearTextoBula(markdown: string, pdfFileName?: string, _trunca
     if (!str) return []
     const s = str.trim()
     const regexNomeCorp =
-      /([A-ZÁÉÍÓÚÂÊÔÃÕÇ][A-Za-zÁÉÍÓÚÂÊÔÃÕÇ0-9&.\-'\s]{2,60}\b(?:LTDA|S\.A\.|S\/A|S\.R\.L\.|LIMITED|LTD\.?|L\.P\.|LP|B\.V\.|BV|INC\.?|CORP\.?|GMBH|S\.L\.|A\.G\.|PVT\.?\s+LTD\.?)\.?)/gi
+      /([A-ZÁÉÍÓÚÂÊÔÃÕÇ][A-Za-zÁÉÍÓÚÂÊÔÃÕÇ0-9&.\-'\s]{2,60}?\b(?:LTDA|S\.A\.|S\/A|S\.R\.L\.|LIMITED|LTD|L\.P\.|LP|B\.V\.|BV|INC|CORP|GMBH|S\.L\.|A\.G\.|PVT\.\s+LTD)\.?)/gi
     const matches: Array<{ nome: string; index: number }> = []
     let m: RegExpExecArray | null
     while ((m = regexNomeCorp.exec(s)) !== null) {
       let nome = m[1].trim().replace(/^[-–—,;:.\s]+|[-–—,;:.\s]+$/g, '')
       nome = nome
         .replace(
-          /^(?:Av\.?|Avenida|Rua|Rod\.?|Rodovia|CEP\s*\d{5}-?\d{3}|SP\s*-\s*Tel[^\s]*|Tel[^\s]*)\s+/i,
+          /^(?:Av\.?|Avenida|Rua|Rod\.?|Rodovia|CEP\s*[\d\-.:]+|SP\s*-\s*Tel[^\s]*|Tel[^\s]*|CDA\/SP|CDA\b|Registro\s+Estadual[^\s]*)\s+/i,
           '',
         )
         .trim()
@@ -565,8 +565,14 @@ export function parsearTextoBula(markdown: string, pdfFileName?: string, _trunca
   function sanitizarRazaoSocial(str: string): string {
     if (!str) return ''
     let s = str.trim().replace(/^[-–—,;:.\s]+|[-–—,;:.\s]+$/g, '')
-    s = s.replace(/\s*[-–—]\s*(?:Av\.?|Rua|CEP|CNPJ|Tel|Rod\.).*$/i, '')
-    s = s.replace(/^(?:Av\.?|Avenida|Rua|Rod\.?|Rodovia|Distrito|Bairro|CEP\b[^\s]*)\s+/i, '')
+    s = s.replace(
+      /\s*[-–—]\s*(?:Av\.?|Rua|CEP|CNPJ|Tel|Rod\.|Zarate\s+Plant|Luling\s+Plant|Muscatine\s+Plant|Antwerp\s+Plant).*$/i,
+      '',
+    )
+    s = s.replace(
+      /^(?:Av\.?|Avenida|Rua|Rod\.?|Rodovia|Distrito|Bairro|CEP\b[^\s]*|CDA\/SP|SP\s+)\s*/i,
+      '',
+    )
     return s.trim()
   }
 
@@ -638,20 +644,19 @@ export function parsearTextoBula(markdown: string, pdfFileName?: string, _trunca
       const linhaEhEndereco = isLinhaEndereco(ln)
       const empresasNaLinha = extrairNomesEmpresaDeLinha(ln)
 
-      // Linha começa com endereço mas tem nome de empresa grudado
-      if (linhaEhEndereco && empresasNaLinha.length > 0) {
+      if (empresasNaLinha.length > 0) {
         const primEmpIdx = empresasNaLinha[0].index
-        const pedacoEndereco = ln.slice(0, primEmpIdx).trim()
-        if (emp && pedacoEndereco) {
-          emp.dados_extras.texto_bruto.push(pedacoEndereco)
-          const cnp = extrairCnpj(pedacoEndereco)
-          if (cnp && !emp.cnpj) emp.cnpj = cnp
-          const cp = extrairCep(pedacoEndereco)
-          if (cp && !emp.cep) emp.cep = cp
-          emp.endereco = emp.endereco ? `${emp.endereco} - ${pedacoEndereco}` : pedacoEndereco
-          const loc = detectarMunicipioUf(pedacoEndereco)
-          if (loc.municipio && !emp.municipio) emp.municipio = loc.municipio
-          if (loc.uf && !emp.uf) emp.uf = loc.uf
+        const pedacoAnterior = ln.slice(0, primEmpIdx).trim()
+        if (emp && pedacoAnterior && (linhaEhEndereco || pedacoAnterior.length > 3)) {
+          emp.dados_extras.texto_bruto.push(pedacoAnterior)
+          const cnpAnt = extrairCnpj(pedacoAnterior)
+          if (cnpAnt && !emp.cnpj) emp.cnpj = cnpAnt
+          const cpAnt = extrairCep(pedacoAnterior)
+          if (cpAnt && !emp.cep) emp.cep = cpAnt
+          emp.endereco = emp.endereco ? `${emp.endereco} - ${pedacoAnterior}` : pedacoAnterior
+          const locAnt = detectarMunicipioUf(pedacoAnterior)
+          if (locAnt.municipio && !emp.municipio) emp.municipio = locAnt.municipio
+          if (locAnt.uf && !emp.uf) emp.uf = locAnt.uf
         }
 
         for (let eIdx = 0; eIdx < empresasNaLinha.length; eIdx++) {
@@ -660,101 +665,39 @@ export function parsearTextoBula(markdown: string, pdfFileName?: string, _trunca
           }
           const empItem = empresasNaLinha[eIdx]
           const rzLimpa = sanitizarRazaoSocial(empItem.nome)
+
+          const inicioEste = empItem.index
+          const fimEste = inicioEste + empItem.nome.length
+          const proximoInicio =
+            eIdx + 1 < empresasNaLinha.length ? empresasNaLinha[eIdx + 1].index : ln.length
+          const pedacoPosterior = ln.slice(fimEste, proximoInicio).trim()
+
+          const cnpPost = extrairCnpj(pedacoPosterior)
+          const cpPost = extrairCep(pedacoPosterior)
+          const locPost = detectarMunicipioUf(pedacoPosterior)
+
           emp = {
             registro_mapa: registroMapa,
             nome_produto: nomeComercial,
             tipo_relacao: tipoRelacao,
             razao_social: rzLimpa,
             nome_fantasia: rzLimpa.split(' ')[0] || '',
-            cnpj: '',
-            endereco: '',
-            municipio: '',
-            uf: '',
-            cep: '',
+            cnpj: cnpPost || '',
+            endereco: pedacoPosterior || '',
+            municipio: locPost.municipio || '',
+            uf: locPost.uf || '',
+            cep: cpPost || '',
             inscricao_estadual: '',
-            pais: detectarPais(rzLimpa),
-            dados_extras: { texto_bruto: [empItem.nome] },
+            pais: detectarPais(rzLimpa + ' ' + pedacoPosterior),
+            dados_extras: {
+              texto_bruto: [empItem.nome, ...(pedacoPosterior ? [pedacoPosterior] : [])],
+            },
           }
         }
         continue
       }
 
-      if (linhaEhEndereco) {
-        if (emp) {
-          emp.dados_extras.texto_bruto.push(ln)
-          const cnp = extrairCnpj(ln)
-          if (cnp && !emp.cnpj) emp.cnpj = cnp
-          const cp = extrairCep(ln)
-          if (cp && !emp.cep) emp.cep = cp
-
-          if (
-            ln.toUpperCase().includes('REGISTRO DO ESTABELECIMENTO') ||
-            ln.toUpperCase().includes('REGISTRO ESTADUAL') ||
-            ln.toUpperCase().includes('CDA') ||
-            ln.toUpperCase().includes('SEMACE') ||
-            ln.toUpperCase().includes('IMA')
-          ) {
-            emp.inscricao_estadual = ln.slice(0, 95)
-          }
-
-          emp.endereco = emp.endereco ? `${emp.endereco} - ${ln}` : ln
-          const loc = detectarMunicipioUf(ln)
-          if (loc.municipio && !emp.municipio) emp.municipio = loc.municipio
-          if (loc.uf && !emp.uf) emp.uf = loc.uf
-          const p = detectarPais(ln)
-          if (p !== 'Brasil' || emp.pais === 'Brasil') emp.pais = p
-        }
-        continue
-      }
-
-      const temSufixoEmpresa = REGEX_SUFIXOS_EMPRESA.test(ln)
-      if (temSufixoEmpresa && empresasNaLinha.length > 0) {
-        if (emp && emp.razao_social) {
-          lista.push(emp)
-        }
-
-        const rzLimpa = sanitizarRazaoSocial(empresasNaLinha[0].nome)
-        const pDetect = detectarPais(ln)
-        const loc = detectarMunicipioUf(ln)
-
-        emp = {
-          registro_mapa: registroMapa,
-          nome_produto: nomeComercial,
-          tipo_relacao: tipoRelacao,
-          razao_social: rzLimpa,
-          nome_fantasia: rzLimpa.split(' ')[0] || '',
-          cnpj: extrairCnpj(ln),
-          endereco: '',
-          municipio: loc.municipio,
-          uf: loc.uf,
-          cep: extrairCep(ln),
-          inscricao_estadual: '',
-          pais: pDetect,
-          dados_extras: { texto_bruto: [ln] },
-        }
-
-        if (empresasNaLinha.length > 1) {
-          for (let eIdx = 1; eIdx < empresasNaLinha.length; eIdx++) {
-            if (emp && emp.razao_social) lista.push(emp)
-            const segNome = sanitizarRazaoSocial(empresasNaLinha[eIdx].nome)
-            emp = {
-              registro_mapa: registroMapa,
-              nome_produto: nomeComercial,
-              tipo_relacao: tipoRelacao,
-              razao_social: segNome,
-              nome_fantasia: segNome.split(' ')[0] || '',
-              cnpj: '',
-              endereco: '',
-              municipio: '',
-              uf: '',
-              cep: '',
-              inscricao_estadual: '',
-              pais: detectarPais(segNome),
-              dados_extras: { texto_bruto: [empresasNaLinha[eIdx].nome] },
-            }
-          }
-        }
-      } else if (emp) {
+      if (emp) {
         emp.dados_extras.texto_bruto.push(ln)
 
         const cnp = extrairCnpj(ln)
@@ -781,6 +724,7 @@ export function parsearTextoBula(markdown: string, pdfFileName?: string, _trunca
         if (p !== 'Brasil' || emp.pais === 'Brasil') emp.pais = p
       }
     }
+
     if (emp && emp.razao_social) {
       lista.push(emp)
     }
@@ -805,9 +749,9 @@ export function parsearTextoBula(markdown: string, pdfFileName?: string, _trunca
   }
 
   const fabricantes = extrairEmpresasSecaoDinamica(
-    'Fabricante',
-    /FABRICANTE\s+DO\s+PRODUTO/i,
-    /(?:FORMULADOR|MANIPULADOR|IMPORTADOR|GRUPO\s+[A-Z])/i,
+    'Fabricante do Produto Técnico',
+    /FABRICANTE\s+DO\s+PRODUTO\s+T[ÉE]CNICO/i,
+    /(?:FORMULADOR|MANIPULADOR|IMPORTADOR|GRUPO\s+[A-Z]|CLASSIFICA[ÇC][ÃA]O)/i,
   )
   for (let f = 0; f < fabricantes.length; f++) {
     empresas.push(fabricantes[f])
@@ -816,7 +760,7 @@ export function parsearTextoBula(markdown: string, pdfFileName?: string, _trunca
   const formuladores = extrairEmpresasSecaoDinamica(
     'Formulador',
     /FORMULADOR\s*:/i,
-    /(?:MANIPULADOR|IMPORTADOR|GRUPO\s+[A-Z]|N°\s+do\s+lote)/i,
+    /(?:MANIPULADOR|IMPORTADOR|GRUPO\s+[A-Z]|N°\s+do\s+lote|CLASSIFICA[ÇC][ÃA]O)/i,
   )
   for (let fo = 0; fo < formuladores.length; fo++) {
     empresas.push(formuladores[fo])
@@ -825,7 +769,7 @@ export function parsearTextoBula(markdown: string, pdfFileName?: string, _trunca
   const manipuladores = extrairEmpresasSecaoDinamica(
     'Manipulador',
     /MANIPULADOR\s*:/i,
-    /(?:IMPORTADOR|GRUPO\s+[A-Z]|N°\s+do\s+lote|ANTES\s+DE\s+USAR)/i,
+    /(?:IMPORTADOR|GRUPO\s+[A-Z]|N°\s+do\s+lote|ANTES\s+DE\s+USAR|CLASSIFICA[ÇC][ÃA]O)/i,
   )
   for (let m = 0; m < manipuladores.length; m++) {
     empresas.push(manipuladores[m])
@@ -834,21 +778,31 @@ export function parsearTextoBula(markdown: string, pdfFileName?: string, _trunca
   const importadores = extrairEmpresasSecaoDinamica(
     'Importador',
     /IMPORTADOR\s*:/i,
-    /(?:N°\s+do\s+lote|Marca\s+registrada|ANTES\s+DE\s+USAR|CLASSIFICA[ÇC][ÃA]O|FABRICANTE)/i,
+    /(?:N°\s+do\s+lote|Marca\s+registrada|ANTES\s+DE\s+USAR|CLASSIFICA[ÇC][ÃA]O|FABRICANTE|DISTRIBUIDOR)/i,
   )
   for (let imp = 0; imp < importadores.length; imp++) {
     empresas.push(importadores[imp])
   }
 
-  // Deduplicação estrita de empresas por (tipo_relacao + razao_social + cnpj)
+  function extrairIdentificadorPlanta(e: any): string {
+    const cnpjDigits = (e.cnpj || '').replace(/\D/g, '')
+    if (cnpjDigits.length === 14) return `CNPJ:${cnpjDigits}`
+    const endLimpo = (e.endereco || '')
+      .toLowerCase()
+      .replace(/[^a-z0-9]/g, '')
+      .slice(0, 35)
+    return `END:${endLimpo}`
+  }
+
   const empresasUnicas: any[] = []
   const chavesVistas = new Set<string>()
   for (let i = 0; i < empresas.length; i++) {
     const e = empresas[i]
     const rzNorm = (e.razao_social || '').toUpperCase().replace(/\s+/g, ' ').trim()
-    const cnpjNorm = (e.cnpj || '').replace(/\D/g, '')
     const tipoNorm = (e.tipo_relacao || '').toUpperCase().trim()
-    const chave = `${tipoNorm}|${rzNorm}|${cnpjNorm}`
+    const plantaId = extrairIdentificadorPlanta(e)
+    const chave = `${tipoNorm}|${rzNorm}|${plantaId}`
+
     if (!chavesVistas.has(chave)) {
       chavesVistas.add(chave)
       empresasUnicas.push(e)
@@ -856,7 +810,8 @@ export function parsearTextoBula(markdown: string, pdfFileName?: string, _trunca
       const existente = empresasUnicas.find((ex) => {
         const exRz = (ex.razao_social || '').toUpperCase().replace(/\s+/g, ' ').trim()
         const exTipo = (ex.tipo_relacao || '').toUpperCase().trim()
-        return exRz === rzNorm && exTipo === tipoNorm
+        const exPlanta = extrairIdentificadorPlanta(ex)
+        return exRz === rzNorm && exTipo === tipoNorm && exPlanta === plantaId
       })
       if (existente) {
         if (!existente.cnpj && e.cnpj) existente.cnpj = e.cnpj
@@ -956,7 +911,7 @@ export function parsearTextoBula(markdown: string, pdfFileName?: string, _trunca
 }
 
 describe('Testes do Parser de Bula PDF - Caso Real ROUNDUP ORIGINAL MAIS', () => {
-  // Texto real correspondente à bula oficial do ROUNDUP ORIGINAL MAIS (anexo da tarefa)
+  // Texto integral correspondente exatamente ao anexo/evidência da bula do ROUNDUP ORIGINAL MAIS (MAPA Nº 01119)
   const textoBulaRoundup = `
 1/27
 REGISTRADO NO MINISTÉRIO DA AGRICULTURA E PECUÁRIA
@@ -979,26 +934,35 @@ Rua Domingos Jorge, 1.100 - CEP: 04779-900 - São Paulo/SP
 CNPJ 64.858.525/0001-45 - Registro Estadual nº 426 - CDA/SP
 
 FABRICANTE DO PRODUTO TÉCNICO:
-Glifosate Técnico Monsanto registrado no Ministério da Agricultura e Pecuária MAPA - sob Nº 01998
+Glifosate Técnico Monsanto registrado no Ministério da Agricultura e Pecuária MAPA - sob 01998
 MONSANTO DO BRASIL LTDA.
 Av. Carlos Marcondes, 1200, km 159,5 - Limoeiro - CEP 12241-421
 São José dos Campos - SP - Tel.: 0800-011-5560 - CNPJ: 64.858.525/0002-26
 Registro Estadual nº 525 - CDA/SP
 AGRO BAYER S.R.L.
-Zarate Plant – Ruta Provincial 6, km 83,1 - Zarate - 2800 - Argentina. 
+Zarate Plant – Ruta Provincial 6, km 83,1 - Zarate - 2800 - Argentina.
 BAYER CROPSCIENCE LP
 Luling Plant - 12.501 - River Road - Luling - Louisiana - 70.070 - E.U.A.
+BAYER CROPSCIENCE LP
+Muscatine Plant - 2.500 - Wiggins Road - Muscatine - Iowa - 52.761 - E.U.A.
+BAYER AGRICULTURE BV
+Antwerp Plant - Haven 627, Scheldelaan 460 - Antuérpia (Lillo) - 2040 - Bélgica
 
 FORMULADOR:
 MONSANTO DO BRASIL LTDA.
-Av. Carlos Marcondes, 1200, km 159,5 - Limoeiro - CEP 12241-421 
+Av. Carlos Marcondes, 1200, km 159,5 - Limoeiro - CEP 12241-421
 São José dos Campos - SP - Tel.: 0800-011-5560 - CNPJ: 64.858.525/0002-26
 Registro Estadual nº 525 - CDA/SP
+AGRO BAYER S.R.L.
+Zarate Plant – Ruta Provincial 6, km 83,1 - Zarate - 2800 - Argentina.
 
 IMPORTADOR:
 MONSANTO DO BRASIL LTDA.
 Rua Domingos Jorge, 1.100 - CEP: 04779-900 - São Paulo/SP
-CNPJ 64.858.525/0001-45
+CNPJ 64.858.525/0001-45 - Registro Estadual nº 426 - CDA/SP
+MONSANTO DO BRASIL LTDA.
+Av. Carlos Marcondes, 1200, km 159,5 - Limoeiro - CEP 12241-421
+São José dos Campos - SP - Tel.: 0800-011-5560 - CNPJ: 64.858.525/0002-26
 
 CLASSIFICAÇÃO TOXICOLÓGICA: CATEGORIA 5 – PRODUTO IMPROVÁVEL DE CAUSAR DANO AGUDO
 CLASSIFICAÇÃO DO POTENCIAL DE PERICULOSIDADE AMBIENTAL PRODUTO PERIGOSO AO MEIO AMBIENTE - CLASSE III
@@ -1184,13 +1148,16 @@ Produto comercial: ROUNDUP ORIGINAL® MAIS corresponde a 577 g/L do sal de di-am
 
   it('14. Parser de Empresas: NUNCA deve transformar linha de endereço em fornecedor/empresa', () => {
     const res = parsearTextoBula(textoBulaRoundup)
-    // Nenhuma razão social pode começar com Av., Rua, CEP, Tel, etc.
     for (const emp of res.empresas) {
       expect(emp.razao_social).not.toMatch(
         /^(?:Av\.?|Avenida|Rua|Rod\.?|Rodovia|CEP\b|Tel\b|CNPJ\b|Distrito|Bairro|Lote)/i,
       )
       expect(emp.razao_social).not.toContain('CEP 12241-421')
       expect(emp.razao_social).not.toContain('Av. Carlos Marcondes')
+      expect(emp.razao_social).not.toContain('Zarate Plant')
+      expect(emp.razao_social).not.toContain('Luling Plant')
+      expect(emp.razao_social).not.toContain('Muscatine Plant')
+      expect(emp.razao_social).not.toContain('Antwerp Plant')
     }
   })
 
@@ -1222,7 +1189,8 @@ Luling Plant - 12.501 - River Road - Luling - Louisiana - 70.070 - E.U.A.
     expect(agroBayer?.razao_social).not.toContain('CEP')
 
     const monsantoFabr = res.empresas.find(
-      (e) => e.tipo_relacao === 'Fabricante' && e.razao_social.includes('MONSANTO'),
+      (e) =>
+        e.tipo_relacao === 'Fabricante do Produto Técnico' && e.razao_social.includes('MONSANTO'),
     )
     expect(monsantoFabr).toBeDefined()
     expect(monsantoFabr?.cnpj).toBe('64.858.525/0002-26')
@@ -1240,8 +1208,78 @@ Luling Plant - 12.501 - River Road - Luling - Louisiana - 70.070 - E.U.A.
     expect(titular?.uf).toBe('SP')
   })
 
-  it('17. Parser de Empresas: Deduplicação deve eliminar duplicatas da mesma empresa no mesmo papel', () => {
-    const textoComDuplicata = `
+  it('17. Parser de Empresas: Deve capturar EXATAMENTE as 10 ocorrências da evidência do ROUNDUP ORIGINAL MAIS na ordem e papéis corretos', () => {
+    const res = parsearTextoBula(textoBulaRoundup)
+    expect(res.empresas.length).toBe(10)
+
+    // 1. Titular do Registro: Monsanto SP Matriz
+    expect(res.empresas[0].tipo_relacao).toBe('Titular do Registro')
+    expect(res.empresas[0].razao_social).toBe('MONSANTO DO BRASIL LTDA.')
+    expect(res.empresas[0].cnpj).toBe('64.858.525/0001-45')
+    expect(res.empresas[0].endereco).toContain('Rua Domingos Jorge')
+
+    // Fabricantes do Produto Técnico (2 a 6)
+    // 2. Monsanto Fábrica SJC
+    expect(res.empresas[1].tipo_relacao).toBe('Fabricante do Produto Técnico')
+    expect(res.empresas[1].razao_social).toBe('MONSANTO DO BRASIL LTDA.')
+    expect(res.empresas[1].cnpj).toBe('64.858.525/0002-26')
+    expect(res.empresas[1].endereco).toContain('Carlos Marcondes')
+
+    // 3. Agro Bayer Zárate (Argentina)
+    expect(res.empresas[2].tipo_relacao).toBe('Fabricante do Produto Técnico')
+    expect(res.empresas[2].razao_social).toBe('AGRO BAYER S.R.L.')
+    expect(res.empresas[2].cnpj).toBe('')
+    expect(res.empresas[2].pais).toBe('Argentina')
+    expect(res.empresas[2].endereco).toContain('Zarate Plant')
+
+    // 4. Bayer CropScience Luling (EUA)
+    expect(res.empresas[3].tipo_relacao).toBe('Fabricante do Produto Técnico')
+    expect(res.empresas[3].razao_social).toBe('BAYER CROPSCIENCE LP')
+    expect(res.empresas[3].cnpj).toBe('')
+    expect(res.empresas[3].pais).toBe('E.U.A.')
+    expect(res.empresas[3].endereco).toContain('Luling Plant')
+
+    // 5. Bayer CropScience Muscatine (EUA)
+    expect(res.empresas[4].tipo_relacao).toBe('Fabricante do Produto Técnico')
+    expect(res.empresas[4].razao_social).toBe('BAYER CROPSCIENCE LP')
+    expect(res.empresas[4].cnpj).toBe('')
+    expect(res.empresas[4].pais).toBe('E.U.A.')
+    expect(res.empresas[4].endereco).toContain('Muscatine Plant')
+
+    // 6. Bayer Agriculture Antuérpia (Bélgica)
+    expect(res.empresas[5].tipo_relacao).toBe('Fabricante do Produto Técnico')
+    expect(res.empresas[5].razao_social).toBe('BAYER AGRICULTURE BV')
+    expect(res.empresas[5].cnpj).toBe('')
+    expect(res.empresas[5].pais).toBe('Bélgica')
+    expect(res.empresas[5].endereco).toContain('Antwerp Plant')
+
+    // Formuladores (7 e 8)
+    // 7. Monsanto Fábrica SJC
+    expect(res.empresas[6].tipo_relacao).toBe('Formulador')
+    expect(res.empresas[6].razao_social).toBe('MONSANTO DO BRASIL LTDA.')
+    expect(res.empresas[6].cnpj).toBe('64.858.525/0002-26')
+    expect(res.empresas[6].endereco).toContain('Carlos Marcondes')
+
+    // 8. Agro Bayer Zárate
+    expect(res.empresas[7].tipo_relacao).toBe('Formulador')
+    expect(res.empresas[7].razao_social).toBe('AGRO BAYER S.R.L.')
+    expect(res.empresas[7].cnpj).toBe('')
+    expect(res.empresas[7].pais).toBe('Argentina')
+
+    // Importadores (9 e 10)
+    // 9. Monsanto SP Matriz
+    expect(res.empresas[8].tipo_relacao).toBe('Importador')
+    expect(res.empresas[8].razao_social).toBe('MONSANTO DO BRASIL LTDA.')
+    expect(res.empresas[8].cnpj).toBe('64.858.525/0001-45')
+
+    // 10. Monsanto Fábrica SJC
+    expect(res.empresas[9].tipo_relacao).toBe('Importador')
+    expect(res.empresas[9].razao_social).toBe('MONSANTO DO BRASIL LTDA.')
+    expect(res.empresas[9].cnpj).toBe('64.858.525/0002-26')
+  })
+
+  it('18. Parser de Empresas: Deduplicação elimina APENAS duplicatas 100% idênticas (mesmo papel + mesma razão social + mesma planta)', () => {
+    const textoComDuplicataExata = `
 REGISTRADO NO MINISTÉRIO DA AGRICULTURA E PECUÁRIA
 MAPA SOB N° 01119
 ROUNDUP ORIGINAL® MAIS
@@ -1256,7 +1294,7 @@ MONSANTO DO BRASIL LTDA.
 Rua Domingos Jorge, 1.100 - CEP: 04779-900 - São Paulo/SP
 CNPJ 64.858.525/0001-45
 `
-    const res = parsearTextoBula(textoComDuplicata)
+    const res = parsearTextoBula(textoComDuplicataExata)
     const titulares = res.empresas.filter(
       (e) => e.tipo_relacao === 'Titular do Registro' && e.razao_social.includes('MONSANTO'),
     )

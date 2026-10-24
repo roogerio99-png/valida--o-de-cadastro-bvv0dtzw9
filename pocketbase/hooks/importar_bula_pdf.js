@@ -680,18 +680,19 @@ routerAdd('POST', '/backend/v1/bula/analisar-pdf', (e) => {
     function extrairNomesEmpresaDeLinha(str) {
       if (!str) return []
       const s = str.trim()
-      // Padrão de nome de empresa: 2 ou mais palavras, geralmente maiúsculas, terminando num sufixo corporativo
-      // Ex.: "AGRO BAYER S.R.L.", "BAYER CROPSCIENCE LP", "MONSANTO DO BRASIL LTDA."
+      // Padrão de nome corporativo: 2 ou mais palavras terminando com sufixo corporativo (nacional ou internacional)
+      // Ex.: "AGRO BAYER S.R.L.", "BAYER CROPSCIENCE LP", "BAYER AGRICULTURE BV", "MONSANTO DO BRASIL LTDA."
+      // Suporta sufixos com ou sem ponto final (LP, BV, S.R.L., LTDA., etc.)
       const regexNomeCorp =
-        /([A-ZÁÉÍÓÚÂÊÔÃÕÇ][A-Za-zÁÉÍÓÚÂÊÔÃÕÇ0-9&.\-'\s]{2,60}\b(?:LTDA|S\.A\.|S\/A|S\.R\.L\.|LIMITED|LTD\.?|L\.P\.|LP|B\.V\.|BV|INC\.?|CORP\.?|GMBH|S\.L\.|A\.G\.|PVT\.?\s+LTD\.?)\.?)/gi
+        /([A-ZÁÉÍÓÚÂÊÔÃÕÇ][A-Za-zÁÉÍÓÚÂÊÔÃÕÇ0-9&.\-'\s]{2,60}?\b(?:LTDA|S\.A\.|S\/A|S\.R\.L\.|LIMITED|LTD|L\.P\.|LP|B\.V\.|BV|INC|CORP|GMBH|S\.L\.|A\.G\.|PVT\.\s+LTD)\.?)/gi
       const matches = []
       let m
       while ((m = regexNomeCorp.exec(s)) !== null) {
         let nome = m[1].trim().replace(/^[-–—,;:.\s]+|[-–—,;:.\s]+$/g, '')
-        // Limpar possíveis prefixos de endereço grudados no nome
+        // Limpar possíveis prefixos de endereço ou fragmentos grudados no nome
         nome = nome
           .replace(
-            /^(?:Av\.?|Avenida|Rua|Rod\.?|Rodovia|CEP\s*\d{5}-?\d{3}|SP\s*-\s*Tel[^\s]*|Tel[^\s]*)\s+/i,
+            /^(?:Av\.?|Avenida|Rua|Rod\.?|Rodovia|CEP\s*[\d\-.:]+|SP\s*-\s*Tel[^\s]*|Tel[^\s]*|CDA\/SP|CDA\b|Registro\s+Estadual[^\s]*)\s+/i,
             '',
           )
           .trim()
@@ -708,10 +709,16 @@ routerAdd('POST', '/backend/v1/bula/analisar-pdf', (e) => {
     function sanitizarRazaoSocial(str) {
       if (!str) return ''
       let s = str.trim().replace(/^[-–—,;:.\s]+|[-–—,;:.\s]+$/g, '')
-      // Se tiver quebra de marcadores de endereço no final
-      s = s.replace(/\s*[-–—]\s*(?:Av\.?|Rua|CEP|CNPJ|Tel|Rod\.).*$/i, '')
-      // Se começar com prefixos de endereço que restaram
-      s = s.replace(/^(?:Av\.?|Avenida|Rua|Rod\.?|Rodovia|Distrito|Bairro|CEP\b[^\s]*)\s+/i, '')
+      // Se tiver marcadores de endereço ou planta no final
+      s = s.replace(
+        /\s*[-–—]\s*(?:Av\.?|Rua|CEP|CNPJ|Tel|Rod\.|Zarate\s+Plant|Luling\s+Plant|Muscatine\s+Plant|Antwerp\s+Plant).*$/i,
+        '',
+      )
+      // Se começar com prefixos de endereço ou identificadores de UF/siglas soltas que restaram (ex: "SP MONSANTO...")
+      s = s.replace(
+        /^(?:Av\.?|Avenida|Rua|Rod\.?|Rodovia|Distrito|Bairro|CEP\b[^\s]*|CDA\/SP|SP\s+)\s*/i,
+        '',
+      )
       return s.trim()
     }
 
@@ -780,132 +787,66 @@ routerAdd('POST', '/backend/v1/bula/analisar-pdf', (e) => {
         const linhaEhEndereco = isLinhaEndereco(ln)
         const empresasNaLinha = extrairNomesEmpresaDeLinha(ln)
 
-        // CASO A: Linha começa com endereço MAS contém uma ou mais empresas concatenadas no meio/fim
-        // Exemplo real da bula Roundup Original Mais:
-        // "Av. Carlos Marcondes, 1200, km 159,5 - Limoeiro - CEP 12241-421 São José dos Campos - SP ... AGRO BAYER S.R.L."
-        if (linhaEhEndereco && empresasNaLinha.length > 0) {
-          // A primeira parte (antes da primeira empresa) pertence ao endereço da empresa corrente (se houver)
+        // CASO A: Linha contém um ou mais nomes de empresa (seja linha de empresa pura ou concatenada com endereço)
+        if (empresasNaLinha.length > 0) {
+          // Se houver texto ANTES da primeira empresa encontrada e já tínhamos uma empresa corrente,
+          // esse trecho anterior pertence aos dados da empresa anterior
           const primEmpIdx = empresasNaLinha[0].index
-          const pedacoEndereco = ln.slice(0, primEmpIdx).trim()
-          if (emp && pedacoEndereco) {
-            emp.dados_extras.texto_bruto.push(pedacoEndereco)
-            const cnp = extrairCnpj(pedacoEndereco)
-            if (cnp && !emp.cnpj) emp.cnpj = cnp
-            const cp = extrairCep(pedacoEndereco)
-            if (cp && !emp.cep) emp.cep = cp
-            emp.endereco = emp.endereco ? `${emp.endereco} - ${pedacoEndereco}` : pedacoEndereco
-            const loc = detectarMunicipioUf(pedacoEndereco)
-            if (loc.municipio && !emp.municipio) emp.municipio = loc.municipio
-            if (loc.uf && !emp.uf) emp.uf = loc.uf
+          const pedacoAnterior = ln.slice(0, primEmpIdx).trim()
+          if (emp && pedacoAnterior && (linhaEhEndereco || pedacoAnterior.length > 3)) {
+            emp.dados_extras.texto_bruto.push(pedacoAnterior)
+            const cnpAnt = extrairCnpj(pedacoAnterior)
+            if (cnpAnt && !emp.cnpj) emp.cnpj = cnpAnt
+            const cpAnt = extrairCep(pedacoAnterior)
+            if (cpAnt && !emp.cep) emp.cep = cpAnt
+            emp.endereco = emp.endereco ? `${emp.endereco} - ${pedacoAnterior}` : pedacoAnterior
+            const locAnt = detectarMunicipioUf(pedacoAnterior)
+            if (locAnt.municipio && !emp.municipio) emp.municipio = locAnt.municipio
+            if (locAnt.uf && !emp.uf) emp.uf = locAnt.uf
           }
 
-          // Para cada empresa encontrada nesta linha composta
+          // Para cada empresa encontrada nesta linha:
           for (let eIdx = 0; eIdx < empresasNaLinha.length; eIdx++) {
             if (emp && emp.razao_social) {
               lista.push(emp)
             }
             const empItem = empresasNaLinha[eIdx]
             const rzLimpa = sanitizarRazaoSocial(empItem.nome)
+
+            // Texto entre o fim desta empresa e o início da próxima (ou fim da linha)
+            const inicioEste = empItem.index
+            const fimEste = inicioEste + empItem.nome.length
+            const proximoInicio =
+              eIdx + 1 < empresasNaLinha.length ? empresasNaLinha[eIdx + 1].index : ln.length
+            const pedacoPosterior = ln.slice(fimEste, proximoInicio).trim()
+
+            const cnpPost = extrairCnpj(pedacoPosterior)
+            const cpPost = extrairCep(pedacoPosterior)
+            const locPost = detectarMunicipioUf(pedacoPosterior)
+
             emp = {
               registro_mapa: registroMapa,
               nome_produto: nomeComercial,
               tipo_relacao: tipoRelacao,
               razao_social: rzLimpa,
               nome_fantasia: rzLimpa.split(' ')[0] || '',
-              cnpj: '',
-              endereco: '',
-              municipio: '',
-              uf: '',
-              cep: '',
+              cnpj: cnpPost || '',
+              endereco: pedacoPosterior || '',
+              municipio: locPost.municipio || '',
+              uf: locPost.uf || '',
+              cep: cpPost || '',
               inscricao_estadual: '',
-              pais: detectarPais(rzLimpa),
-              dados_extras: { texto_bruto: [empItem.nome] },
+              pais: detectarPais(rzLimpa + ' ' + pedacoPosterior),
+              dados_extras: {
+                texto_bruto: [empItem.nome, ...(pedacoPosterior ? [pedacoPosterior] : [])],
+              },
             }
           }
           continue
         }
 
-        // CASO B: Linha é endereço puro (sem empresa concatenada)
-        if (linhaEhEndereco) {
-          if (emp) {
-            emp.dados_extras.texto_bruto.push(ln)
-            const cnp = extrairCnpj(ln)
-            if (cnp && !emp.cnpj) emp.cnpj = cnp
-            const cp = extrairCep(ln)
-            if (cp && !emp.cep) emp.cep = cp
-
-            if (
-              ln.toUpperCase().includes('REGISTRO DO ESTABELECIMENTO') ||
-              ln.toUpperCase().includes('REGISTRO ESTADUAL') ||
-              ln.toUpperCase().includes('CDA') ||
-              ln.toUpperCase().includes('SEMACE') ||
-              ln.toUpperCase().includes('IMA')
-            ) {
-              emp.inscricao_estadual = ln.slice(0, 95)
-            }
-
-            emp.endereco = emp.endereco ? `${emp.endereco} - ${ln}` : ln
-            const loc = detectarMunicipioUf(ln)
-            if (loc.municipio && !emp.municipio) emp.municipio = loc.municipio
-            if (loc.uf && !emp.uf) emp.uf = loc.uf
-            const p = detectarPais(ln)
-            if (p !== 'Brasil' || emp.pais === 'Brasil') emp.pais = p
-          }
-          continue
-        }
-
-        // CASO C: Linha normal de empresa (contém sufixo de empresa e NÃO começa com endereço)
-        const temSufixoEmpresa = REGEX_SUFIXOS_EMPRESA.test(ln)
-        if (temSufixoEmpresa && empresasNaLinha.length > 0) {
-          if (emp && emp.razao_social) {
-            lista.push(emp)
-          }
-
-          // Se tiver apenas 1 empresa na linha
-          const rzLimpa = sanitizarRazaoSocial(empresasNaLinha[0].nome)
-          const pDetect = detectarPais(ln)
-          const loc = detectarMunicipioUf(ln)
-
-          emp = {
-            registro_mapa: registroMapa,
-            nome_produto: nomeComercial,
-            tipo_relacao: tipoRelacao,
-            razao_social: rzLimpa,
-            nome_fantasia: rzLimpa.split(' ')[0] || '',
-            cnpj: extrairCnpj(ln),
-            endereco: '',
-            municipio: loc.municipio,
-            uf: loc.uf,
-            cep: extrairCep(ln),
-            inscricao_estadual: '',
-            pais: pDetect,
-            dados_extras: { texto_bruto: [ln] },
-          }
-
-          // Se houver mais de uma empresa na mesma linha
-          if (empresasNaLinha.length > 1) {
-            for (let eIdx = 1; eIdx < empresasNaLinha.length; eIdx++) {
-              if (emp && emp.razao_social) lista.push(emp)
-              const segNome = sanitizarRazaoSocial(empresasNaLinha[eIdx].nome)
-              emp = {
-                registro_mapa: registroMapa,
-                nome_produto: nomeComercial,
-                tipo_relacao: tipoRelacao,
-                razao_social: segNome,
-                nome_fantasia: segNome.split(' ')[0] || '',
-                cnpj: '',
-                endereco: '',
-                municipio: '',
-                uf: '',
-                cep: '',
-                inscricao_estadual: '',
-                pais: detectarPais(segNome),
-                dados_extras: { texto_bruto: [empresasNaLinha[eIdx].nome] },
-              }
-            }
-          }
-        } else if (emp) {
-          // Linha de continuação de dados (endereço, CNPJ, etc.)
+        // CASO B: Linha sem nome de empresa — dados de endereço / planta / CNPJ / IE da empresa corrente
+        if (emp) {
           emp.dados_extras.texto_bruto.push(ln)
 
           const cnp = extrairCnpj(ln)
@@ -932,6 +873,7 @@ routerAdd('POST', '/backend/v1/bula/analisar-pdf', (e) => {
           if (p !== 'Brasil' || emp.pais === 'Brasil') emp.pais = p
         }
       }
+
       if (emp && emp.razao_social) {
         lista.push(emp)
       }
@@ -957,9 +899,9 @@ routerAdd('POST', '/backend/v1/bula/analisar-pdf', (e) => {
     }
 
     const fabricantes = extrairEmpresasSecaoDinamica(
-      'Fabricante',
-      /FABRICANTE\s+DO\s+PRODUTO/i,
-      /(?:FORMULADOR|MANIPULADOR|IMPORTADOR|GRUPO\s+[A-Z])/i,
+      'Fabricante do Produto Técnico',
+      /FABRICANTE\s+DO\s+PRODUTO\s+T[ÉE]CNICO/i,
+      /(?:FORMULADOR|MANIPULADOR|IMPORTADOR|GRUPO\s+[A-Z]|CLASSIFICA[ÇC][ÃA]O)/i,
     )
     for (let f = 0; f < fabricantes.length; f++) {
       empresas.push(fabricantes[f])
@@ -968,7 +910,7 @@ routerAdd('POST', '/backend/v1/bula/analisar-pdf', (e) => {
     const formuladores = extrairEmpresasSecaoDinamica(
       'Formulador',
       /FORMULADOR\s*:/i,
-      /(?:MANIPULADOR|IMPORTADOR|GRUPO\s+[A-Z]|N°\s+do\s+lote)/i,
+      /(?:MANIPULADOR|IMPORTADOR|GRUPO\s+[A-Z]|N°\s+do\s+lote|CLASSIFICA[ÇC][ÃA]O)/i,
     )
     for (let fo = 0; fo < formuladores.length; fo++) {
       empresas.push(formuladores[fo])
@@ -977,7 +919,7 @@ routerAdd('POST', '/backend/v1/bula/analisar-pdf', (e) => {
     const manipuladores = extrairEmpresasSecaoDinamica(
       'Manipulador',
       /MANIPULADOR\s*:/i,
-      /(?:IMPORTADOR|GRUPO\s+[A-Z]|N°\s+do\s+lote|ANTES\s+DE\s+USAR)/i,
+      /(?:IMPORTADOR|GRUPO\s+[A-Z]|N°\s+do\s+lote|ANTES\s+DE\s+USAR|CLASSIFICA[ÇC][ÃA]O)/i,
     )
     for (let m = 0; m < manipuladores.length; m++) {
       empresas.push(manipuladores[m])
@@ -986,31 +928,47 @@ routerAdd('POST', '/backend/v1/bula/analisar-pdf', (e) => {
     const importadores = extrairEmpresasSecaoDinamica(
       'Importador',
       /IMPORTADOR\s*:/i,
-      /(?:N°\s+do\s+lote|Marca\s+registrada|ANTES\s+DE\s+USAR|CLASSIFICA[ÇC][ÃA]O|FABRICANTE)/i,
+      /(?:N°\s+do\s+lote|Marca\s+registrada|ANTES\s+DE\s+USAR|CLASSIFICA[ÇC][ÃA]O|FABRICANTE|DISTRIBUIDOR)/i,
     )
     for (let imp = 0; imp < importadores.length; imp++) {
       empresas.push(importadores[imp])
     }
 
-    // Deduplicação estrita de empresas por (tipo_relacao + razao_social + cnpj)
-    // Se a mesma empresa aparecer repetida no mesmo papel (ex.: Monsanto), consolidamos os dados em 1 registro único
+    // REGRA DE DEDUPLICAÇÃO ESTRITA:
+    // Apenas duplicatas EXATAS são eliminadas: mesma razão social + mesmo papel + mesmo CNPJ/endereço (planta).
+    // Se a mesma razão social aparecer em papéis distintos (Titular vs Fabricante vs Formulador vs Importador)
+    // ou em plantas/CNPJs/endereços distintos (ex: Monsanto Matriz SP 0001-45 vs Fábrica SJC 0002-26),
+    // CADA UMA É UM REGISTRO PRÓPRIO E DEVE SER PRESERVADO INTEGRALMENTE.
+    function extrairIdentificadorPlanta(e) {
+      const cnpjDigits = (e.cnpj || '').replace(/\D/g, '')
+      if (cnpjDigits.length === 14) return `CNPJ:${cnpjDigits}`
+      // Para empresas estrangeiras sem CNPJ, usa os primeiros 35 caracteres alfanuméricos do endereço/planta
+      const endLimpo = (e.endereco || '')
+        .toLowerCase()
+        .replace(/[^a-z0-9]/g, '')
+        .slice(0, 35)
+      return `END:${endLimpo}`
+    }
+
     const empresasUnicas = []
     const chavesVistas = new Set()
     for (let i = 0; i < empresas.length; i++) {
       const e = empresas[i]
       const rzNorm = (e.razao_social || '').toUpperCase().replace(/\s+/g, ' ').trim()
-      const cnpjNorm = (e.cnpj || '').replace(/\D/g, '')
       const tipoNorm = (e.tipo_relacao || '').toUpperCase().trim()
-      const chave = `${tipoNorm}|${rzNorm}|${cnpjNorm}`
+      const plantaId = extrairIdentificadorPlanta(e)
+      const chave = `${tipoNorm}|${rzNorm}|${plantaId}`
+
       if (!chavesVistas.has(chave)) {
         chavesVistas.add(chave)
         empresasUnicas.push(e)
       } else {
-        // Encontra o registro existente e mescla campos vazios (ex.: se o anterior não tinha CNPJ ou endereço)
+        // Encontra o registro exatamente idêntico já cadastrado e enriquece campos vazios
         const existente = empresasUnicas.find((ex) => {
           const exRz = (ex.razao_social || '').toUpperCase().replace(/\s+/g, ' ').trim()
           const exTipo = (ex.tipo_relacao || '').toUpperCase().trim()
-          return exRz === rzNorm && exTipo === tipoNorm
+          const exPlanta = extrairIdentificadorPlanta(ex)
+          return exRz === rzNorm && exTipo === tipoNorm && exPlanta === plantaId
         })
         if (existente) {
           if (!existente.cnpj && e.cnpj) existente.cnpj = e.cnpj
@@ -1558,7 +1516,12 @@ routerAdd('POST', '/backend/v1/bula/analisar-pdf', (e) => {
       'Titular do Registro'
 
     const fabricantesTexto = empresas
-      .filter((e) => e.tipo_relacao === 'Fabricante' || e.tipo_relacao === 'Formulador')
+      .filter(
+        (e) =>
+          e.tipo_relacao === 'Fabricante' ||
+          e.tipo_relacao === 'Fabricante do Produto Técnico' ||
+          e.tipo_relacao === 'Formulador',
+      )
       .map((e) => e.razao_social)
       .filter((v, i, arr) => arr.indexOf(v) === i)
       .join(' / ')
@@ -1629,7 +1592,10 @@ routerAdd('POST', '/backend/v1/bula/analisar-pdf', (e) => {
         encontrado: empresas.length > 0,
         total: empresas.length,
         titular: produtoPrincipal.titular_registro,
-        fabricantes: empresas.filter((e) => e.tipo_relacao === 'Fabricante').length,
+        fabricantes: empresas.filter(
+          (e) =>
+            e.tipo_relacao === 'Fabricante' || e.tipo_relacao === 'Fabricante do Produto Técnico',
+        ).length,
         formuladores: empresas.filter((e) => e.tipo_relacao === 'Formulador').length,
       },
       classificacoes: {
@@ -1822,7 +1788,7 @@ routerAdd('POST', '/backend/v1/bula/gravar-pdf', (e) => {
         else contadores.bula_composicao.inseridos++
       }
 
-      // 3. Gravar bula_empresas
+      // 3. Gravar bula_empresas (idempotente e preservando múltiplas ocorrências legítimas)
       const colEmp = txApp.findCollectionByNameOrId('bula_empresas')
       for (let i = 0; i < empresas.length; i++) {
         const emp = empresas[i]
@@ -1831,15 +1797,23 @@ routerAdd('POST', '/backend/v1/bula/gravar-pdf', (e) => {
         if (!rz) continue
         const escRz = rz.replace(/'/g, "\\'")
         const escTr = tr.replace(/'/g, "\\'")
+        const cnpjVal = String(emp.cnpj || '').trim()
+        const endVal = String(emp.endereco || '').trim()
+        const escCnpj = cnpjVal.replace(/'/g, "\\'")
+
+        // Identificação unívoca por (registro_mapa + tipo_relacao + razao_social + cnpj/endereço):
+        // Se a empresa possui CNPJ, busca exatamente por esse CNPJ no mesmo papel.
+        // Se estrangeira sem CNPJ, busca por trecho do endereço ou pela razão social caso única na seção.
+        let filtroEmp = `registro_mapa = '${escMapa}' && tipo_relacao = '${escTr}' && razao_social = '${escRz}'`
+        if (cnpjVal) {
+          filtroEmp += ` && cnpj = '${escCnpj}'`
+        } else if (endVal) {
+          const primTrechoEnd = endVal.slice(0, 30).replace(/'/g, "\\'")
+          filtroEmp += ` && endereco ~ '${primTrechoEnd}'`
+        }
 
         const empExistentes =
-          txApp.findRecordsByFilter(
-            'bula_empresas',
-            `registro_mapa = '${escMapa}' && tipo_relacao = '${escTr}' && razao_social = '${escRz}'`,
-            '-created',
-            1,
-            0,
-          ) || []
+          txApp.findRecordsByFilter('bula_empresas', filtroEmp, '-created', 1, 0) || []
 
         let recEmp = null
         let isUp = false
@@ -1855,8 +1829,8 @@ routerAdd('POST', '/backend/v1/bula/gravar-pdf', (e) => {
         recEmp.set('tipo_relacao', tr)
         recEmp.set('razao_social', rz)
         recEmp.set('nome_fantasia', String(emp.nome_fantasia || '').trim())
-        recEmp.set('cnpj', String(emp.cnpj || '').trim())
-        recEmp.set('endereco', String(emp.endereco || '').trim())
+        recEmp.set('cnpj', cnpjVal)
+        recEmp.set('endereco', endVal)
         recEmp.set('municipio', String(emp.municipio || '').trim())
         recEmp.set('uf', String(emp.uf || '').trim())
         recEmp.set('pais', String(emp.pais || 'Brasil').trim())
