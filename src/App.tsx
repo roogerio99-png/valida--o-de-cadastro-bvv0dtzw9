@@ -49,6 +49,7 @@ export function App() {
               <Route path="/cadastro-bula" element={<Navigate to="/bula" replace />} />
               <Route path="/principios-ativos" element={<PrincipiosAtivos />} />
               <Route path="/regras" element={<Regras />} />
+              <Route path="/regras-ncm" element={<Regras />} />
               <Route path="/parametrizacao" element={<Parametrizacao />} />
               <Route path="/travas" element={<Travas />} />
               <Route path="/sincronizacao" element={<SincronizacaoProdutos />} />
