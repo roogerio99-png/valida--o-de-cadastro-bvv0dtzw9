@@ -1341,12 +1341,12 @@ Consulte a base pública oficial do AGROFIT e a BULA oficial registrada no MAPA 
 
         const divergenciasCadastradas = []
 
-        if (motor.normalizarTexto(gravadoNcm) !== motor.normalizarTexto(ncmCanonicoDeterminado)) {
+        if (motor.normalizarTexto(gravadoNcm) !== motor.normalizarTexto(ncmResolvidaBaseMestre)) {
           divergenciasCadastradas.push({
             campo: 'NCM',
             valor_gravado: gravadoNcm || 'Não preenchido',
-            valor_correto_bula: ncmCanonicoDeterminado,
-            sugestao: `Atualizar NCM na Base Mestre de "${gravadoNcm}" para "${ncmCanonicoDeterminado}".`,
+            valor_correto_bula: ncmResolvidaBaseMestre,
+            sugestao: `Atualizar NCM na Base Mestre de "${gravadoNcm}" para "${ncmResolvidaBaseMestre}".`,
           })
         }
 
@@ -1724,7 +1724,7 @@ Consulte a base pública oficial do AGROFIT e a BULA oficial registrada no MAPA 
       produto_validado: {
         nome_produto: motorCanonico.marca_padronizada,
         ncm: motorCanonico.ncm_padrao,
-        ncm_descricao_oficial: ncmExternoInfo?.descricao || '',
+        ncm_descricao_oficial: regraNcmRecord?.getString('descricao') || '',
         embalagem: motorCanonico.embalagem,
         quantidade_embalagem: bulaExtraida?.quantidade_embalagem_principal || '20 L',
         principio_ativo: motorCanonico.principio_ativo,
