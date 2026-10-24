@@ -1307,13 +1307,17 @@ export function Validar() {
                         <th className="py-2 px-3">Faixa de Embalagem</th>
                         <th className="py-2 px-3">Exemplos / Quantidade</th>
                         <th className="py-2 px-3">NCM Correta da Faixa</th>
-                        <th className="py-2 px-3">NCM Informada ({ncm})</th>
+                        <th className="py-2 px-3">NCM Base Mestre</th>
                         <th className="py-2 px-3">Enquadramento</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-[#DCE5DC]">
                       {resultado.linhas_ncm_embalagem.map((linha: LinhaNcmEmbalagem) => {
                         const aplica = linha.ncm_informada_se_aplica
+                        const ncmExibida =
+                          ncmResolvidaMestre?.ncmEspecifica ||
+                          resultado.produto_canonico?.ncm_padrao ||
+                          '—'
                         return (
                           <tr
                             key={linha.faixa_id}
@@ -1334,7 +1338,7 @@ export function Validar() {
                               {linha.ncm_correta}
                             </td>
                             <td className="py-2.5 px-3 font-mono text-[11px] text-[#1C2B1C]">
-                              {ncm}
+                              {ncmExibida}
                             </td>
                             <td className="py-2.5 px-3 whitespace-nowrap">
                               <Badge
