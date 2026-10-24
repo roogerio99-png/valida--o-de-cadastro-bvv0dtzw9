@@ -1131,8 +1131,6 @@ routerAdd('POST', '/backend/v1/importar-lote', (e) => {
             if (data.tipo_formulacao)
               rec.set('tipo_formulacao', String(data.tipo_formulacao).trim())
             if (modoAcaoFinal) rec.set('modo_acao', modoAcaoFinal)
-            const ncmFmt = fmtNcmMascara(data.ncm_padrao || data.ncm)
-            if (ncmFmt) rec.set('ncm_padrao', ncmFmt)
             if (data.tipo_produto) rec.set('tipo_produto', String(data.tipo_produto).trim())
             if (data.status_registro)
               rec.set('status_registro', String(data.status_registro).trim())
@@ -1142,8 +1140,6 @@ routerAdd('POST', '/backend/v1/importar-lote', (e) => {
             if (data.mapa_oficial_limpo)
               rec.set('mapa_oficial_limpo', String(data.mapa_oficial_limpo).trim())
             if (data.embalagem) rec.set('embalagem', String(data.embalagem).trim())
-            if (data.ncm_oficial_exata)
-              rec.set('ncm_oficial_exata', String(data.ncm_oficial_exata).trim())
             if (data.url_oficial) rec.set('url_oficial', String(data.url_oficial).trim())
             if (data.macro_grupo) rec.set('macro_grupo', String(data.macro_grupo).trim())
             if (data.sub_grupo) rec.set('sub_grupo', String(data.sub_grupo).trim())
@@ -1169,7 +1165,6 @@ routerAdd('POST', '/backend/v1/importar-lote', (e) => {
             rec.set('classificacao_ambiental', String(data.classificacao_ambiental || '').trim())
             rec.set('tipo_formulacao', String(data.tipo_formulacao || '').trim())
             rec.set('modo_acao', modoAcaoFinal)
-            rec.set('ncm_padrao', fmtNcmMascara(data.ncm_padrao || data.ncm))
             rec.set(
               'tipo_produto',
               String(data.tipo_produto || 'Produto Formulado Comercial').trim(),
@@ -1179,7 +1174,6 @@ routerAdd('POST', '/backend/v1/importar-lote', (e) => {
             rec.set('pa_oficial_correto', String(data.pa_oficial_correto || '').trim())
             rec.set('mapa_oficial_limpo', String(data.mapa_oficial_limpo || '').trim())
             rec.set('embalagem', String(data.embalagem || '').trim())
-            rec.set('ncm_oficial_exata', String(data.ncm_oficial_exata || '').trim())
             rec.set('url_oficial', String(data.url_oficial || '').trim())
             rec.set('macro_grupo', String(data.macro_grupo || '').trim())
             rec.set('sub_grupo', String(data.sub_grupo || '').trim())
@@ -1680,10 +1674,8 @@ routerAdd('POST', '/backend/v1/importar-lote', (e) => {
           rec.set('material', String(data.material || '').trim())
           rec.set('capacidade', cap)
           rec.set('unidade_medida', String(data.unidade_medida || 'L').trim())
-          rec.set('ncm', fmtNcmMascara(data.ncm))
           rec.set('destinacao_final', String(data.destinacao_final || '').trim())
           rec.set('codigo', codigoProd)
-          rec.set('ncm_faixa', String(data.ncm_faixa || '').trim())
           rec.set('descricao_embalagem', String(data.descricao_embalagem || '').trim())
           if (data.dados_extras) rec.set('dados_extras', JSON.stringify(data.dados_extras))
 

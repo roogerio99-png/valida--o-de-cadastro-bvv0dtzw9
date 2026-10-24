@@ -128,17 +128,11 @@ const DROP_ZONES: ZoneConfig[] = [
       'bula_embalagens',
       'sheet 4',
     ],
-    title: 'Bula 4: Embalagens × NCM',
-    subtitle: 'Especificação técnica de recipientes, capacidades, materiais e NCM.',
+    title: 'Bula 4: Embalagens da Bula',
+    subtitle:
+      'Especificação técnica de recipientes, capacidades e materiais (NCM alimentada na Base Mestre).',
     targetCollection: 'bula_embalagens',
-    expectedHeaders: [
-      'REGISTRO MAPA',
-      'NOME PRODUTO',
-      'TIPO EMBALAGEM',
-      'MATERIAL',
-      'CAPACIDADE',
-      'NCM',
-    ],
+    expectedHeaders: ['REGISTRO MAPA', 'NOME PRODUTO', 'TIPO EMBALAGEM', 'MATERIAL', 'CAPACIDADE'],
     sampleDescription: 'Bloco acessório de embalagens autorizadas e enquadramento fiscal',
   },
   {
@@ -1213,16 +1207,17 @@ export function Importar() {
             classificacao_ambiental: amb || '',
             tipo_formulacao: form || '',
             modo_acao: modoDefensivo || '',
-            ncm_padrao: cleanNcm(ncmRaw) ? formatarNcmMascara(cleanNcm(ncmRaw)) : ncmRaw || '',
+            ncm_padrao: '',
             tipo_produto: tipoProd || 'Produto Formulado Comercial',
             status_registro: statusReg || 'Ativo',
             codigo: codigo || '',
             pa_oficial_correto: paOficialCorreto || '',
             mapa_oficial_limpo: mapaOficialLimpo || '',
             embalagem: embalagemVal || '',
-            ncm_oficial_exata: cleanNcm(ncmOficialExata)
-              ? formatarNcmMascara(cleanNcm(ncmOficialExata))
-              : ncmOficialExata || '',
+            ncm_oficial_exata: '',
+            ncm_origem_planilha: cleanNcm(ncmOficialExata || ncmRaw)
+              ? formatarNcmMascara(cleanNcm(ncmOficialExata || ncmRaw))
+              : ncmOficialExata || ncmRaw || '',
             url_oficial: urlOficialVal || '',
             macro_grupo: macroGrupoVal || '',
             sub_grupo: subGrupoVal || '',
@@ -1463,10 +1458,13 @@ export function Importar() {
             material: mat || '',
             capacidade: cap || '',
             unidade_medida: und || 'L',
-            ncm: cleanNcm(ncmRaw) ? formatarNcmMascara(cleanNcm(ncmRaw)) : ncmRaw || '',
+            ncm: '',
             destinacao_final: dest || '',
             codigo: codigo || '',
-            ncm_faixa: ncmFaixa || '',
+            ncm_faixa: '',
+            ncm_origem_planilha: cleanNcm(ncmRaw)
+              ? formatarNcmMascara(cleanNcm(ncmRaw))
+              : ncmRaw || '',
             descricao_embalagem: descEmb || '',
             dados_extras: row,
           },

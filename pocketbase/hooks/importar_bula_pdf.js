@@ -1508,7 +1508,7 @@ routerAdd('POST', '/backend/v1/bula/analisar-pdf', (e) => {
       ncmDeducao = '3808.93.29'
     }
 
-    // 10. EMBALAGENS DEDUZIDAS
+    // 10. EMBALAGENS DEDUZIDAS (sem NCM na bula analítica)
     const embalagens = [
       {
         registro_mapa: registroMapa,
@@ -1517,7 +1517,6 @@ routerAdd('POST', '/backend/v1/bula/analisar-pdf', (e) => {
         material: 'Plástico (PEAD) / Coex',
         capacidade: '20',
         unidade_medida: 'L',
-        ncm: ncmDeducao,
         destinacao_final:
           'Devolução obrigatória em posto de recebimento para reciclagem ou incineração licenciada.',
         descricao_embalagem:
@@ -1577,7 +1576,6 @@ routerAdd('POST', '/backend/v1/bula/analisar-pdf', (e) => {
       classificacao_ambiental: classificacaoAmbiental,
       tipo_formulacao: tipoFormulacao,
       modo_acao: modoAcao,
-      ncm_padrao: ncmDeducao,
       tipo_produto: 'Produto Formulado Comercial',
       status_registro: 'Ativo',
       embalagem: '1X20L (20 L)',
@@ -1766,7 +1764,6 @@ routerAdd('POST', '/backend/v1/bula/gravar-pdf', (e) => {
       recProd.set('classificacao_ambiental', String(produto.classificacao_ambiental || '').trim())
       recProd.set('tipo_formulacao', String(produto.tipo_formulacao || '').trim())
       recProd.set('modo_acao', String(produto.modo_acao || '').slice(0, 1950))
-      recProd.set('ncm_padrao', String(produto.ncm_padrao || '').trim())
       recProd.set('tipo_produto', 'Produto Formulado Comercial')
       recProd.set('status_registro', String(produto.status_registro || 'Ativo').trim())
       recProd.set('embalagem', String(produto.embalagem || '1X20L (20 L)').trim())
@@ -1909,7 +1906,6 @@ routerAdd('POST', '/backend/v1/bula/gravar-pdf', (e) => {
         recEmb.set('material', String(emb.material || '').trim())
         recEmb.set('capacidade', cap)
         recEmb.set('unidade_medida', String(emb.unidade_medida || 'L').trim())
-        recEmb.set('ncm', String(emb.ncm || '').trim())
         recEmb.set('destinacao_final', String(emb.destinacao_final || '').trim())
         recEmb.set('descricao_embalagem', String(emb.descricao_embalagem || '').trim())
         if (emb.dados_extras) recEmb.set('dados_extras', JSON.stringify(emb.dados_extras))
@@ -2115,7 +2111,7 @@ routerAdd('POST', '/backend/v1/bula/gravar-pdf', (e) => {
                   capacidade: '20',
                   unidade_medida: 'L',
                   descricao_embalagem: String(produto.embalagem || '1X20L (20 L)'),
-                  ncm: produto.ncm_padrao || produto.ncm || '3808.93.29',
+                  ncm: ncmDeducao,
                 },
               ]
 
@@ -2211,7 +2207,7 @@ routerAdd('POST', '/backend/v1/bula/gravar-pdf', (e) => {
             marcaPad.toUpperCase() === 'ROUNDUP WG' ||
             nomeComercial.toUpperCase() === 'ROUNDUP WG'
 
-          let ncmEsp = embItem.ncm || produto.ncm_padrao || produto.ncm
+          let ncmEsp = embItem.ncm || ncmDeducao
           if (isRoundupWg) {
             ncmEsp = '3808.93.24'
           } else if (isNota2) {
@@ -2225,7 +2221,7 @@ routerAdd('POST', '/backend/v1/bula/gravar-pdf', (e) => {
             if (qtdPrinc <= 10 && unPrinc === 'KG') ncmEsp = '3105.10.00'
             else ncmEsp = ncmEsp || '3105.90.90'
           } else if (!ncmEsp) {
-            ncmEsp = produto.ncm_padrao || produto.ncm || '3808.93.29'
+            ncmEsp = ncmDeducao || '3808.93.29'
           }
           const ncmMascara = formatarNcmMascaraLocal(ncmEsp)
           const ncmLimpo = ncmMascara.replace(/\D/g, '')

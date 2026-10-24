@@ -647,10 +647,6 @@ export function ModalImportarBulaPdf({
                         </span>
                         <span className="text-xs">{dados?.produto.classificacao_ambiental}</span>
                       </div>
-                      <div>
-                        <span className="text-[#5A6D5A] block text-[11px]">NCM Sugerida</span>
-                        <span className="text-xs font-mono">{dados?.produto.ncm_padrao}</span>
-                      </div>
                     </div>
                   </div>
                 </TabsContent>

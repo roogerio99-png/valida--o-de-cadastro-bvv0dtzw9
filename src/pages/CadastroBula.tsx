@@ -257,7 +257,6 @@ export function CadastroBula() {
       'Classificacao_Toxicologica',
       'Classificacao_Ambiental',
       'Tipo_Formulacao',
-      'NCM_Padrao',
     ]
 
     const rows = produtos.map((p) =>
@@ -273,7 +272,6 @@ export function CadastroBula() {
         `"${(p.classificacao_toxicologica || '').replace(/"/g, '""')}"`,
         `"${(p.classificacao_ambiental || '').replace(/"/g, '""')}"`,
         `"${(p.tipo_formulacao || '').replace(/"/g, '""')}"`,
-        `"${p.ncm_padrao || ''}"`,
       ].join(';'),
     )
 
@@ -557,7 +555,6 @@ export function CadastroBula() {
                 <th className="py-3 px-3 font-semibold min-w-[180px]">Titular do Registro</th>
                 <th className="py-3 px-3 font-semibold min-w-[200px]">Princípio Ativo</th>
                 <th className="py-3 px-3 font-semibold min-w-[140px]">Classe Agronômica</th>
-                <th className="py-3 px-3 font-semibold min-w-[110px]">NCM</th>
                 <th className="py-3 px-3 font-semibold min-w-[130px]">Toxicologia</th>
                 <th className="py-3 px-3 font-semibold text-center w-28 whitespace-nowrap">
                   Ações
@@ -567,7 +564,7 @@ export function CadastroBula() {
             <tbody className="divide-y divide-[#F0F4F0] bg-white">
               {loading && produtos.length === 0 ? (
                 <tr>
-                  <td colSpan={9} className="py-12 text-center text-[#5A6D5A]">
+                  <td colSpan={8} className="py-12 text-center text-[#5A6D5A]">
                     <div className="flex flex-col items-center justify-center gap-2">
                       <Loader2 className="w-6 h-6 animate-spin text-[#1B5E20]" />
                       <span className="text-xs">Carregando Cadastro de Bula...</span>
@@ -576,7 +573,7 @@ export function CadastroBula() {
                 </tr>
               ) : produtos.length === 0 ? (
                 <tr>
-                  <td colSpan={9} className="py-12 text-center text-[#5A6D5A]">
+                  <td colSpan={8} className="py-12 text-center text-[#5A6D5A]">
                     <div className="flex flex-col items-center justify-center gap-2 max-w-md mx-auto">
                       <FileText className="w-10 h-10 text-emerald-300 stroke-[1.5]" />
                       <p className="font-bold text-sm text-[#1C2B1C]">
@@ -669,10 +666,6 @@ export function CadastroBula() {
                           )}
                         </td>
 
-                        <td className="py-2.5 px-3 font-mono text-xs text-[#1C2B1C] whitespace-nowrap">
-                          {p.ncm_padrao || '—'}
-                        </td>
-
                         <td className="py-2.5 px-3 text-xs text-[#5A6D5A] truncate max-w-[140px]">
                           {p.classificacao_toxicologica || '—'}
                         </td>
@@ -728,7 +721,7 @@ export function CadastroBula() {
                       {/* BLOCO EXPANDIDO: VISÃO INTEGRADA COM ABAS DOS BLOCOS ACESSÓRIOS */}
                       {isExpanded && (
                         <tr className="bg-[#FAFBF9]">
-                          <td colSpan={9} className="p-4 border-b border-[#DCE5DC]">
+                          <td colSpan={8} className="p-4 border-b border-[#DCE5DC]">
                             <PainelBlocosAcessoriosBula bula={p} />
                           </td>
                         </tr>
@@ -840,7 +833,7 @@ export function CadastroBula() {
                     <li>Bula Produtos (Cadastro Mestre 1:1)</li>
                     <li>Composição em Linhas (Ingredientes ativos e garantias)</li>
                     <li>Cadeia de Empresas (Titular, Formulador, Manipulador, Importador)</li>
-                    <li>Embalagens × NCM (Capacidades, lavabilidade e TIPI)</li>
+                    <li>Embalagens da Bula (Capacidades, tipos e destinação)</li>
                     <li>Culturas e Carência (Intervalos de segurança e reentrada)</li>
                     <li>Alvos e Doses (Pragas, doenças e doses PC)</li>
                     <li>Aplicação e EPI (Recomendações técnicas e proteção)</li>
@@ -1284,41 +1277,20 @@ function PainelBlocosAcessoriosBula({ bula }: PainelBlocosProps) {
             </div>
 
             <div className="p-3 bg-[#F5F7F1] rounded-xl border border-[#DCE5DC]">
-              <span className="text-[#5A6D5A] block text-[11px]">Classificação TIPI / NCM</span>
+              <span className="text-[#5A6D5A] block text-[11px]">Status do Registro</span>
               <div className="flex items-center gap-1.5 flex-wrap">
-                <strong className="text-sm font-mono text-[#1C2B1C]">
-                  {bula.ncm_oficial_exata || bula.ncm_padrao || '3808.93.24'}
-                </strong>
-                {bula.ncm_oficial_exata &&
-                  bula.ncm_padrao &&
-                  bula.ncm_oficial_exata !== bula.ncm_padrao && (
-                    <span className="text-[10px] text-[#5A6D5A] font-mono bg-white px-1.5 py-0.5 rounded border border-[#DCE5DC]">
-                      Padrão: {bula.ncm_padrao}
-                    </span>
-                  )}
+                <Badge
+                  variant="outline"
+                  className="text-xs bg-emerald-50 text-emerald-800 border-emerald-300 py-0.5"
+                >
+                  {bula.status_registro || 'Ativo'}
+                </Badge>
               </div>
-              <div className="mt-2 text-[11px] text-[#5A6D5A] flex items-center justify-between">
-                <span>
-                  Status:{' '}
-                  <Badge
-                    variant="outline"
-                    className="text-[10px] bg-emerald-50 text-emerald-800 border-emerald-300 py-0"
-                  >
-                    {bula.status_registro || 'Ativo'}
-                  </Badge>
+              <div className="mt-2 text-[11px] text-[#5A6D5A]">
+                Classificação tributária (NCM):{' '}
+                <span className="font-semibold text-emerald-800">
+                  Resolvida e validada na Base Mestre
                 </span>
-                {bula.nota_subpos_2 && (
-                  <Badge
-                    variant="outline"
-                    className={`text-[10px] py-0 ${
-                      bula.nota_subpos_2 === 'SIM'
-                        ? 'bg-amber-50 text-amber-900 border-amber-300 font-semibold'
-                        : 'bg-white text-[#5A6D5A] border-[#DCE5DC]'
-                    }`}
-                  >
-                    Nota Subpos 2: {bula.nota_subpos_2}
-                  </Badge>
-                )}
               </div>
             </div>
           </div>
@@ -1408,18 +1380,6 @@ function PainelBlocosAcessoriosBula({ bula }: PainelBlocosProps) {
               )}
             </div>
           </div>
-
-          {/* Regra TIPI quando preenchida */}
-          {bula.regra_tipi && (
-            <div className="p-3 bg-amber-50/60 rounded-xl border border-amber-200 text-xs text-[#1C2B1C]">
-              <strong className="text-amber-950 block mb-1">
-                Regra TIPI (Tabela de Incidência do IPI / NCM Embalagem):
-              </strong>
-              <p className="text-amber-900 leading-relaxed font-mono text-[11px]">
-                {bula.regra_tipi}
-              </p>
-            </div>
-          )}
 
           {bula.modo_acao && (
             <div className="p-3 bg-emerald-50/50 rounded-xl border border-emerald-200 text-xs text-[#1C2B1C]">
@@ -1580,7 +1540,7 @@ function PainelBlocosAcessoriosBula({ bula }: PainelBlocosProps) {
           )}
         </TabsContent>
         {/* ---------------------------------------------------------------- */}
-        {/* ABA 4: EMBALAGENS × NCM EM LINHAS */}
+        {/* ABA 4: EMBALAGENS DA BULA EM LINHAS (SEM NCM) */}
         {/* ---------------------------------------------------------------- */}
         <TabsContent value="embalagens" className="mt-3">
           {loadingBloco && embalagens === null ? (
@@ -1588,12 +1548,12 @@ function PainelBlocosAcessoriosBula({ bula }: PainelBlocosProps) {
           ) : !embalagens || embalagens.length === 0 ? (
             <EmptyBloco
               titulo="Nenhuma embalagem importada para este produto"
-              descricao="Use a tela Importar Planilhas para carregar a aba 'Sheet 4. Embalagens_NCM_Linhas'."
+              descricao="Use a tela Importar Planilhas para carregar a aba 'Sheet 4. Embalagens_Linhas'."
             />
           ) : (
             <div className="border border-[#DCE5DC] rounded-xl overflow-hidden bg-white shadow-xs">
               <ScrollableTable autoFitHeight={false} maxHeight="360px" minHeight="180px">
-                <table className="w-full text-xs text-left min-w-[1050px]">
+                <table className="w-full text-xs text-left min-w-[850px]">
                   <thead className="sticky top-0 z-20 bg-[#F5F7F1] text-[#5A6D5A] border-b border-[#DCE5DC] shadow-[0_1px_0_0_#DCE5DC]">
                     <tr className="bg-[#F5F7F1] border-b border-[#DCE5DC] text-left text-[#5A6D5A]">
                       <th className="py-2.5 px-3 font-semibold w-12 whitespace-nowrap">Cód</th>
@@ -1608,12 +1568,6 @@ function PainelBlocosAcessoriosBula({ bula }: PainelBlocosProps) {
                       </th>
                       <th className="py-2.5 px-3 font-semibold min-w-[120px] whitespace-nowrap">
                         Capacidade
-                      </th>
-                      <th className="py-2.5 px-3 font-semibold min-w-[100px] whitespace-nowrap">
-                        NCM
-                      </th>
-                      <th className="py-2.5 px-3 font-semibold min-w-[120px] whitespace-nowrap">
-                        Faixa NCM
                       </th>
                       <th className="py-2.5 px-3 font-semibold min-w-[160px] whitespace-nowrap">
                         Destinação Final
@@ -1642,12 +1596,6 @@ function PainelBlocosAcessoriosBula({ bula }: PainelBlocosProps) {
                           {item.capacidade
                             ? `${item.capacidade} ${item.unidade_medida || ''}`
                             : '—'}
-                        </td>
-                        <td className="py-2.5 px-3 font-mono text-xs whitespace-nowrap">
-                          {item.ncm || '—'}
-                        </td>
-                        <td className="py-2.5 px-3 font-mono text-[11px] text-[#1C2B1C] whitespace-nowrap">
-                          {item.ncm_faixa || '—'}
                         </td>
                         <td className="py-2.5 px-3 text-[#5A6D5A] whitespace-nowrap">
                           {item.destinacao_final || 'Logística Reversa / InpEV'}
