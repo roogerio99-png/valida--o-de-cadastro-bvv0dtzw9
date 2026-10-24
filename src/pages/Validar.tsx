@@ -40,7 +40,9 @@ import {
   listarBaseMestre,
   criarProdutoBaseMestre,
   atualizarProdutoBaseMestre,
+  resolverNcmBaseMestre,
 } from '@/services/agroService'
+import { parsearEmbalagemComercial } from '@/lib/motorCanonico'
 import type {
   ValidarCadastroInput,
   RespostaValidacaoCadastro,
@@ -62,12 +64,20 @@ export function Validar() {
   // Modo de validação: "novo" (Validar Cadastro) ou "existente" (Validar Existente)
   const [modo, setModo] = useState<'novo' | 'existente'>('novo')
 
-  // Os 5 campos de entrada do escopo
+  // Campos de entrada do escopo (NCM removida da digitação — resolvida exclusivamente na Base Mestre)
   const [nomeComercial, setNomeComercial] = useState('')
-  const [ncm, setNcm] = useState('')
-  const [principioAtivo, setPrincipioAtivo] = useState('')
-  const [codigoMapa, setCodigoMapa] = useState('')
+  const [registroMapa, setRegistroMapa] = useState('')
   const [embalagem, setEmbalagem] = useState('')
+  const [principioAtivo, setPrincipioAtivo] = useState('')
+  const [fabricante, setFabricante] = useState('')
+  const [concentracao, setConcentracao] = useState('')
+  const [ncmResolvidaMestre, setNcmResolvidaMestre] = useState<{
+    ncmEspecifica: string
+    quantidade: number
+    unidade: string
+    acondicionamento: string
+  } | null>(null)
+  const [buscandoNcmMestre, setBuscandoNcmMestre] = useState(false)
 
   // Para o modo "Validar Existente": busca rápida de produto na Base Mestre
   const [buscaExistenteTexto, setBuscaExistenteTexto] = useState('')
@@ -111,21 +121,29 @@ export function Validar() {
     }
   }, [loading])
 
-  // Formatação de máscara do NCM em tempo real (0000.00.00)
-  const formatarNcmInput = (valor: string): string => {
-    const digits = valor.replace(/\D/g, '').slice(0, 8)
-    if (digits.length <= 4) return digits
-    if (digits.length <= 6) return `${digits.slice(0, 4)}.${digits.slice(4)}`
-    return `${digits.slice(0, 4)}.${digits.slice(4, 6)}.${digits.slice(6, 8)}`
+  // Consulta automática de NCM na Base Mestre quando registro_mapa ou embalagem mudam
+  const consultarNcmMestre = async (mapa: string, emb: string) => {
+    const mapaLimpo = mapa.trim()
+    if (!mapaLimpo) {
+      setNcmResolvidaMestre(null)
+      return
+    }
+    setBuscandoNcmMestre(true)
+    try {
+      const parseada = parsearEmbalagemComercial(emb)
+      const res = await resolverNcmBaseMestre(
+        mapaLimpo,
+        parseada.quantidade,
+        parseada.unidade,
+        parseada.acondicionamento,
+      )
+      setNcmResolvidaMestre(res)
+    } catch {
+      setNcmResolvidaMestre(null)
+    } finally {
+      setBuscandoNcmMestre(false)
+    }
   }
-
-  const handleNcmChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const formatado = formatarNcmInput(e.target.value)
-    setNcm(formatado)
-  }
-
-  const ncmDigitos = ncm.replace(/\D/g, '')
-  const ncmIncompleto = ncmDigitos.length > 0 && ncmDigitos.length < 8
 
   // Busca rápida de produtos na Base Mestre para o modo existente
   const handleBuscarBaseMestre = async () => {
@@ -163,12 +181,13 @@ export function Validar() {
   const handleSelecionarProdutoExistente = (prod: BaseMestreProduto) => {
     setProdutoExistenteSelecionado(prod)
     setNomeComercial(prod.marca_padronizada || prod.nome_completo || prod.nome_produto || '')
-    const ncmClean = (prod.ncm_padrao || prod.ncm || '').replace(/\D/g, '')
-    setNcm(formatarNcmInput(ncmClean))
-    setPrincipioAtivo(prod.principio_ativo || '')
-    setCodigoMapa(prod.registro_mapa || '')
+    setRegistroMapa(prod.registro_mapa || '')
     setEmbalagem(prod.embalagem || '')
+    setPrincipioAtivo(prod.principio_ativo || '')
+    setFabricante(prod.titular_fabricante || prod.fabricante || '')
+    setConcentracao(prod.concentracao ? String(prod.concentracao) : '')
     setProdutosBaseMestre([])
+    consultarNcmMestre(prod.registro_mapa || '', prod.embalagem || '')
     toast({
       title: 'Produto Selecionado',
       description: `Dados de "${prod.marca_padronizada || prod.nome_produto}" carregados no formulário para validação cruzada.`,
@@ -188,26 +207,29 @@ export function Validar() {
       return
     }
 
-    if (ncmDigitos.length !== 8) {
-      toast({
-        variant: 'destructive',
-        title: 'NCM Incompleto',
-        description: 'O código NCM deve possuir exatamente 8 dígitos numéricos.',
-      })
-      return
-    }
-
     setLoading(true)
     setSalvoComSucesso(false)
     setErroValidacao(null)
 
     try {
+      // Pré-resolver a NCM da Base Mestre para exibição imediata
+      const parseada = parsearEmbalagemComercial(embalagem)
+      const resNcm = await resolverNcmBaseMestre(
+        registroMapa.trim(),
+        parseada.quantidade,
+        parseada.unidade,
+        parseada.acondicionamento,
+      )
+      setNcmResolvidaMestre(resNcm)
+
       const payload: ValidarCadastroInput = {
         nome_comercial: nomeComercial.trim(),
-        ncm: ncmDigitos,
-        principio_ativo: principioAtivo.trim() || undefined,
-        codigo_mapa: codigoMapa.trim() || undefined,
+        codigo_mapa: registroMapa.trim() || undefined,
+        registro_mapa: registroMapa.trim() || undefined,
         embalagem: embalagem.trim() || undefined,
+        principio_ativo: principioAtivo.trim() || undefined,
+        fabricante: fabricante.trim() || undefined,
+        concentracao: concentracao.trim() ? Number(concentracao.replace(',', '.')) : undefined,
         modo: modo,
         id_produto_existente: produtoExistenteSelecionado?.id,
         auto_cadastrar: autoCadastrar,
@@ -262,15 +284,19 @@ export function Validar() {
 
     try {
       const canon = resultado.produto_canonico || {}
+      const ncmCalculado = canon.ncm_padrao || ncmResolvidaMestre?.ncmEspecifica || ''
       const payload = {
         nome_completo: canon.nome_completo || nomeComercial,
         marca_padronizada: canon.marca_padronizada || nomeComercial,
-        ncm_padrao: canon.ncm_padrao || formatarNcmInput(ncmDigitos),
-        ncm: (canon.ncm_padrao || ncmDigitos).replace(/\D/g, ''),
+        ncm_padrao: ncmCalculado,
+        ncm_especifica: ncmResolvidaMestre?.ncmEspecifica || ncmCalculado,
+        ncm: ncmCalculado.replace(/\D/g, ''),
         principio_ativo: canon.principio_ativo || principioAtivo || nomeComercial,
-        registro_mapa: canon.registro_mapa || codigoMapa,
-        titular_fabricante: canon.titular_fabricante,
+        registro_mapa: canon.registro_mapa || registroMapa,
+        titular_fabricante: canon.titular_fabricante || fabricante,
+        fabricante: canon.titular_fabricante || fabricante,
         embalagem: canon.embalagem || embalagem || '1X20L (20 L)',
+        concentracao: concentracao ? Number(concentracao.replace(',', '.')) : 0,
         tipo_produto: canon.tipo_produto,
         unidade: canon.unidade,
         macro_grupo: canon.macro_grupo,
@@ -355,12 +381,11 @@ export function Validar() {
     if (resultado.linhas_ncm_embalagem && resultado.linhas_ncm_embalagem.length > 0) {
       linhas.push('')
       linhas.push('ENQUADRAMENTO TIPI POR FAIXA DE EMBALAGEM')
-      linhas.push(
-        'Faixa;Rótulo;Exemplo / Capacidade;NCM Correta TIPI;NCM Informada;Aplica-se à Informada',
-      )
+      linhas.push('Faixa;Rótulo;Exemplo / Capacidade;NCM Correta TIPI;NCM Base Mestre')
+      const ncmMestreStr = ncmResolvidaMestre?.ncmEspecifica || '(Base Mestre)'
       resultado.linhas_ncm_embalagem.forEach((l) => {
         linhas.push(
-          `"${l.faixa_nome}";"${l.faixa_rotulo}";"${l.exemplo_embalagem}";"${l.ncm_correta}";"${ncm}";"${l.ncm_informada_se_aplica ? 'SIM' : 'NÃO'}"`,
+          `"${l.faixa_nome}";"${l.faixa_rotulo}";"${l.exemplo_embalagem}";"${l.ncm_correta}";"${ncmMestreStr}"`,
         )
       })
     }
@@ -391,10 +416,12 @@ export function Validar() {
       gerado_em: new Date().toISOString(),
       produto_consultado: {
         nome_comercial: nomeComercial,
-        ncm_informada: ncm,
-        principio_ativo_informado: principioAtivo,
-        codigo_mapa_informado: codigoMapa,
+        registro_mapa: registroMapa,
         embalagem_informada: embalagem,
+        principio_ativo_informado: principioAtivo,
+        fabricante: fabricante,
+        concentracao: concentracao,
+        ncm_resolvida_base_mestre: ncmResolvidaMestre,
         modo_validacao: modo,
       },
       parecer_unificado: {
@@ -430,10 +457,12 @@ export function Validar() {
 
   const handleLimpar = () => {
     setNomeComercial('')
-    setNcm('')
-    setPrincipioAtivo('')
-    setCodigoMapa('')
+    setRegistroMapa('')
     setEmbalagem('')
+    setPrincipioAtivo('')
+    setFabricante('')
+    setConcentracao('')
+    setNcmResolvidaMestre(null)
     setBuscaExistenteTexto('')
     setProdutosBaseMestre([])
     setProdutoExistenteSelecionado(null)
@@ -442,25 +471,31 @@ export function Validar() {
     setSalvoComSucesso(false)
   }
 
-  const handleCarregarExemplo = (tipo: 'roundup' | 'standak' | 'priori') => {
-    if (tipo === 'roundup') {
-      setNomeComercial('ROUNDUP ORIGINAL DI')
-      setNcm('3808.93.24')
+  const handleCarregarExemplo = (tipo: 'roundup_wg' | 'roundup_original' | 'standak') => {
+    if (tipo === 'roundup_wg') {
+      setNomeComercial('ROUNDUP WG')
+      setRegistroMapa('002094')
+      setEmbalagem('20KG saco')
       setPrincipioAtivo('Glifosato')
-      setCodigoMapa('008907')
-      setEmbalagem('Bombona 20 L')
-    } else if (tipo === 'standak') {
-      setNomeComercial('STANDAK TOP')
-      setNcm('3808.91.99')
-      setPrincipioAtivo('Fipronil + Piraclostrobina + Tiofanato-metílico')
-      setCodigoMapa('001209')
-      setEmbalagem('Frasco 1 L')
+      setFabricante('BAYER S/A')
+      setConcentracao('720')
+      consultarNcmMestre('002094', '20KG saco')
+    } else if (tipo === 'roundup_original') {
+      setNomeComercial('ROUNDUP ORIGINAL')
+      setRegistroMapa('01119')
+      setEmbalagem('20 L Bombona')
+      setPrincipioAtivo('Glifosato')
+      setFabricante('MONSANTO DO BRASIL LTDA')
+      setConcentracao('480')
+      consultarNcmMestre('01119', '20 L Bombona')
     } else {
-      setNomeComercial('TALISMAN')
-      setNcm('3808.62.90')
-      setPrincipioAtivo('Bifentrina + Carbossulfano')
-      setCodigoMapa('001807')
-      setEmbalagem('Frasco 250 mL')
+      setNomeComercial('STANDAK TOP')
+      setRegistroMapa('001209')
+      setEmbalagem('4x5L')
+      setPrincipioAtivo('Fipronil + Piraclostrobina + Tiofanato-metílico')
+      setFabricante('BASF S.A.')
+      setConcentracao('250')
+      consultarNcmMestre('001209', '4x5L')
     }
   }
 
@@ -513,11 +548,22 @@ export function Validar() {
           <Button
             variant="outline"
             size="sm"
-            onClick={() => handleCarregarExemplo('roundup')}
+            onClick={() => handleCarregarExemplo('roundup_wg')}
             className="text-xs h-8 text-[#1B5E20] border-emerald-300 hover:bg-emerald-50"
+            title="Exemplo: ROUNDUP WG (MAPA 002094, NCM 38089324)"
           >
             <Sparkles className="w-3.5 h-3.5 mr-1 text-[#F57F17]" />
-            Exemplo
+            Roundup WG
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => handleCarregarExemplo('roundup_original')}
+            className="text-xs h-8 text-[#1B5E20] border-emerald-300 hover:bg-emerald-50"
+            title="Exemplo: ROUNDUP ORIGINAL (MAPA 01119, NCM 38089329)"
+          >
+            <Sparkles className="w-3.5 h-3.5 mr-1 text-emerald-700" />
+            Roundup Original
           </Button>
           <Button
             variant="ghost"
@@ -557,8 +603,8 @@ export function Validar() {
               </div>
               <CardDescription className="text-xs text-[#5A6D5A]">
                 {modo === 'novo'
-                  ? 'Informe Nome Comercial e NCM (obrigatórios) para buscar a bula oficial e validar o cadastro.'
-                  : 'Selecione ou informe um cadastro já gravado para conferir se diverge da bula oficial.'}
+                  ? 'Informe o Nome Comercial e a Embalagem. A NCM é resolvida exclusivamente na Base Mestre (a bula não carrega NCM).'
+                  : 'Selecione ou informe um cadastro já gravado para auditar as 6 travas e conferir a classificação na Base Mestre.'}
               </CardDescription>
             </CardHeader>
             <CardContent>
@@ -647,19 +693,19 @@ export function Validar() {
                 </div>
               )}
 
-              {/* FORMULÁRIO COM OS 5 CAMPOS */}
+              {/* FORMULÁRIO DE VALIDAÇÃO (NCM NÃO É DIGITADA — É RESOLVIDA NA BASE MESTRE) */}
               <form onSubmit={handleValidar} className="space-y-3.5">
-                {/* CAMPO 1: NOME COMERCIAL (Obrigatório) */}
+                {/* CAMPO 1: NOME DO PRODUTO (Obrigatório) */}
                 <div className="space-y-1">
                   <div className="flex items-center justify-between">
                     <Label
                       htmlFor="nome_comercial"
                       className="text-xs font-semibold text-[#1C2B1C]"
                     >
-                      Nome Comercial *
+                      Nome do Produto *
                     </Label>
                     <span className="text-[10px] text-[#1B5E20] font-medium bg-emerald-50 px-1.5 py-0.2 rounded">
-                      Chave da Busca da Bula
+                      Identificação Comercial
                     </span>
                   </div>
                   <Input
@@ -667,49 +713,122 @@ export function Validar() {
                     required
                     value={nomeComercial}
                     onChange={(e) => setNomeComercial(e.target.value)}
-                    placeholder="Ex.: ROUNDUP ORIGINAL DI, STANDAK TOP, TALISMAN..."
+                    placeholder="Ex.: ROUNDUP WG, ROUNDUP ORIGINAL, STANDAK TOP..."
                     className="h-9 text-xs border-[#DCE5DC] focus-visible:ring-[#1B5E20]"
                   />
+                </div>
+
+                {/* CAMPO 2: REGISTRO MAPA (Chave da Base Mestre) */}
+                <div className="space-y-1">
+                  <div className="flex items-center justify-between">
+                    <Label htmlFor="registro_mapa" className="text-xs font-semibold text-[#1C2B1C]">
+                      Registro MAPA *
+                    </Label>
+                    <span className="text-[10px] text-[#1B5E20] font-medium bg-emerald-50 px-1.5 py-0.2 rounded">
+                      Chave Base Mestre
+                    </span>
+                  </div>
+                  <Input
+                    id="registro_mapa"
+                    value={registroMapa}
+                    onChange={(e) => {
+                      const val = e.target.value
+                      setRegistroMapa(val)
+                      consultarNcmMestre(val, embalagem)
+                    }}
+                    placeholder="Ex.: 002094, 01119, 008907..."
+                    className="h-9 text-xs font-mono font-bold border-[#DCE5DC] text-[#1B5E20] focus-visible:ring-[#1B5E20]"
+                  />
                   <span className="text-[10px] text-[#5A6D5A] block leading-tight">
-                    O sistema buscará a bula oficial no AGROFIT através deste nome comercial.
+                    Usado para resolver a NCM tributária canônica na Base Mestre por embalagem.
                   </span>
                 </div>
 
-                {/* CAMPO 2: NCM (Obrigatório, 8 dígitos, máscara 0000.00.00) */}
+                {/* CAMPO 3: EMBALAGEM (Quantidade + Unidade + Acondicionamento) */}
                 <div className="space-y-1">
                   <div className="flex items-center justify-between">
-                    <Label htmlFor="ncm" className="text-xs font-semibold text-[#1C2B1C]">
-                      NCM * (8 dígitos)
+                    <Label htmlFor="embalagem" className="text-xs font-semibold text-[#1C2B1C]">
+                      Embalagem Comercial (Qtd + Unidade + Acondicionamento) *
                     </Label>
-                    <span className="text-[10px] text-[#5A6D5A] font-mono">0000.00.00</span>
+                    <span className="text-[10px] text-[#5A6D5A] font-mono">
+                      ex: 4x5L, 20KG saco
+                    </span>
                   </div>
                   <Input
-                    id="ncm"
-                    required
-                    maxLength={10}
-                    value={ncm}
-                    onChange={handleNcmChange}
-                    placeholder="0000.00.00"
-                    className={`h-9 text-xs font-mono font-bold border-[#DCE5DC] text-[#1B5E20] focus-visible:ring-[#1B5E20] ${
-                      ncmIncompleto ? 'border-amber-400 bg-amber-50/40 text-amber-900' : ''
-                    }`}
+                    id="embalagem"
+                    value={embalagem}
+                    onChange={(e) => {
+                      const val = e.target.value
+                      setEmbalagem(val)
+                      consultarNcmMestre(registroMapa, val)
+                    }}
+                    placeholder="Ex.: 4x5L, 20KG saco, Bombona 20 L, 12X1L..."
+                    className="h-9 text-xs border-[#DCE5DC] focus-visible:ring-[#1B5E20]"
                   />
-                  {ncmIncompleto ? (
-                    <p className="text-[11px] text-amber-700 flex items-center gap-1 font-medium">
-                      <AlertTriangle className="w-3.5 h-3.5 flex-shrink-0" />
-                      <span>
-                        NCM incompleta ({ncmDigitos.length}/8 dígitos). Preencha os 8 dígitos para
-                        validação.
-                      </span>
+                  <div className="flex items-center justify-between text-[10px] text-[#5A6D5A] pt-0.5">
+                    <span>Atalhos canônicos:</span>
+                    <div className="flex gap-1 flex-wrap">
+                      {['4x5L', '20KG saco', '20 L Bombona', 'Frasco 1 L', 'Tambor 200 L'].map(
+                        (item) => (
+                          <button
+                            key={item}
+                            type="button"
+                            onClick={() => {
+                              setEmbalagem(item)
+                              consultarNcmMestre(registroMapa, item)
+                            }}
+                            className="px-1.5 py-0.5 rounded text-[10px] font-semibold bg-emerald-50 text-[#1B5E20] hover:bg-emerald-100 transition-colors border border-emerald-200/60"
+                          >
+                            {item}
+                          </button>
+                        ),
+                      )}
+                    </div>
+                  </div>
+                </div>
+
+                {/* PREVIEW DA NCM RESOLVIDA DA BASE MESTRE */}
+                <div className="p-3 rounded-xl bg-[#FAFBF8] border border-[#DCE5DC] space-y-1">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[11px] font-semibold text-[#1C2B1C] flex items-center gap-1">
+                      <Database className="w-3.5 h-3.5 text-[#1B5E20]" />
+                      <span>NCM Resolvida na Base Mestre</span>
+                    </span>
+                    {buscandoNcmMestre && (
+                      <Loader2 className="w-3 h-3 animate-spin text-[#1B5E20]" />
+                    )}
+                  </div>
+                  {ncmResolvidaMestre ? (
+                    <div className="flex items-center justify-between pt-1">
+                      <div className="flex items-center gap-2">
+                        <Badge className="bg-emerald-700 text-white font-mono text-xs font-bold px-2.5 py-0.5 shadow-sm">
+                          {ncmResolvidaMestre.ncmEspecifica}
+                        </Badge>
+                        <span className="text-[11px] text-[#5A6D5A]">
+                          {ncmResolvidaMestre.quantidade} {ncmResolvidaMestre.unidade} (
+                          {ncmResolvidaMestre.acondicionamento})
+                        </span>
+                      </div>
+                      <Badge
+                        variant="outline"
+                        className="text-[10px] text-emerald-800 border-emerald-300 bg-emerald-50"
+                      >
+                        Base Mestre
+                      </Badge>
+                    </div>
+                  ) : registroMapa.trim() ? (
+                    <p className="text-[11px] text-amber-800 italic pt-0.5">
+                      Produto sem classificação tributária na Base Mestre para esta embalagem.
                     </p>
                   ) : (
-                    <span className="text-[10px] text-[#5A6D5A] block leading-tight">
-                      Será comparado com a NCM canônica da fórmula e com a tabela TIPI / Siscomex.
-                    </span>
+                    <p className="text-[11px] text-[#5A6D5A] italic pt-0.5">
+                      A classificação tributária vem da Base Mestre por embalagem (a bula não
+                      carrega NCM).
+                    </p>
                   )}
                 </div>
 
-                {/* CAMPO 3: PRINCÍPIO ATIVO (Opcional) */}
+                {/* CAMPO 4: PRINCÍPIO ATIVO */}
                 <div className="space-y-1">
                   <div className="flex items-center justify-between">
                     <Label
@@ -724,69 +843,39 @@ export function Validar() {
                     id="principio_ativo"
                     value={principioAtivo}
                     onChange={(e) => setPrincipioAtivo(e.target.value)}
-                    placeholder="Ex.: Glifosato, Bifentrina, 2,4-D (se conhecido)"
+                    placeholder="Ex.: Glifosato, Fipronil, Bifentrina..."
                     className="h-9 text-xs border-[#DCE5DC] focus-visible:ring-[#1B5E20]"
                   />
-                  <span className="text-[10px] text-[#5A6D5A] block leading-tight">
-                    Se não informado, o sistema extrai diretamente da bula oficial sem reprovar.
-                  </span>
                 </div>
 
-                {/* CAMPO 4: CÓDIGO MAPA (Opcional) */}
-                <div className="space-y-1">
-                  <div className="flex items-center justify-between">
-                    <Label htmlFor="codigo_mapa" className="text-xs font-semibold text-[#1C2B1C]">
-                      Código MAPA (Registro)
+                {/* GRID: FABRICANTE E CONCENTRAÇÃO */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                  {/* CAMPO 5: FABRICANTE */}
+                  <div className="space-y-1">
+                    <Label htmlFor="fabricante" className="text-xs font-semibold text-[#1C2B1C]">
+                      Fabricante / Titular
                     </Label>
-                    <span className="text-[10px] text-[#5A6D5A] italic">Opcional</span>
+                    <Input
+                      id="fabricante"
+                      value={fabricante}
+                      onChange={(e) => setFabricante(e.target.value)}
+                      placeholder="Ex.: BAYER S/A, BASF..."
+                      className="h-9 text-xs border-[#DCE5DC] focus-visible:ring-[#1B5E20]"
+                    />
                   </div>
-                  <Input
-                    id="codigo_mapa"
-                    value={codigoMapa}
-                    onChange={(e) => setCodigoMapa(e.target.value)}
-                    placeholder="Ex.: 008907, Nº 0315 ou TC 00123"
-                    className="h-9 text-xs border-[#DCE5DC] focus-visible:ring-[#1B5E20]"
-                  />
-                  <span className="text-[10px] text-[#5A6D5A] block leading-tight">
-                    Preserva zeros à esquerda e compara com o registro oficial da bula/AGROFIT.
-                  </span>
-                </div>
 
-                {/* CAMPO 5: EMBALAGEM (Opcional) */}
-                <div className="space-y-1">
-                  <div className="flex items-center justify-between">
-                    <Label htmlFor="embalagem" className="text-xs font-semibold text-[#1C2B1C]">
-                      Embalagem Comercial
+                  {/* CAMPO 6: CONCENTRAÇÃO */}
+                  <div className="space-y-1">
+                    <Label htmlFor="concentracao" className="text-xs font-semibold text-[#1C2B1C]">
+                      Concentração (g/L ou g/kg)
                     </Label>
-                    <span className="text-[10px] text-[#5A6D5A] italic">Opcional</span>
-                  </div>
-                  <Input
-                    id="embalagem"
-                    value={embalagem}
-                    onChange={(e) => setEmbalagem(e.target.value)}
-                    placeholder="Ex.: frasco 250 mL, saco 5 kg, bombona 20 L"
-                    className="h-9 text-xs border-[#DCE5DC] focus-visible:ring-[#1B5E20]"
-                  />
-                  <div className="flex items-center justify-between text-[10px] text-[#5A6D5A] pt-0.5">
-                    <span>Atalhos rápidos:</span>
-                    <div className="flex gap-1">
-                      {[
-                        'Frasco 250 mL',
-                        'Frasco 1 L',
-                        'Bombona 5 L',
-                        'Bombona 20 L',
-                        'Saco 5 kg',
-                      ].map((item) => (
-                        <button
-                          key={item}
-                          type="button"
-                          onClick={() => setEmbalagem(item)}
-                          className="px-1.5 py-0.5 rounded text-[10px] font-semibold bg-emerald-50 text-[#1B5E20] hover:bg-emerald-100 transition-colors border border-emerald-200/60"
-                        >
-                          {item}
-                        </button>
-                      ))}
-                    </div>
+                    <Input
+                      id="concentracao"
+                      value={concentracao}
+                      onChange={(e) => setConcentracao(e.target.value)}
+                      placeholder="Ex.: 480, 720, 250..."
+                      className="h-9 text-xs border-[#DCE5DC] focus-visible:ring-[#1B5E20]"
+                    />
                   </div>
                 </div>
 
@@ -831,7 +920,7 @@ export function Validar() {
                 <div className="pt-1">
                   <Button
                     type="submit"
-                    disabled={loading || ncmIncompleto}
+                    disabled={loading}
                     className="w-full h-11 bg-[#1B5E20] hover:bg-[#2E7D32] text-white font-semibold rounded-xl flex items-center justify-center gap-2 shadow-md transition-all active:scale-[0.98]"
                   >
                     {loading ? (

@@ -414,10 +414,13 @@ export interface GravacaoBaseMestreResultado {
 
 export interface ValidarCadastroInput {
   nome_comercial: string
-  ncm: string
+  ncm?: string
   principio_ativo?: string
   codigo_mapa?: string
+  registro_mapa?: string
   embalagem?: string
+  fabricante?: string
+  concentracao?: number | string
   modo?: 'novo' | 'existente'
   id_produto_existente?: string
   auto_cadastrar?: boolean
