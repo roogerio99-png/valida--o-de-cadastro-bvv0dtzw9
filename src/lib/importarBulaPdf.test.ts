@@ -707,7 +707,7 @@ export function parsearTextoBula(markdown: string, pdfFileName?: string, _trunca
     {
       tipo: 'Fabricante do Produto Técnico',
       inicio:
-        /(?:FABRICANTE[S\s(\)]*DO\s+PRODUTO\s+T[ÉE]CNICO|FABRICANTE\s+T[ÉE]CNICO|PRODUTO\s+T[ÉE]CNICO\s*:)/i,
+        /(?:FABRICANTE[S\s()]*DO\s+PRODUTO\s+T[ÉE]CNICO|FABRICANTE\s+T[ÉE]CNICO|PRODUTO\s+T[ÉE]CNICO\s*:)/i,
     },
     {
       tipo: 'Formulador',
@@ -1101,6 +1101,7 @@ describe('Testes do Parser de Bula PDF - Caso Real ROUNDUP ORIGINAL MAIS', () =>
   // - Fabricante do Produto Técnico: Monsanto Europe S.A. (Bélgica)
   // - Formulador: MONSANTO DO BRASIL LTDA. (SJC) + AGRO BAYER S.R.L. (Zárate, Argentina)
   // - Importador: MONSANTO DO BRASIL LTDA. (SP Matriz) + MONSANTO DO BRASIL LTDA. (SJC Fábrica) + BAYER CROPSCIENCE LP (Luling, EUA) + BAYER CROPSCIENCE LP (Muscatine, EUA) + BAYER AGRICULTURE BV (Antwerp, Bélgica) + BAYER S.A. (Colômbia)
+  // Verificação de conformidade e integridade da cadeia oficial
   const textoBulaRoundup = `
 1/27
 REGISTRADO NO MINISTÉRIO DA AGRICULTURA E PECUÁRIA
