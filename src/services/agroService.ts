@@ -153,6 +153,75 @@ export async function excluirProdutoBaseMestre(id: string) {
   return pb.collection('base_mestre').delete(id)
 }
 
+/**
+ * Consulta a Base Mestre e resolve a NCM pela chave natural da embalagem:
+ * registro_mapa + quantidade + unidade + acondicionamento
+ */
+export async function resolverNcmBaseMestre(
+  registroMapa: string,
+  quantidade?: number | string,
+  unidade?: string,
+  acondicionamento?: string,
+): Promise<{
+  ncmEspecifica: string
+  quantidade: number
+  unidade: string
+  acondicionamento: string
+} | null> {
+  try {
+    const regDigits = String(registroMapa || '').replace(/\D/g, '')
+    if (!regDigits) return null
+
+    const qtdNum = Number(quantidade) || 0
+    const unStr = String(unidade || '')
+      .trim()
+      .toUpperCase()
+    const acondStr = String(acondicionamento || '').trim()
+
+    // 1. Tentar busca exata por registro_mapa e campos de embalagem
+    let filter = `registro_mapa ~ '${regDigits}'`
+    if (qtdNum > 0) {
+      filter += ` && quantidade_embalagem_principal = ${qtdNum}`
+    }
+    if (unStr) {
+      filter += ` && unidade_medida_principal = '${unStr}'`
+    }
+    if (acondStr) {
+      filter += ` && forma_acondicionamento = '${acondStr}'`
+    }
+
+    const res = await pb.collection('base_mestre').getList<BaseMestreProduto>(1, 10, {
+      filter,
+      sort: '-created',
+    })
+
+    const match =
+      res.items.find((item) => {
+        const itemRegDigits = (item.registro_mapa || '').replace(/\D/g, '')
+        if (itemRegDigits !== regDigits) return false
+        if (qtdNum > 0 && item.quantidade_embalagem_principal !== qtdNum) return false
+        if (unStr && (item.unidade_medida_principal || '').toUpperCase() !== unStr) return false
+        if (acondStr && item.forma_acondicionamento !== acondStr) return false
+        return true
+      }) || res.items[0]
+
+    if (match) {
+      const ncm = (match.ncm_especifica || match.ncm_padrao || match.ncm || '').trim()
+      return {
+        ncmEspecifica: ncm,
+        quantidade: match.quantidade_embalagem_principal || qtdNum || 20,
+        unidade: match.unidade_medida_principal || unStr || 'L',
+        acondicionamento: match.forma_acondicionamento || acondStr || 'Bombona',
+      }
+    }
+
+    return null
+  } catch (err) {
+    console.error('Erro ao resolver NCM na Base Mestre:', err)
+    return null
+  }
+}
+
 // -----------------------------------------------------------------------------
 // Relatório de Duplicidades no Servidor
 // -----------------------------------------------------------------------------

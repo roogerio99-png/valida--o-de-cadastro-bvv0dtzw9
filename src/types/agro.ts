@@ -26,14 +26,12 @@ export interface BulaProdutoItem extends RecordModel {
   classificacao_ambiental?: string
   tipo_formulacao?: string
   modo_acao?: string
-  ncm_padrao?: string
   tipo_produto?: string
   status_registro?: string
   codigo?: string
   pa_oficial_correto?: string
   mapa_oficial_limpo?: string
   embalagem?: string
-  ncm_oficial_exata?: string
   url_oficial?: string
   macro_grupo?: string
   sub_grupo?: string
@@ -89,10 +87,8 @@ export interface BulaEmbalagemItem extends RecordModel {
   material?: string
   capacidade?: string
   unidade_medida?: string
-  ncm?: string
   destinacao_final?: string
   codigo?: string
-  ncm_faixa?: string
   descricao_embalagem?: string
   dados_extras?: Record<string, unknown>
   created: string

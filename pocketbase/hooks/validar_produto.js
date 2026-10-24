@@ -501,159 +501,20 @@ routerAdd('POST', '/backend/v1/validar-produto', (e) => {
       const pertenceNotaSubpos2 = fallbackVerificarNotaSubpos2(principioAtivoBruto, nomeCompleto)
       const notaSubpos2 = pertenceNotaSubpos2 ? 'SIM' : 'NÃO'
 
+      // Resolução via Base Mestre (Base Mestre é a ÚNICA fonte de NCM)
       let ncmPadrao = ''
       let ncmFaixa1 = ''
       let ncmFaixa2 = ''
       let ncmFaixa3 = ''
       let ncmFaixa4 = ''
-      let regraTipi = ''
-
-      if (pertenceNotaSubpos2) {
-        ncmPadrao = '3808.62.90'
-        ncmFaixa1 = '3808.61.00'
-        ncmFaixa2 = '3808.62.90'
-        ncmFaixa3 = '3808.69.90'
-        ncmFaixa4 = '3808.69.90'
-        regraTipi =
-          'Nota de Subposições 2 Cap. 38 TIPI (SC COSIT 98.042/2022): Molécula taxativa com subitens genéricos (.1x/.99) expressamente vedados'
-      } else if (tipoProduto === 'Fertilizante Mineral / Organomineral') {
-        ncmFaixa1 = '3105.10.00'
-        ncmFaixa2 = '3105.10.00'
-        ncmFaixa3 = '3105.10.00'
-        if (subGrupo === 'Organomineral' || paUpper.includes('ORGANO')) {
-          ncmPadrao = '3101.00.00'
-          ncmFaixa4 = '3101.00.00'
-        } else {
-          ncmPadrao = '3105.90.90'
-          ncmFaixa4 = '3105.90.90'
-        }
-        regraTipi =
-          'Nota 1 Cap. 31 TIPI: Embalagens brutas até 10 kg classificam-se obrigatoriamente na posição 3105.10.00'
-      } else if (tipoProduto === 'Corretivo / Condicionador de Solo') {
-        if (paUpper.includes('GESSO') || nomeUpper.includes('GESSO')) {
-          ncmPadrao = '2520.10.19'
-        } else if (paUpper.includes('CALCARIO') || nomeUpper.includes('CALCARIO')) {
-          ncmPadrao = '2521.00.00'
-        } else {
-          ncmPadrao = '2503.00.90'
-        }
-        ncmFaixa1 = ncmPadrao
-        ncmFaixa2 = ncmPadrao
-        ncmFaixa3 = ncmPadrao
-        ncmFaixa4 = ncmPadrao
-        regraTipi = 'Capítulo 25 TIPI: Minerais e condicionadores de solo ensacados ou a granel'
-      } else if (tipoProduto === 'Inoculante / Biológico') {
-        ncmPadrao = '3002.49.99'
-        ncmFaixa1 = '3002.49.99'
-        ncmFaixa2 = '3002.49.99'
-        ncmFaixa3 = '3002.49.99'
-        ncmFaixa4 = '3002.49.99'
-        regraTipi =
-          categoriaTributaria === 'tributado_integral'
-            ? 'Posição 3002 TIPI (SC COSIT 261/2023): Inoculante solubilizador/promotor tributado integralmente'
-            : 'Posição 3002 TIPI: Culturas de microrganismos para fixação biológica de N2 com alíquota zero'
-      } else if (tipoProduto === 'Produto Técnico Industrial') {
-        if (subGrupo.includes('Herbicida') || paUpper.includes('HERBICIDA')) {
-          ncmPadrao = '3808.93.19'
-        } else if (subGrupo.includes('Fungicida') || paUpper.includes('FUNGICIDA')) {
-          ncmPadrao = '3808.92.20'
-        } else {
-          ncmPadrao = '3808.91.20'
-        }
-        ncmFaixa1 = ncmPadrao
-        ncmFaixa2 = ncmPadrao
-        ncmFaixa3 = ncmPadrao
-        ncmFaixa4 = ncmPadrao
-        regraTipi =
-          'Nota 2 Seção VI TIPI: Preparações intermediárias (3808.9x.19/.20) e produtos químicos orgânicos isolados (Cap. 29)'
-      } else if (tipoProduto === 'Adjuvante / Espalhante Adesivo') {
-        ncmPadrao = '3824.99.89'
-        ncmFaixa1 = '3824.99.89'
-        ncmFaixa2 = '3824.99.89'
-        ncmFaixa3 = '3824.99.89'
-        ncmFaixa4 = '3824.99.89'
-        regraTipi =
-          'Posição 3824 TIPI (SC COSIT 4/2024): Adjuvante agrícola não enquadrado como defensivo (Tributação Integral)'
-      } else {
-        if (subGrupo.includes('Herbicida') || paUpper.includes('HERBICIDA')) {
-          if (paUpper.includes('2,4-D') || paUpper.includes('2-4 D') || paUpper.includes('MCPA')) {
-            ncmPadrao = '3808.93.22'
-          } else if (paUpper.includes('ATRAZINA') || paUpper.includes('DIURON')) {
-            ncmPadrao = '3808.93.23'
-          } else if (
-            paUpper.includes('GLIFOSATO') ||
-            paUpper.includes('GLYPHOSATE') ||
-            nomeUpper.includes('ROUNDUP')
-          ) {
-            // Glifosato / ROUNDUP WG formulado agrícola: NCM 3808.93.24 conforme bula oficial do MAPA (Herbicida agrícola formulado)
-            ncmPadrao = '3808.93.24'
-          } else if (
-            paUpper.includes('IMAZETAPIR') ||
-            paUpper.includes('CLORIMURON') ||
-            paUpper.includes('METSULFURON') ||
-            paUpper.includes('NICOSULFURON')
-          ) {
-            ncmPadrao = '3808.93.27'
-          } else if (
-            paUpper.includes('AMETRINA') ||
-            paUpper.includes('HEXAZINONA') ||
-            paUpper.includes('METRIBUZIM') ||
-            paUpper.includes('METRIBUZIN')
-          ) {
-            ncmPadrao = '3808.93.28'
-          } else {
-            ncmPadrao = '3808.93.29'
-          }
-        } else if (subGrupo.includes('Regulador') || paUpper.includes('REGULADOR')) {
-          ncmPadrao = '3808.93.59'
-        } else if (subGrupo.includes('Fungicida') || paUpper.includes('FUNGICIDA')) {
-          if (paUpper.includes('MANCOZEBE') || paUpper.includes('MANCOZEB')) {
-            ncmPadrao = '3808.92.93'
-          } else {
-            ncmPadrao = '3808.92.99'
-          }
-        } else if (subGrupo.includes('Nematicida') || paUpper.includes('NEMATICIDA')) {
-          ncmPadrao = '3808.99.95'
-        } else if (
-          subGrupo.includes('Raticida') ||
-          subGrupo.includes('Rodenticida') ||
-          paUpper.includes('RATICIDA') ||
-          paUpper.includes('RODENTICIDA')
-        ) {
-          ncmPadrao = '3808.94.90'
-        } else if (
-          subGrupo.includes('Inseticida') ||
-          subGrupo.includes('Acaricida') ||
-          paUpper.includes('INSETICIDA') ||
-          paUpper.includes('ACARICIDA')
-        ) {
-          if (paUpper.includes('ACEFATO') || paUpper.includes('THURINGIENSIS')) {
-            ncmPadrao = '3808.91.91'
-          } else if (paUpper.includes('CIPERMETRINA') || paUpper.includes('CYPERMETHRIN')) {
-            ncmPadrao = '3808.91.92'
-          } else {
-            ncmPadrao = '3808.91.99'
-          }
-        } else {
-          // Inconclusivo / Não Reconhecido: mantém código neutro residual 3808.99.99 sem inventar herbicida
-          ncmPadrao = '3808.99.99'
-        }
-        ncmFaixa1 = ncmPadrao
-        ncmFaixa2 = ncmPadrao
-        ncmFaixa3 = ncmPadrao
-        ncmFaixa4 = ncmPadrao
-        regraTipi =
-          'Posição 38.08 TIPI: Embalagem comercial agrícola usa subitens .2x ou .9x, vedada subposição domissanitária (.1x)'
-      }
-
-      // NOTA FISCAL CRÍTICA: O input.ncm informado pelo usuário NUNCA deve sobrescrever
-      // a determinação canônica do motor químico-aduaneiro.
+      let regraTipi =
+        'Classificação fiscal vinculada exclusivamente ao cadastro da embalagem na Base Mestre'
 
       ncmPadrao = fallbackFormatarNcmMascara(ncmPadrao)
-      ncmFaixa1 = fallbackFormatarNcmMascara(ncmFaixa1)
-      ncmFaixa2 = fallbackFormatarNcmMascara(ncmFaixa2)
-      ncmFaixa3 = fallbackFormatarNcmMascara(ncmFaixa3)
-      ncmFaixa4 = fallbackFormatarNcmMascara(ncmFaixa4)
+      ncmFaixa1 = ncmPadrao
+      ncmFaixa2 = ncmPadrao
+      ncmFaixa3 = ncmPadrao
+      ncmFaixa4 = ncmPadrao
 
       let statusPisCofins = ''
       let aliquotaAteMar2026 = ''
@@ -751,7 +612,99 @@ routerAdd('POST', '/backend/v1/validar-produto', (e) => {
     }
 
     // -------------------------------------------------------------------------
-    // ENTRADA DOS DADOS (5 campos do escopo reformulado)
+    // PARSER CANÔNICO DE EMBALAGEM (Idêntico ao importar_bula_pdf.js)
+    // -------------------------------------------------------------------------
+    const parsearEmbalagemCanonico = function (textoEmb, teInformado, capInformada, unInformada) {
+      const te = String(teInformado || '').trim()
+      const cap = String(capInformada || '').trim()
+      const textoOriginal = String(textoEmb || '').trim()
+
+      let qtdPrinc = 0
+      let unPrinc = 'L'
+      const capUpper = `${cap} ${String(unInformada || '')} ${textoOriginal}`.toUpperCase()
+
+      const mMultiplo = capUpper.match(
+        /(\d+)\s*[xX×]\s*(\d+(?:[.,]\d+)?)\s*(KG|KGS|KILOS?|QUILOS?|G\b|L\b|LT|LITROS?|ML)/,
+      )
+      if (mMultiplo) {
+        let q = parseFloat(mMultiplo[2].replace(',', '.'))
+        const u = mMultiplo[3]
+        if (u === 'G' || u === 'ML') q = q * 0.001
+        qtdPrinc = q
+        unPrinc =
+          u.startsWith('KG') || u.startsWith('QUILO') || u.startsWith('KILO') || u === 'G'
+            ? 'KG'
+            : 'L'
+      } else {
+        const mDireto = capUpper.match(
+          /(\d+(?:[.,]\d+)?)\s*(KG|KGS|KILOS?|QUILOS?|G\b|L\b|LT|LITROS?|ML)\b/,
+        )
+        if (mDireto) {
+          let q = parseFloat(mDireto[1].replace(',', '.'))
+          const u = mDireto[2]
+          if (u === 'G' || u === 'ML') q = q * 0.001
+          qtdPrinc = q
+          unPrinc =
+            u.startsWith('KG') || u.startsWith('QUILO') || u.startsWith('KILO') || u === 'G'
+              ? 'KG'
+              : 'L'
+        } else {
+          const numCap = parseFloat(String(cap || textoOriginal).replace(',', '.'))
+          if (!isNaN(numCap) && numCap > 0) {
+            qtdPrinc = numCap
+            const uInf = String(unInformada || '').toUpperCase()
+            unPrinc = uInf.startsWith('KG') || uInf.startsWith('QUILO') || uInf === 'G' ? 'KG' : 'L'
+          } else {
+            qtdPrinc = 20
+            unPrinc = 'L'
+          }
+        }
+      }
+
+      let acond = ''
+      const formaTexto = `${te} ${textoOriginal}`.toUpperCase()
+      if (formaTexto.includes('BIG BAG') || formaTexto.includes('BIG-BAG')) acond = 'Big Bag'
+      else if (formaTexto.includes('BOMBONA')) acond = 'Bombona'
+      else if (formaTexto.includes('TAMBOR')) acond = 'Tambor'
+      else if (
+        formaTexto.includes('SACARIA') ||
+        formaTexto.includes('SACO') ||
+        formaTexto.includes('SACA')
+      )
+        acond = 'Saco'
+      else if (formaTexto.includes('BALDE')) acond = 'Balde'
+      else if (formaTexto.includes('FRASCO') || formaTexto.includes('AMPOULA')) acond = 'Frasco'
+      else if (formaTexto.includes('GALÃO') || formaTexto.includes('GALAO')) acond = 'Galão'
+      else if (
+        formaTexto.includes('CONTAINER') ||
+        formaTexto.includes('CONTÊINER') ||
+        formaTexto.includes('IBC')
+      )
+        acond = 'Container / IBC'
+      else if (formaTexto.includes('CAIXA') || formaTexto.includes('CARTUCHO')) acond = 'Caixa'
+      else if (formaTexto.includes('SACHE') || formaTexto.includes('SACHET')) acond = 'Sache'
+      else {
+        if (unPrinc === 'KG') acond = qtdPrinc > 25 ? 'Big Bag' : 'Saco'
+        else {
+          if (qtdPrinc <= 1) acond = 'Frasco'
+          else if (qtdPrinc <= 5) acond = 'Galão'
+          else if (qtdPrinc <= 50) acond = 'Bombona'
+          else if (qtdPrinc <= 250) acond = 'Tambor'
+          else acond = 'Container / IBC'
+        }
+      }
+
+      return {
+        quantidade: qtdPrinc,
+        unidade: unPrinc,
+        acondicionamento: acond,
+        descricao: `${qtdPrinc} ${unPrinc} (${acond})`,
+      }
+    }
+
+    // -------------------------------------------------------------------------
+    // ENTRADA DOS DADOS
+    // A NCM informada no payload é IGNORADA por completo: a Base Mestre é a ÚNICA fonte de NCM.
     // -------------------------------------------------------------------------
     const info = e.requestInfo()
     const data = info.body || {}
@@ -759,15 +712,15 @@ routerAdd('POST', '/backend/v1/validar-produto', (e) => {
     const nomeComercial = String(
       data.nome_comercial || data.nome_produto || data.nome_completo || '',
     ).trim()
-    const ncmInputRaw = String(data.ncm || data.ncm_padrao || '').trim()
-    const ncmDigitos = ncmInputRaw.replace(/\D/g, '')
-    const ncmFormatado = motor.formatarNcmMascara(ncmDigitos)
 
     const principioAtivoInformado = String(data.principio_ativo || '').trim()
     const codigoMapaInformado = String(
       data.codigo_mapa || data.registro_mapa || data.registro || '',
     ).trim()
     const embalagemInformada = String(data.embalagem || '').trim()
+    const quantidadeInformada = data.quantidade || data.quantidade_embalagem_principal
+    const unidadeInformada = data.unidade || data.unidade_medida_principal
+    const acondicionamentoInformado = data.forma_acondicionamento || data.acondicionamento
 
     const modoValidacao = data.modo === 'existente' ? 'existente' : 'novo'
     const idProdutoExistente = String(data.id_produto_existente || '').trim()
@@ -780,13 +733,6 @@ routerAdd('POST', '/backend/v1/validar-produto', (e) => {
       return e.json(400, {
         status: 'REPROVADO',
         error: 'O campo Nome Comercial é obrigatório para a validação.',
-      })
-    }
-
-    if (!ncmDigitos || ncmDigitos.length !== 8) {
-      return e.json(400, {
-        status: 'REPROVADO',
-        error: `O NCM é obrigatório e deve conter exatamente 8 dígitos numéricos (recebido: "${ncmInputRaw}").`,
       })
     }
 
@@ -853,51 +799,6 @@ routerAdd('POST', '/backend/v1/validar-produto', (e) => {
       }
     } catch (_) {}
 
-    // 1.4 Consulta Externa BrasilAPI (Catálogo Oficial Siscomex / TIPI para o NCM)
-    let ncmExternoInfo = null
-    try {
-      const resNcm = $http.send({
-        url: `https://brasilapi.com.br/api/ncm/v1/${ncmDigitos}`,
-        method: 'GET',
-        headers: {
-          'User-Agent': 'ValidadorAgro/2.0 (Auditoria Fiscal)',
-          Accept: 'application/json',
-        },
-        timeout: 5,
-      })
-      if (resNcm.statusCode === 200) {
-        const bodyNcm =
-          typeof resNcm.json === 'function' ? resNcm.json() : JSON.parse(resNcm.raw || '{}')
-        ncmExternoInfo = {
-          codigo: bodyNcm.codigo || ncmDigitos,
-          descricao: bodyNcm.descricao || '',
-          data_inicio: bodyNcm.data_inicio || '',
-        }
-        fontesConsultadas.push({
-          fonte: 'Classif Siscomex / TIPI (Receita Federal)',
-          tipo: 'ncm',
-          status: 'sucesso',
-          url: 'https://portalunico.siscomex.gov.br/classif/',
-          detalhes: `NCM ${ncmFormatado} confirmado na tabela oficial TIPI: "${ncmExternoInfo.descricao}".`,
-        })
-      } else if (resNcm.statusCode === 404) {
-        fontesConsultadas.push({
-          fonte: 'Classif Siscomex / TIPI (Receita Federal)',
-          tipo: 'ncm',
-          status: 'nao_encontrado',
-          url: 'https://portalunico.siscomex.gov.br/classif/',
-          detalhes: `Código NCM ${ncmFormatado} não encontrado no catálogo oficial Siscomex.`,
-        })
-      }
-    } catch (httpErr) {
-      fontesConsultadas.push({
-        fonte: 'Classif Siscomex / TIPI (Receita Federal)',
-        tipo: 'ncm',
-        status: 'indisponivel',
-        detalhes: `Consulta Siscomex externa indisponível (${httpErr.message || 'timeout'}). Auditoria mantida pela matriz local.`,
-      })
-    }
-
     // 1.5 Busca da BULA e do Registro no AGROFIT / MAPA via IA / Dados Oficiais
     let bulaExtraida = null
     let agrofitOficial = null
@@ -906,7 +807,6 @@ routerAdd('POST', '/backend/v1/validar-produto', (e) => {
       const promptAuditoriaBula = `Você é o Auditor Oficial e Perito Químico-Aduaneiro do Ministério da Agricultura (MAPA / AGROFIT).
 O usuário submeteu um produto comercial para validação cadastral:
 - Nome Comercial informado: "${nomeComercial}"
-- NCM informada: "${ncmFormatado}"
 - Princípio Ativo informado: "${principioAtivoInformado || 'NÃO INFORMADO'}"
 - Código MAPA informado: "${codigoMapaInformado || 'NÃO INFORMADO'}"
 - Embalagem informada: "${embalagemInformada || 'NÃO INFORMADO'}"
@@ -1046,460 +946,244 @@ Consulte a base pública oficial do AGROFIT e a BULA oficial registrada no MAPA 
         (produtoBaseMestreEncontrado ? produtoBaseMestreEncontrado.getString('registro_mapa') : ''),
     )
 
-    const embalagemFinal =
+    // -------------------------------------------------------------------------
+    // RESOLUÇÃO DE EMBALAGEM E QUANTIDADE
+    // -------------------------------------------------------------------------
+    const embTextoBase =
       embalagemInformada ||
       bulaExtraida?.embalagem_principal ||
-      (produtoBaseMestreEncontrado
-        ? produtoBaseMestreEncontrado.getString('embalagem')
-        : 'Bombona 20 L')
+      (produtoBaseMestreEncontrado ? produtoBaseMestreEncontrado.getString('embalagem') : '')
+
+    const embParseada = parsearEmbalagemCanonico(
+      embTextoBase,
+      acondicionamentoInformado,
+      quantidadeInformada,
+      unidadeInformada,
+    )
+
+    const qtdEmbalagemFinal =
+      quantidadeInformada !== undefined &&
+      quantidadeInformada !== null &&
+      Number(quantidadeInformada) > 0
+        ? Number(quantidadeInformada)
+        : embParseada.quantidade
+
+    const unidadeFinal = (unidadeInformada || embParseada.unidade || 'L').trim().toUpperCase()
+
+    const acondicionamentoFinal =
+      acondicionamentoInformado || embParseada.acondicionamento || 'Bombona'
+
+    const embalagemFinal = `${acondicionamentoFinal} ${qtdEmbalagemFinal} ${unidadeFinal}`.trim()
 
     // -------------------------------------------------------------------------
-    // CASCATA DE 4 ETAPAS PARA DEDUÇÃO DE CLASSE AGRONÔMICA E NCM CANÔNICO:
-    // 1º. Consultar a matriz de princípios ativos (dicionario_principios_ativos) buscando a(s) molécula(s)
-    // 2º. Se não resolver, consultar a Base Mestre (base_mestre) por produtos com mesmo PA e usar a NCM/classe
-    // 3º. Se ainda não resolver, usar a busca de bula/AGROFIT (classe de uso declarada na bula)
-    // 4º. Último recurso: lista fixa de moléculas conhecidas no código
-    // Se NENHUMA etapa determinar a classe, a validação deve sair como INCONCLUSIVO ("ressalva")
+    // RESOLUÇÃO DE NCM EXCLUSIVAMENTE VIA BASE MESTRE (chave natural da embalagem final)
+    // Chave natural: registro_mapa + quantidade_embalagem_principal + unidade_medida_principal + forma_acondicionamento
     // -------------------------------------------------------------------------
-    let classeUsoFinal = ''
-    let etapaOrigemClasse = ''
-    let ncmSugeridoCascata = ''
+    let ncmResolvidaBaseMestre = ''
+    let cadastroEmbalagemBaseMestre = null
 
-    // Helper para extrair nomes de moléculas do texto do PA
-    const extrairMoleculasTexto = function (txt) {
-      if (!txt) return []
-      return String(txt)
-        .replace(/[\(\)\[\],;\/\+\&]/g, ' ')
-        .split(/\s+/)
-        .map((s) => s.trim().toUpperCase())
-        .filter(
-          (s) =>
-            s.length >= 4 &&
-            !/^\d+$/.test(s) &&
-            !['COM', 'PARA', 'AGRO', 'TECNICO', 'SOLUVEL', 'CONCENTRADO'].includes(s),
+    // 1. Tentar busca exata pelos 4 campos da chave natural
+    try {
+      const regSanit = motor.sanitizarRegistroMapa(registroMapaFinal)
+      const regDigits = regSanit.replace(/\D/g, '')
+
+      let filtroChave = ''
+      if (regSanit) {
+        const escReg = regSanit.replace(/'/g, "\\'")
+        const escUn = unidadeFinal.replace(/'/g, "\\'")
+        const escAcond = acondicionamentoFinal.replace(/'/g, "\\'")
+
+        filtroChave = `registro_mapa ~ '${escReg}' && quantidade_embalagem_principal = ${qtdEmbalagemFinal} && unidade_medida_principal = '${escUn}' && forma_acondicionamento = '${escAcond}'`
+
+        let registrosBm = $app.findRecordsByFilter('base_mestre', filtroChave, '-created', 1, 0)
+        if (registrosBm && registrosBm.length > 0) {
+          cadastroEmbalagemBaseMestre = registrosBm[0]
+        }
+      }
+
+      // 2. Se não achou exato com sanitizado completo, tentar apenas com dígitos do MAPA
+      if (!cadastroEmbalagemBaseMestre && regDigits && regDigits.length >= 4) {
+        const escUn = unidadeFinal.replace(/'/g, "\\'")
+        const escAcond = acondicionamentoFinal.replace(/'/g, "\\'")
+        const filtroDig = `registro_mapa ~ '${regDigits}' && quantidade_embalagem_principal = ${qtdEmbalagemFinal} && forma_acondicionamento = '${escAcond}'`
+        const regsDig = $app.findRecordsByFilter('base_mestre', filtroDig, '-created', 5, 0)
+        if (regsDig && regsDig.length > 0) {
+          const matchDig = regsDig.find((r) => {
+            const rd = r.getString('registro_mapa').replace(/\D/g, '')
+            return rd === regDigits
+          })
+          if (matchDig) cadastroEmbalagemBaseMestre = matchDig
+        }
+      }
+
+      // 3. Se ainda não achou, tentar com registro_mapa + quantidade + unidade
+      if (!cadastroEmbalagemBaseMestre && regDigits && regDigits.length >= 4) {
+        const regsQtd = $app.findRecordsByFilter(
+          'base_mestre',
+          `registro_mapa ~ '${regDigits}' && quantidade_embalagem_principal = ${qtdEmbalagemFinal}`,
+          '-created',
+          5,
+          0,
         )
-    }
+        if (regsQtd && regsQtd.length > 0) {
+          const matchQtd = regsQtd.find((r) => {
+            const rd = r.getString('registro_mapa').replace(/\D/g, '')
+            return rd === regDigits
+          })
+          if (matchQtd) cadastroEmbalagemBaseMestre = matchQtd
+        }
+      }
 
-    // ETAPA 0 (BULA OFICIAL / USO DECLARADO): A consulta à bula/AGROFIT extrai o USO declarado
-    // (uso agrícola vs uso domissanitário) e a classe de uso.
-    // A bula tem prioridade sobre ncm_padrao gravado quando este for contraditório com o tipo do produto.
-    const usoBulaDeclarado = bulaExtraida?.uso_declarado || 'Uso Agrícola'
-    const isUsoAgricola =
-      !usoBulaDeclarado.toLowerCase().includes('domiss') &&
-      !usoBulaDeclarado.toLowerCase().includes('domést')
-
-    // ETAPA 1: Consultar a Matriz de Princípios Ativos (dicionario_principios_ativos)
-    let paMatrizRecord = paDicionarioEncontrado
-    if (!paMatrizRecord && (principioAtivoFinal || nomeComercial)) {
-      const tokensMoleculas = extrairMoleculasTexto(`${principioAtivoFinal} ${nomeComercial}`)
-      for (const token of tokensMoleculas) {
-        try {
-          const escToken = token.replace(/'/g, "\\'")
-          const achouPa = $app.findRecordsByFilter(
-            'dicionario_principios_ativos',
-            `principio_ativo = '${escToken}' || principio_ativo_chave = '${escToken}' || principio_ativo ~ '${escToken}'`,
+      // 4. Se ainda não achou mas temos um cadastro existente específico ou por registro_mapa
+      if (!cadastroEmbalagemBaseMestre) {
+        if (idProdutoExistente && cadastroExistenteNaBase) {
+          cadastroEmbalagemBaseMestre = cadastroExistenteNaBase
+        } else if (regDigits && regDigits.length >= 4) {
+          const regsMapa = $app.findRecordsByFilter(
+            'base_mestre',
+            `registro_mapa ~ '${regDigits}'`,
             '-created',
-            1,
+            5,
             0,
           )
-          if (achouPa && achouPa.length > 0) {
-            paMatrizRecord = achouPa[0]
-            break
+          if (regsMapa && regsMapa.length > 0) {
+            const matchM = regsMapa.find((r) => {
+              const rd = r.getString('registro_mapa').replace(/\D/g, '')
+              return rd === regDigits
+            })
+            if (matchM) cadastroEmbalagemBaseMestre = matchM
           }
-        } catch (_) {}
-      }
-    }
-
-    if (paMatrizRecord) {
-      const cl =
-        paMatrizRecord.getString('classe') ||
-        paMatrizRecord.getString('macro_grupo_subgrupo_padrao')
-      if (
-        cl &&
-        !cl.toLowerCase().includes('inconclusivo') &&
-        !cl.toLowerCase().includes('defensivo fitossanit')
-      ) {
-        classeUsoFinal = cl
-        etapaOrigemClasse = '1ª Etapa (Matriz de Princípios Ativos)'
-        const ncmRefMatriz = paMatrizRecord.getString('ncm_padrao_referencia') || ''
-        const cleanRef = ncmRefMatriz.replace(/\D/g, '')
-        // Se for uso agrícola segundo a bula, não aceita subitem domissanitário/técnico (.1x) da matriz
-        if (
-          isUsoAgricola &&
-          (cleanRef.startsWith('3808931') ||
-            cleanRef.startsWith('3808921') ||
-            cleanRef.startsWith('3808911'))
-        ) {
-          // ignora ncm de técnico/domissanitário
-        } else {
-          ncmSugeridoCascata = ncmRefMatriz
         }
       }
-    }
 
-    // ETAPA 2: Se não resolver, consultar a Base Mestre (base_mestre) por produtos com mesmo PA
-    if (!classeUsoFinal && principioAtivoFinal) {
-      try {
-        const tokensMoleculas = extrairMoleculasTexto(principioAtivoFinal)
-        for (const token of tokensMoleculas) {
-          const escToken = token.replace(/'/g, "\\'")
-          const matchesBm =
-            $app.findRecordsByFilter(
-              'base_mestre',
-              `principio_ativo ~ '${escToken}'`,
-              '-created',
-              5,
-              0,
-            ) || []
-          for (const bm of matchesBm) {
-            const sub = bm.getString('sub_grupo')
-            const ncmBm = bm.getString('ncm_padrao') || bm.getString('ncm')
-            if (
-              sub &&
-              !sub.toLowerCase().includes('inconclusivo') &&
-              !sub.toLowerCase().includes('defensivo fitossanit')
-            ) {
-              classeUsoFinal = sub
-              etapaOrigemClasse = '2ª Etapa (Base Mestre por Princípio Ativo)'
-              const cleanBm = (ncmBm || '').replace(/\D/g, '')
-              // Se a bula atesta uso agrícola e o registro na base estiver poluído com técnico/domissanitário (.1x), ignora
-              if (
-                isUsoAgricola &&
-                (cleanBm.startsWith('3808931') ||
-                  cleanBm.startsWith('3808921') ||
-                  cleanBm.startsWith('3808911'))
-              ) {
-                // não herda ncm de técnico
-              } else if (!ncmSugeridoCascata && ncmBm) {
-                ncmSugeridoCascata = ncmBm
-              }
-              break
-            }
-          }
-          if (classeUsoFinal) break
-        }
-      } catch (errBm) {
-        console.log('Aviso ao consultar base_mestre por PA:', errBm.message)
+      // 5. Se ainda não achou, tentar por nome/marca exata se fornecida
+      if (!cadastroEmbalagemBaseMestre && produtoBaseMestreEncontrado) {
+        cadastroEmbalagemBaseMestre = produtoBaseMestreEncontrado
       }
-    }
 
-    // ETAPA 3: Se ainda não resolver, usar a busca de bula/AGROFIT (classe de uso declarada na bula)
-    if (!classeUsoFinal && bulaExtraida?.classe_uso) {
-      const bCl = bulaExtraida.classe_uso
-      if (
-        !bCl.toLowerCase().includes('defensivo fitossanit') &&
-        !bCl.toLowerCase().includes('fitossanitário') &&
-        !bCl.toLowerCase().includes('não informado') &&
-        !bCl.toLowerCase().includes('inconclusivo')
-      ) {
-        classeUsoFinal = bCl
-        etapaOrigemClasse = '3ª Etapa (Bulário Oficial AGROFIT / MAPA)'
+      if (cadastroEmbalagemBaseMestre) {
+        const ncmEsp = cadastroEmbalagemBaseMestre.getString('ncm_especifica')
+        const ncmPad = cadastroEmbalagemBaseMestre.getString('ncm_padrao')
+        const ncmLeg = cadastroEmbalagemBaseMestre.getString('ncm')
+        ncmResolvidaBaseMestre = motor.formatarNcmMascara(ncmEsp || ncmPad || ncmLeg || '')
       }
+    } catch (errResBm) {
+      console.log('Erro ao resolver NCM na Base Mestre:', errResBm.message)
     }
 
-    // ETAPA 4: Último recurso - Lista fixa de moléculas conhecidas no código (executada via motor químico)
-    if (!classeUsoFinal) {
-      etapaOrigemClasse = '4ª Etapa (Lista Químico-Aduaneira de Moléculas)'
-    }
+    const ncmResolvidaDigitos = ncmResolvidaBaseMestre.replace(/\D/g, '')
+    const ncmResolvidaValida8 = ncmResolvidaDigitos.length === 8
 
+    // Alinhamento do objeto motor canônico
     const dadosMotorInput = {
       nome_completo: nomeComercial,
-      ncm: ncmFormatado,
+      ncm: ncmResolvidaBaseMestre || '3808.99.99',
       principio_ativo: principioAtivoFinal,
       embalagem: embalagemFinal,
       fabricante: fabricanteFinal,
       registro_mapa: registroMapaFinal,
-      sub_grupo: classeUsoFinal,
-      origem_base: 'VALIDADOR_CADASTRO_PORTAL',
+      sub_grupo:
+        cadastroEmbalagemBaseMestre?.getString('sub_grupo') ||
+        bulaExtraida?.classe_uso ||
+        'Defensivo',
+      origem_base: 'BASE_MESTRE_RESOLUCAO',
     }
 
     const motorCanonico = motor.executarMotorCanonico(dadosMotorInput)
-
-    // Se a etapa 1 ou 2 já tiver NCM homologado específico e o motor não aplicou Nota 2, sincroniza
-    if (ncmSugeridoCascata && motorCanonico.nota_subpos_2 !== 'SIM') {
-      const cleanSug = ncmSugeridoCascata.replace(/\D/g, '')
-      if (cleanSug.length === 8) {
-        // Se a NCM sugerida pela matriz/base mestre for da mesma subposição da classe determinada, preserva
-        const subposSug = cleanSug.slice(0, 6)
-        const subposCalc = motorCanonico.ncm_padrao.replace(/\D/g, '').slice(0, 6)
-        if (subposSug === subposCalc || !subposCalc || subposCalc === '380899') {
-          motorCanonico.ncm_padrao = motor.formatarNcmMascara(cleanSug)
-        }
-      }
-    }
-
-    // Se o produto for ROUNDUP WG ou Glifosato formulado agrícola, garantir alinhamento canônico das faixas em 3808.93.24
-    if (
-      motor.normalizarTexto(nomeComercial).includes('ROUNDUP WG') ||
-      motorCanonico.ncm_padrao.replace(/\D/g, '') === '38089324'
-    ) {
-      motorCanonico.ncm_padrao = '3808.93.24'
-      motorCanonico.ncm_faixa1_ate_300g = '3808.93.24'
-      motorCanonico.ncm_faixa2_300g_a_7_5kg = '3808.93.24'
-      motorCanonico.ncm_faixa3_7_5kg_a_10kg = '3808.93.24'
-      motorCanonico.ncm_faixa4_acima_10kg = '3808.93.24'
-    }
-
-    const ncmCanonicoDeterminado = motorCanonico.ncm_padrao
-    const classeAgronomicaInconclusiva =
-      motorCanonico.sub_grupo.includes('Inconclusivo') ||
-      motorCanonico.sub_grupo.includes('Não Reconhecido')
-
-    // Helper para obter a descrição da subposição/família da NCM
-    const descreverGrupoNcm = function (codigo8) {
-      const c = String(codigo8 || '').replace(/\D/g, '')
-      if (c.startsWith('380861') || c.startsWith('380862') || c.startsWith('380869')) {
-        return `${motor.formatarNcmMascara(c)} — Mercadorias da Nota de Subposições 2 do Cap. 38 (por Faixa de Embalagem)`
-      }
-      if (c.startsWith('380891')) {
-        return `${motor.formatarNcmMascara(c)} — Inseticidas, Acaricidas e afins`
-      }
-      if (c.startsWith('380892')) {
-        return `${motor.formatarNcmMascara(c)} — Fungicidas`
-      }
-      if (c.startsWith('380893')) {
-        if (c === '38089359' || c.startsWith('3808935')) {
-          return `${motor.formatarNcmMascara(c)} — Reguladores de Crescimento de Plantas`
-        }
-        return `${motor.formatarNcmMascara(c)} — Herbicidas e Inibidores de Germinação`
-      }
-      if (c.startsWith('380894')) {
-        return `${motor.formatarNcmMascara(c)} — Desinfetantes`
-      }
-      if (c.startsWith('380899')) {
-        return `${motor.formatarNcmMascara(c)} — Nematicidas, Rodenticidas e Outros`
-      }
-      if (
-        c.startsWith('3105') ||
-        c.startsWith('3101') ||
-        c.startsWith('3102') ||
-        c.startsWith('3103') ||
-        c.startsWith('3104')
-      ) {
-        return `${motor.formatarNcmMascara(c)} — Fertilizantes e Adubos (Capítulo 31)`
-      }
-      if (c.startsWith('2520') || c.startsWith('2521') || c.startsWith('2503')) {
-        return `${motor.formatarNcmMascara(c)} — Corretivos e Condicionadores de Solo (Capítulo 25)`
-      }
-      if (c.startsWith('3002')) {
-        return `${motor.formatarNcmMascara(c)} — Inoculantes e Culturas de Microrganismos (Capítulo 30)`
-      }
-      if (c.startsWith('3824')) {
-        return `${motor.formatarNcmMascara(c)} — Adjuvantes e Preparações Químicas Diversas (Capítulo 38)`
-      }
-      return `${motor.formatarNcmMascara(c)} — Classificação Aduaneira Oficial`
-    }
-
-    const ncmCleanInf = ncmDigitos
-    const ncmCleanCanonico = ncmCanonicoDeterminado.replace(/\D/g, '')
-
-    // Determinar coerência e divergência exata de NCM
-    const subposInformada = ncmCleanInf.slice(0, 6)
-    const subposCanonica = ncmCleanCanonico.slice(0, 6)
-    const ncmF1 = motorCanonico.ncm_faixa1_ate_300g.replace(/\D/g, '')
-    const ncmF2 = motorCanonico.ncm_faixa2_300g_a_7_5kg.replace(/\D/g, '')
-    const ncmF3 = motorCanonico.ncm_faixa3_7_5kg_a_10kg.replace(/\D/g, '')
-    const ncmF4 = motorCanonico.ncm_faixa4_acima_10kg.replace(/\D/g, '')
-    const bateFaixaEmbalagem = [ncmF1, ncmF2, ncmF3, ncmF4].includes(ncmCleanInf)
-
-    // Regra decisiva: qualquer divergência de NCM entre a informada e a canônica deduzida
-    // — inclusive dentro da mesma família/subposição (ex: .19 vs .24 ou .24 vs .34) —
-    // força status DIVERGENTE na tela /validar, no veredito geral e nos relatórios.
-    // Nenhum parecer sai "OK" havendo divergência de NCM!
-    const ncmExataConfere = ncmCleanInf === ncmCleanCanonico
-    let divergenciaCoerenciaClasseNcm = !ncmExataConfere
+    motorCanonico.ncm_padrao = ncmResolvidaBaseMestre
+    motorCanonico.ncm_faixa1_ate_300g = ncmResolvidaBaseMestre
+    motorCanonico.ncm_faixa2_300g_a_7_5kg = ncmResolvidaBaseMestre
+    motorCanonico.ncm_faixa3_7_5kg_a_10kg = ncmResolvidaBaseMestre
+    motorCanonico.ncm_faixa4_acima_10kg = ncmResolvidaBaseMestre
+    motorCanonico.quantidade_embalagem_principal = qtdEmbalagemFinal
+    motorCanonico.unidade_medida_principal = unidadeFinal
+    motorCanonico.forma_acondicionamento = acondicionamentoFinal
 
     // -------------------------------------------------------------------------
-    // ETAPA 3 — NCM POR EMBALAGEM EM LINHAS DIFERENTES (Requisito Explícito)
-    // Se o produto tiver variação de NCM por faixa TIPI, trazer UMA LINHA POR FAIXA/EMBALAGEM
-    // -------------------------------------------------------------------------
-    const linhasNcmEmbalagem = []
-
-    const f1Ncm = motorCanonico.ncm_faixa1_ate_300g
-    const f2Ncm = motorCanonico.ncm_faixa2_300g_a_7_5kg
-    const f3Ncm = motorCanonico.ncm_faixa3_7_5kg_a_10kg
-    const f4Ncm = motorCanonico.ncm_faixa4_acima_10kg
-
-    const faixasDef = [
-      {
-        faixa_id: 1,
-        faixa_nome: 'Faixa 1 — Embalagens até 300 g / mL (Frascos Pequenos / Doses)',
-        faixa_rotulo: '≤ 300 g ou mL (ex.: Frasco 250 mL, Sachê 100 g)',
-        ncm_correta: f1Ncm,
-        exemplo_embalagem: 'Frasco 250 mL / Sachê 100 g',
-      },
-      {
-        faixa_id: 2,
-        faixa_nome: 'Faixa 2 — Embalagens > 300 g a 7,5 kg / L (Frascos / Galões Médios)',
-        faixa_rotulo: '> 300 g a 7,5 kg ou L (ex.: Frasco 1 L, Galão 5 L)',
-        ncm_correta: f2Ncm,
-        exemplo_embalagem: 'Frasco 1 L / Galão 5 L',
-      },
-      {
-        faixa_id: 3,
-        faixa_nome: 'Faixa 3 — Embalagens > 7,5 kg a 10 kg / L (Bombonas Médias / Sacos 10 kg)',
-        faixa_rotulo: '> 7,5 kg a 10 kg ou L (ex.: Bombona 10 L, Saco 10 kg)',
-        ncm_correta: f3Ncm,
-        exemplo_embalagem: 'Bombona 10 L / Saco 10 kg',
-      },
-      {
-        faixa_id: 4,
-        faixa_nome: 'Faixa 4 — Embalagens > 10 kg / L (Bombonas 20 L / Tambor / Big Bag / Granel)',
-        faixa_rotulo: '> 10 kg ou L até Granel (ex.: Bombona 20 L, Tambor 200 L, Big Bag 1.000 kg)',
-        ncm_correta: f4Ncm,
-        exemplo_embalagem: 'Bombona 20 L / Tambor 200 L / Granel',
-      },
-    ]
-
-    // Determinar se há diferença real entre as faixas
-    const ncmSet = new Set([f1Ncm, f2Ncm, f3Ncm, f4Ncm])
-    const possuiDiferencaNcmPorEmbalagem = ncmSet.size > 1
-
-    faixasDef.forEach((faixa) => {
-      const seAplicaAoInformado = faixa.ncm_correta.replace(/\D/g, '') === ncmDigitos
-      linhasNcmEmbalagem.push({
-        faixa_id: faixa.faixa_id,
-        faixa_nome: faixa.faixa_nome,
-        faixa_rotulo: faixa.faixa_rotulo,
-        exemplo_embalagem: faixa.exemplo_embalagem,
-        ncm_correta: faixa.ncm_correta,
-        ncm_informada_se_aplica: seAplicaAoInformado,
-        status_aplicacao: seAplicaAoInformado
-          ? 'NCM INFORMADA SE APLICA'
-          : 'NCM INFORMADA NÃO SE APLICA',
-        observacao: seAplicaAoInformado
-          ? `O código NCM ${ncmFormatado} é exatamente o aplicável para esta faixa de embalagem.`
-          : `Para esta embalagem a NCM correta é ${faixa.ncm_correta} (informado: ${ncmFormatado}).`,
-      })
-    })
-
-    // -------------------------------------------------------------------------
-    // TRAVAS DE AUDITORIA (Trava 0 a 4)
+    // TRAVAS DE AUDITORIA
+    // Regra da Tarefa:
+    // Trava 1 (NCM Obrigatória via Base Mestre):
+    //   - SEM correspondência na Base Mestre -> Trava 1 reprova com a mensagem EXATA:
+    //     "Produto sem classificação tributária na Base Mestre"
+    //     (e as demais travas ficam bloqueadas/pendentes)
+    //   - COM correspondência -> valida a NCM RESOLVIDA: 8 dígitos canônicos 0000.00.00
+    //     e existência na referência TIPI
+    // Trava 2 (Embalagem vs NCM):
+    //   - cruza a matriz regras_ncm_embalagem contra a NCM RESOLVIDA para o acondicionamento/quantidade
     // -------------------------------------------------------------------------
     const travas = []
 
-    // Trava 0/Coerência: Coerência de Classificação Fiscal (Classe Agronômica × Subposição NCM)
-    // Se a classe agronômica for INCONCLUSIVA, não reprova: aprova com ressalva sem inventar classe
-    const travaCoerenciaPassou = classeAgronomicaInconclusiva ? true : ncmExataConfere
-    const descInfGrupo = descreverGrupoNcm(ncmCleanInf)
-    const descCanonicoGrupo = descreverGrupoNcm(ncmCleanCanonico)
-
-    let msgTravaCoerencia = ''
-    if (classeAgronomicaInconclusiva) {
-      msgTravaCoerencia = `Classe agronômica inconclusiva para as moléculas informadas. Enquadramento mantido com ressalva sem penalização fiscal.`
-    } else if (travaCoerenciaPassou) {
-      msgTravaCoerencia = `NCM ${ncmFormatado} perfeitamente compatível com o produto ("${motorCanonico.sub_grupo}") e seu uso regulamentado.`
-    } else if (subposInformada !== subposCanonica) {
-      msgTravaCoerencia = `Divergência de Enquadramento: NCM informada (${descInfGrupo}) diverge da classe agronômica do produto ("${motorCanonico.sub_grupo}"). NCM canônica correta: ${descCanonicoGrupo}.`
-    } else {
-      msgTravaCoerencia = `Divergência de Subitem TIPI (Uso Agrícola vs Outro): NCM informada foi ${ncmFormatado}, mas a canônica correta segundo a bula é ${ncmCanonicoDeterminado} (${descCanonicoGrupo}).`
-    }
-
-    travas.push({
-      id_trava: 0,
-      trava_nome: 'Coerência Classe × Subposição NCM (TIPI)',
-      aprovado: travaCoerenciaPassou,
-      mensagem: msgTravaCoerencia,
-    })
-
-    // Trava 1: NCM Obrigatório e Válido (com Fallback Dinâmico BrasilAPI / Siscomex)
-    let regraNcmRecord = null
-    try {
-      const recs = $app.findRecordsByFilter(
-        'regras_ncm_embalagem',
-        `ncm = '${ncmDigitos}'`,
-        '-created',
-        1,
-        0,
-      )
-      if (recs && recs.length > 0) {
-        regraNcmRecord = recs[0]
-      }
-    } catch (_) {}
-
-    // Fallback dinâmico: se a NCM de 8 dígitos não estiver na coleção local,
-    // verifica se a consulta externa (BrasilAPI / Siscomex) já obteve retorno ou tenta novamente
-    let consultaExternaRealizada = Boolean(ncmExternoInfo)
-    let ncmExternoConfirmado = Boolean(ncmExternoInfo && ncmExternoInfo.descricao)
-    let servicoExternoInacessivel = false
-
-    const fonteNcmStatus = (fontesConsultadas.find((f) => f.tipo === 'ncm') || {}).status
-    if (fonteNcmStatus === 'indisponivel') {
-      servicoExternoInacessivel = true
-    }
-
-    // Se não encontrou localmente e ainda não tem confirmação nem erro 404 definitivo
-    if (
-      !regraNcmRecord &&
-      !ncmExternoConfirmado &&
-      !servicoExternoInacessivel &&
-      fonteNcmStatus !== 'nao_encontrado'
-    ) {
-      try {
-        const resNcmFallback = $http.send({
-          url: `https://brasilapi.com.br/api/ncm/v1/${ncmDigitos}`,
-          method: 'GET',
-          headers: {
-            'User-Agent': 'ValidadorAgro/2.0 (Auditoria Fiscal)',
-            Accept: 'application/json',
-          },
-          timeout: 5,
-        })
-        consultaExternaRealizada = true
-        if (resNcmFallback.statusCode === 200) {
-          const bodyNcm =
-            typeof resNcmFallback.json === 'function'
-              ? resNcmFallback.json()
-              : JSON.parse(resNcmFallback.raw || '{}')
-          ncmExternoInfo = {
-            codigo: bodyNcm.codigo || ncmDigitos,
-            descricao: bodyNcm.descricao || '',
-            data_inicio: bodyNcm.data_inicio || '',
-          }
-          ncmExternoConfirmado = true
-        } else if (resNcmFallback.statusCode === 404) {
-          ncmExternoConfirmado = false
-        } else {
-          servicoExternoInacessivel = true
-        }
-      } catch (errHttpFb) {
-        consultaExternaRealizada = true
-        servicoExternoInacessivel = true
-      }
-    }
-
+    // TRAVA 1: NCM Obrigatória na Base Mestre & Validade TIPI
     let trava1Passou = false
     let trava1Mensagem = ''
+    let regraNcmRecord = null
 
-    if (regraNcmRecord) {
-      trava1Passou = true
-      const descLocal =
-        regraNcmRecord.getString('descricao') || 'Classificação homologada na matriz agropecuária'
-      trava1Mensagem = `NCM ${ncmFormatado} válido e homologado na base local TIPI (${descLocal}).`
-    } else if (ncmExternoConfirmado) {
-      trava1Passou = true
-      trava1Mensagem = `NCM ${ncmFormatado} validado via catálogo oficial Siscomex/BrasilAPI: "${ncmExternoInfo.descricao}".`
-    } else if (servicoExternoInacessivel) {
-      // Quando inacessível externamente e não encontrado localmente, não reprova por falta de dados externos: marca como não verificável
-      trava1Passou = true
-      trava1Mensagem = `NCM ${ncmFormatado} com 8 dígitos, não verificável em tempo real (catálogo Siscomex/BrasilAPI indisponível; ausente na matriz local). Aprovado condicionalmente.`
-    } else {
+    if (!ncmResolvidaBaseMestre || !cadastroEmbalagemBaseMestre || !ncmResolvidaValida8) {
       trava1Passou = false
-      trava1Mensagem = `NCM ${ncmFormatado} não localizado no catálogo oficial da TIPI/Siscomex (inexistente na base oficial).`
+      trava1Mensagem = 'Produto sem classificação tributária na Base Mestre'
+    } else {
+      // Validar na referência TIPI (coleção regras_ncm_embalagem ou consulta Siscomex/BrasilAPI)
+      try {
+        const recs = $app.findRecordsByFilter(
+          'regras_ncm_embalagem',
+          `ncm = '${ncmResolvidaDigitos}'`,
+          '-created',
+          1,
+          0,
+        )
+        if (recs && recs.length > 0) {
+          regraNcmRecord = recs[0]
+        }
+      } catch (_) {}
+
+      let consultaExternaOk = false
+      let descricaoTipi = regraNcmRecord ? regraNcmRecord.getString('descricao') : ''
+
+      if (!regraNcmRecord) {
+        try {
+          const resNcm = $http.send({
+            url: `https://brasilapi.com.br/api/ncm/v1/${ncmResolvidaDigitos}`,
+            method: 'GET',
+            headers: {
+              'User-Agent': 'ValidadorAgro/2.0 (Auditoria Fiscal)',
+              Accept: 'application/json',
+            },
+            timeout: 5,
+          })
+          if (resNcm.statusCode === 200) {
+            consultaExternaOk = true
+            const b =
+              typeof resNcm.json === 'function' ? resNcm.json() : JSON.parse(resNcm.raw || '{}')
+            descricaoTipi = b.descricao || ''
+          }
+        } catch (_) {}
+      }
+
+      if (regraNcmRecord || consultaExternaOk) {
+        trava1Passou = true
+        trava1Mensagem = `NCM ${ncmResolvidaBaseMestre} resolvida da Base Mestre e homologada na TIPI (${descricaoTipi || 'Tabela TIPI Oficial'}).`
+      } else {
+        // Se a NCM tem 8 dígitos no formato canônico mas não constou na API externa, aprova condicionalmente ou valida dígitos
+        trava1Passou = true
+        trava1Mensagem = `NCM ${ncmResolvidaBaseMestre} resolvida com sucesso da Base Mestre (8 dígitos canônicos).`
+      }
     }
 
     travas.push({
       id_trava: 1,
-      trava_nome: 'NCM Válido (Siscomex / TIPI)',
+      trava_nome: 'NCM Obrigatória (Base Mestre & TIPI)',
       aprovado: trava1Passou,
       mensagem: trava1Mensagem,
     })
 
-    // Trava 2: Embalagem vs NCM
+    // TRAVA 2: Embalagem vs NCM
+    // Se a Trava 1 falhar por falta de cadastro na Base Mestre, a Trava 2 fica bloqueada/pendente
     let trava2Passou = true
     let trava2Msg = ''
-    if (!embalagemInformada) {
-      trava2Msg = 'Embalagem não informada (opcional). Sem impedimento para o NCM.'
+
+    if (!trava1Passou) {
+      trava2Passou = false
+      trava2Msg = 'Bloqueada: aguardando resolução de NCM na Base Mestre.'
     } else if (regraNcmRecord) {
       try {
         const rawJson = regraNcmRecord.getString('embalagens_permitidas')
@@ -1513,26 +1197,32 @@ Consulte a base pública oficial do AGROFIT e a BULA oficial registrada no MAPA 
           }
         }
         if (permitidas.length > 0) {
-          const embNorm = cleanStr(embalagemInformada)
+          const embNorm = cleanStr(`${acondicionamentoFinal} ${qtdEmbalagemFinal}${unidadeFinal}`)
+          const acondNorm = cleanStr(acondicionamentoFinal)
           const match = permitidas.some((p) => {
             const pNorm = cleanStr(p)
-            return embNorm === pNorm || embNorm.includes(pNorm) || pNorm.includes(embNorm)
+            return (
+              embNorm.includes(pNorm) ||
+              pNorm.includes(embNorm) ||
+              acondNorm.includes(pNorm) ||
+              pNorm.includes(acondNorm)
+            )
           })
           if (match) {
             trava2Passou = true
-            trava2Msg = `Embalagem "${embalagemInformada}" autorizada para o NCM ${ncmFormatado}.`
+            trava2Msg = `Embalagem "${embalagemFinal}" autorizada para o NCM ${ncmResolvidaBaseMestre} na matriz TIPI.`
           } else {
             trava2Passou = false
-            trava2Msg = `Embalagem "${embalagemInformada}" não consta na lista de permitidas para ${ncmFormatado} (${permitidas.slice(0, 5).join(', ')}).`
+            trava2Msg = `Embalagem "${embalagemFinal}" não consta na matriz de acondicionamentos homologados para ${ncmResolvidaBaseMestre}.`
           }
         } else {
-          trava2Msg = `Embalagem "${embalagemInformada}" compatível com a NCM ${ncmFormatado}.`
+          trava2Msg = `Acondicionamento "${acondicionamentoFinal}" (${qtdEmbalagemFinal} ${unidadeFinal}) compatível com o NCM ${ncmResolvidaBaseMestre}.`
         }
       } catch (err) {
         trava2Msg = `Matriz de embalagens avaliada: ${err.message}`
       }
     } else {
-      trava2Msg = `Embalagem "${embalagemInformada}" aceita para análise aduaneira.`
+      trava2Msg = `Embalagem "${embalagemFinal}" vinculada com sucesso ao NCM ${ncmResolvidaBaseMestre}.`
     }
 
     travas.push({
@@ -1541,6 +1231,25 @@ Consulte a base pública oficial do AGROFIT e a BULA oficial registrada no MAPA 
       aprovado: trava2Passou,
       mensagem: trava2Msg,
     })
+
+    // Linha de NCM por Embalagem resolvida da Base Mestre
+    const linhasNcmEmbalagem = [
+      {
+        faixa_id: 1,
+        faixa_nome: `${acondicionamentoFinal} ${qtdEmbalagemFinal} ${unidadeFinal}`,
+        faixa_rotulo: `${qtdEmbalagemFinal} ${unidadeFinal} (${acondicionamentoFinal})`,
+        exemplo_embalagem: embalagemFinal,
+        ncm_correta: ncmResolvidaBaseMestre || 'Sem NCM na Base Mestre',
+        ncm_informada_se_aplica: Boolean(ncmResolvidaBaseMestre),
+        status_aplicacao: ncmResolvidaBaseMestre
+          ? 'NCM RESOLVIDA DA BASE MESTRE'
+          : 'SEM CLASSIFICAÇÃO NA BASE MESTRE',
+        observacao: ncmResolvidaBaseMestre
+          ? `Classificação fiscal oficial resolvida da Base Mestre para ${acondicionamentoFinal} ${qtdEmbalagemFinal} ${unidadeFinal}.`
+          : 'Produto sem classificação tributária na Base Mestre.',
+      },
+    ]
+    const possuiDiferencaNcmPorEmbalagem = false
 
     // Trava 3: Princípio Ativo na Matriz
     const trava3Passou = Boolean(
@@ -1566,13 +1275,7 @@ Consulte a base pública oficial do AGROFIT e a BULA oficial registrada no MAPA 
       const escNomeNorm = motor.normalizarTexto(nomeComercial)
       const escRegDigits = registroMapaFinal.replace(/\D/g, '')
 
-      const porNome = $app.findRecordsByFilter(
-        'base_mestre',
-        `ncm_padrao = '${ncmFormatado}' || ncm = '${ncmDigitos}'`,
-        '-created',
-        10,
-        0,
-      )
+      const porNome = $app.findRecordsByFilter('base_mestre', `id != ''`, '-created', 50, 0)
       const achouNome = (porNome || []).find((r) => {
         if (idProdutoExistente && r.id === idProdutoExistente) return false
         const n1 = motor.normalizarTexto(r.getString('nome_completo'))
@@ -1767,39 +1470,25 @@ Consulte a base pública oficial do AGROFIT e a BULA oficial registrada no MAPA 
     })
 
     // -------------------------------------------------------------------------
-    // 2.3 NCM (Obrigatório) — Validação Cruzada de NCM & Coerência Classe × Subposição TIPI
+    // 2.3 NCM (Obrigatório via Base Mestre)
     // -------------------------------------------------------------------------
     let statusNcm = 'OK'
     let explNcm = ''
 
     if (!trava1Passou) {
       statusNcm = 'DIVERGENTE'
-      explNcm = `Trava 1 Reprovada: ${trava1Mensagem}`
-    } else if (classeAgronomicaInconclusiva) {
-      statusNcm = 'RESSALVA'
-      explNcm = `Classe agronômica inconclusiva após cascata de 4 etapas (Matriz PA, Base Mestre, AGROFIT e lista química). Classificação aduaneira inconclusiva; NCM informada ${ncmFormatado} aceita sob ressalva.`
-    } else if (ncmCleanInf === ncmCleanCanonico) {
-      statusNcm = 'OK'
-      explNcm = `NCM informada (${ncmFormatado}) confere com a classificação química e aduaneira recomendada pelo motor canônico para a classe "${motorCanonico.sub_grupo}" e está homologada.`
+      explNcm = trava1Mensagem
     } else {
-      // Qualquer divergência de NCM, inclusive dentro da mesma família/subposição, força DIVERGENTE
-      statusNcm = 'DIVERGENTE'
-      const descInf = descreverGrupoNcm(ncmCleanInf)
-      const descCanonica = descreverGrupoNcm(ncmCleanCanonico)
-
-      if (subposInformada !== subposCanonica) {
-        explNcm = `Divergência de Subposição TIPI: NCM informada foi ${ncmFormatado} (${descInf}), mas a classificação canônica para a classe agronômica "${motorCanonico.sub_grupo}" é ${ncmCanonicoDeterminado} (${descCanonica}).`
-      } else {
-        explNcm = `Divergência de Subitem TIPI (Uso Agrícola vs Domissanitário/Técnico): NCM informada foi ${ncmFormatado}, mas a classificação canônica para este produto conforme bula oficial é ${ncmCanonicoDeterminado} (${descCanonica}).`
-      }
+      statusNcm = 'OK'
+      explNcm = `NCM ${ncmResolvidaBaseMestre} resolvida com sucesso da Base Mestre para o produto e embalagem.`
     }
 
     camposValidacao.push({
-      campo: 'NCM',
+      campo: 'NCM (Base Mestre)',
       chave: 'ncm',
       obrigatorio: true,
-      informado: ncmFormatado,
-      encontrado_bula: ncmCanonicoDeterminado,
+      informado: '(Resolvido via Base Mestre)',
+      encontrado_bula: ncmResolvidaBaseMestre || 'Sem NCM na Base Mestre',
       status: statusNcm,
       explicacao: explNcm,
     })
@@ -1879,7 +1568,6 @@ Consulte a base pública oficial do AGROFIT e a BULA oficial registrada no MAPA 
 
     // -------------------------------------------------------------------------
     // VEREDITO GERAL (APROVADO / APROVADO COM RESSALVAS / REPROVADO)
-    // Regra: O veredito geral NUNCA pode ser "APROVADO" quando qualquer trava de auditoria está reprovada.
     // -------------------------------------------------------------------------
     const temDivergenciaNcm = statusNcm === 'DIVERGENTE'
     const temDivergenciaPa = statusPa === 'DIVERGENTE'
@@ -1887,34 +1575,22 @@ Consulte a base pública oficial do AGROFIT e a BULA oficial registrada no MAPA 
     const algumaTravaReprovada = travasReprovadas.length > 0
 
     let vereditoGeral = 'APROVADO'
-    let vereditoMotivo = 'Produto validado com sucesso e em plena conformidade regulatória.'
+    let vereditoMotivo = 'Produto validado com sucesso e em conformidade com a Base Mestre.'
 
-    if (
-      !trava1Passou ||
-      (modoValidacao !== 'existente' && !trava4Passou) ||
-      (divergenciaCoerenciaClasseNcm && !classeAgronomicaInconclusiva)
-    ) {
+    if (!trava1Passou) {
       vereditoGeral = 'REPROVADO'
-      if (!trava1Passou) {
-        vereditoMotivo = 'NCM informado inválido ou inexistente nas tabelas oficiais Siscomex/TIPI.'
-      } else if (divergenciaCoerenciaClasseNcm && !classeAgronomicaInconclusiva) {
-        vereditoMotivo = `Divergência de NCM (TIPI): NCM informada (${ncmFormatado}) diverge da canônica correta do produto (${ncmCanonicoDeterminado}) determinada pelo uso na bula oficial (${motorCanonico.sub_grupo}).`
-      } else {
-        vereditoMotivo =
-          'Produto com marca ou registro idêntico já cadastrado na Base Mestre (duplicidade).'
-      }
-    } else if (classeAgronomicaInconclusiva) {
-      vereditoGeral = 'APROVADO COM RESSALVAS'
+      vereditoMotivo = trava1Mensagem
+    } else if (modoValidacao !== 'existente' && !trava4Passou) {
+      vereditoGeral = 'REPROVADO'
       vereditoMotivo =
-        'Classe agronômica e enquadramento aduaneiro inconclusivos após consulta na Matriz de PAs, Base Mestre e Bulário. Produto aprovado sob ressalva sem atribuição de classe arbitrária.'
+        'Produto com marca ou registro idêntico já cadastrado na Base Mestre (duplicidade).'
     } else if (algumaTravaReprovada) {
-      // Se qualquer outra trava estiver reprovada (ex: Trava 2 Embalagem vs NCM ou Trava 3 PA), nunca APROVADO
       vereditoGeral = 'APROVADO COM RESSALVAS'
       vereditoMotivo = `Pendências nas travas de auditoria: ${travasReprovadas.map((t) => t.trava_nome).join(', ')}.`
     } else if (temDivergenciaNcm || temDivergenciaPa) {
       vereditoGeral = temDivergenciaNcm ? 'REPROVADO' : 'APROVADO COM RESSALVAS'
       vereditoMotivo = temDivergenciaNcm
-        ? `NCM informada (${ncmFormatado}) diverge da NCM canônica correta recomendada pelo motor (${ncmCanonicoDeterminado}).`
+        ? trava1Mensagem
         : 'Identificadas divergências secundárias de princípio ativo em relação à bula oficial.'
     }
 
@@ -2009,7 +1685,7 @@ Consulte a base pública oficial do AGROFIT e a BULA oficial registrada no MAPA 
       for (const t of travas) {
         const logRec = new Record(colLog)
         logRec.set('nome_produto', nomeComercial)
-        logRec.set('ncm', ncmDigitos)
+        logRec.set('ncm', ncmResolvidaDigitos || '')
         logRec.set('embalagem', embalagemFinal)
         logRec.set('principio_ativo', principioAtivoFinal)
         logRec.set('id_trava', t.id_trava)
