@@ -535,23 +535,46 @@ export function parsearTextoBula(markdown: string, pdfFileName?: string, _trunca
   }
 
   const REGEX_SUFIXOS_EMPRESA =
-    /\b(?:LTDA|S\.A\.|S\/A|S\.R\.L\.|LIMITED|LTD\.?|L\.P\.|LP|B\.V\.|BV|INC\.?|CORP\.?|GMBH|S\.L\.|A\.G\.|PVT\.?\s+LTD\.?)\b/i
+    /(?:\b(?:LTDA|LIMITED|LTD|LP|BV|INC|CORP|GMBH|AG|SAS|NV|LLC|SRL|SACIF|SAIC|SL)\b|\bS[/.]?A\.?(?!\w)|\bS[/.]?R[/.]?L\.?(?!\w)|\bB[/.]?V\.?(?!\w)|\bL[/.]?P\.?(?!\w)|\bS[/.]?L\.?(?!\w)|\bA[/.]?G\.?(?!\w)|\bPVT\.?\s+LTD\.?(?!\w)|\bS\.?A\.?C\.?I\.?F\.?(?!\w)|\bS\.?A\.?I\.?C\.?(?!\w)|\bN\.?V\.?(?!\w)|\bS\.?A\.?S\.?(?!\w))/i
+
+  const REGEX_AVISO_LEGAL_MARCA =
+    /(?:®|™|\bmarca\s+registrada\b|\btrade\s*mark\b|\bpropriedade\s+(?:intelectual|industrial)\b|\bdireitos\s+reservados\b|\ball\s+rights\s+reserved\b|\baviso\s+legal\b)/i
 
   function extrairNomesEmpresaDeLinha(str: string) {
     if (!str) return []
     const s = str.trim()
+
+    if (
+      REGEX_AVISO_LEGAL_MARCA.test(s) &&
+      !/(?:LTDA|S\.A\.|S\/A|S\.R\.L\.|LIMITED|BV|LP)\s*[-–—:]/i.test(s)
+    ) {
+      if (
+        /^(?:®\s*)?Marca\s+registrada\b/i.test(s) ||
+        /Marca\s+registrada\s+[A-Za-z\s]+(?:LP|USA|BR)/i.test(s)
+      ) {
+        return []
+      }
+    }
+
     const regexNomeCorp =
-      /([A-ZÁÉÍÓÚÂÊÔÃÕÇ][A-Za-zÁÉÍÓÚÂÊÔÃÕÇ0-9&.\-'\s]{2,60}?\b(?:LTDA|S\.A\.|S\/A|S\.R\.L\.|LIMITED|LTD|L\.P\.|LP|B\.V\.|BV|INC|CORP|GMBH|S\.L\.|A\.G\.|PVT\.\s+LTD)\.?)/gi
+      /([A-ZÁÉÍÓÚÂÊÔÃÕÇ][A-Za-zÁÉÍÓÚÂÊÔÃÕÇ0-9&.\-'\s]{1,60}?\b(?:LTDA|LIMITED|LTD|LP|BV|INC|CORP|GMBH|AG|SAS|NV|LLC|SRL|SACIF|SAIC|SL)(?:\.|\b)|[A-ZÁÉÍÓÚÂÊÔÃÕÇ][A-Za-zÁÉÍÓÚÂÊÔÃÕÇ0-9&.\-'\s]{1,60}?\b(?:S[/.]?A\.?|S[/.]?R[/.]?L\.?|B[/.]?V\.?|L[/.]?P\.?|S[/.]?L\.?|A[/.]?G\.?|PVT\.?\s+LTD\.?|S\.?A\.?C\.?I\.?F\.?|S\.?A\.?I\.?C\.?|N\.?V\.?|S\.?A\.?S\.?)(?!\w))/gi
+
     const matches: Array<{ nome: string; index: number }> = []
     let m: RegExpExecArray | null
     while ((m = regexNomeCorp.exec(s)) !== null) {
-      let nome = m[1].trim().replace(/^[-–—,;:.\s]+|[-–—,;:.\s]+$/g, '')
+      let nome = m[1].trim().replace(/^[-–—,;:\s]+|[-–—,;:\s]+$/g, '')
+
+      if (REGEX_AVISO_LEGAL_MARCA.test(nome) || /^(?:®|™|Marca\s+registrada)/i.test(nome)) {
+        continue
+      }
+
       nome = nome
         .replace(
           /^(?:Av\.?|Avenida|Rua|Rod\.?|Rodovia|CEP\s*[\d\-.:]+|SP\s*-\s*Tel[^\s]*|Tel[^\s]*|CDA\/SP|CDA\b|Registro\s+Estadual[^\s]*)\s+/i,
           '',
         )
         .trim()
+
       if (nome.length >= 3 && !isLinhaEndereco(nome) && REGEX_SUFIXOS_EMPRESA.test(nome)) {
         matches.push({
           nome: nome,
@@ -564,7 +587,10 @@ export function parsearTextoBula(markdown: string, pdfFileName?: string, _trunca
 
   function sanitizarRazaoSocial(str: string): string {
     if (!str) return ''
-    let s = str.trim().replace(/^[-–—,;:.\s]+|[-–—,;:.\s]+$/g, '')
+    let s = str
+      .trim()
+      .replace(/^[-–—,;:.\s]+/, '')
+      .replace(/[-–—,;:\s]+$/, '')
     s = s.replace(
       /\s*[-–—]\s*(?:Av\.?|Rua|CEP|CNPJ|Tel|Rod\.|Zarate\s+Plant|Luling\s+Plant|Muscatine\s+Plant|Antwerp\s+Plant).*$/i,
       '',
@@ -573,6 +599,7 @@ export function parsearTextoBula(markdown: string, pdfFileName?: string, _trunca
       /^(?:Av\.?|Avenida|Rua|Rod\.?|Rodovia|Distrito|Bairro|CEP\b[^\s]*|CDA\/SP|SP\s+)\s*/i,
       '',
     )
+    s = s.replace(/^(?:®\s*)?Marca\s+registrada\s+/i, '')
     return s.trim()
   }
 
@@ -583,7 +610,15 @@ export function parsearTextoBula(markdown: string, pdfFileName?: string, _trunca
     if (/Argentina|Zarate|Zárate/i.test(str)) return 'Argentina'
     if (/E\.U\.A\.|USA|United States|Louisiana|Iowa|Luling|Muscatine/i.test(str)) return 'E.U.A.'
     if (/Bélgica|Belgium|Antwerp|Antuérpia/i.test(str)) return 'Bélgica'
+    if (/Col[ôo]mbia|Colombia|Soledad|Atl[áa]ntico/i.test(str)) return 'Colômbia'
     if (/China/i.test(str)) return 'China'
+    if (/Alemanha|Germany|Leverkusen|Trostberg/i.test(str)) return 'Alemanha'
+    if (/Su[íi][çc]a|Switzerland|Muttenz/i.test(str)) return 'Suíça'
+    if (/Fran[çc]a|France/i.test(str)) return 'França'
+    if (/Jap[ãa]o|Japan/i.test(str)) return 'Japão'
+    if (/Guatemala|Amatitl[áa]n/i.test(str)) return 'Guatemala'
+    if (/M[ée]xico/i.test(str)) return 'México'
+    if (/Chile/i.test(str)) return 'Chile'
     return 'Brasil'
   }
 
@@ -603,6 +638,7 @@ export function parsearTextoBula(markdown: string, pdfFileName?: string, _trunca
     if (/Luling/i.test(str)) return { municipio: 'Luling', uf: 'LA' }
     if (/Muscatine/i.test(str)) return { municipio: 'Muscatine', uf: 'IA' }
     if (/Antu[ée]rpia|Antwerp/i.test(str)) return { municipio: 'Antuérpia', uf: '' }
+    if (/Soledad/i.test(str)) return { municipio: 'Soledad', uf: 'Atlántico' }
     if (/Cuddalore/i.test(str)) return { municipio: 'Cuddalore', uf: '' }
     return { municipio: '', uf: '' }
   }
@@ -622,7 +658,7 @@ export function parsearTextoBula(markdown: string, pdfFileName?: string, _trunca
     pais: string,
     cnpj?: string,
   ): string {
-    if (cnpj && cnpj.length >= 14) return cnpj
+    if (cnpj && cnpj.length >= 14 && !cnpj.startsWith('EXT-')) return cnpj
     const str = `${razaoSocial} ${endereco} ${pais}`.toUpperCase()
     if (str.includes('ZARATE') || str.includes('ZÁRATE') || str.includes('ARGENTINA')) {
       return 'EXT-ARG-ZARATE'
@@ -641,13 +677,16 @@ export function parsearTextoBula(markdown: string, pdfFileName?: string, _trunca
     ) {
       return 'EXT-BEL-ANTWERP'
     }
+    if (str.includes('COLOMBIA') || str.includes('COLÔMBIA') || str.includes('SOLEDAD')) {
+      return 'EXT-COL-SOLEDAD'
+    }
     if (str.includes('CUDDALORE') || str.includes('INDIA') || str.includes('ÍNDIA')) {
       return 'EXT-IND-CUDDALORE'
     }
     if (str.includes('CANELONES') || str.includes('JUANICÓ') || str.includes('URUGUAI')) {
       return 'EXT-URY-CANELONES'
     }
-    const paisCode = pais === 'Brasil' ? 'BR' : pais ? pais.slice(0, 3).toUpperCase() : 'EXT'
+    const paisCode = pais === 'Brasil' ? 'EXT' : pais ? pais.slice(0, 3).toUpperCase() : 'EXT'
     const planta = extrairPlantaUnidade(endereco)
     if (planta) {
       const pNome = planta
@@ -663,23 +702,25 @@ export function parsearTextoBula(markdown: string, pdfFileName?: string, _trunca
   const SECAO_CABECALHO_MAP = [
     {
       tipo: 'Titular do Registro',
-      inicio: /TITULAR\s+DO\s+REGISTRO/i,
+      inicio: /(?:TITULAR(?:ES)?\s+DO\s+REGISTRO|REGISTRANTE\b)/i,
     },
     {
       tipo: 'Fabricante do Produto Técnico',
-      inicio: /FABRICANTE\s+DO\s+PRODUTO\s+T[ÉE]CNICO/i,
+      inicio:
+        /(?:FABRICANTE[S\s(\)]*DO\s+PRODUTO\s+T[ÉE]CNICO|FABRICANTE\s+T[ÉE]CNICO|PRODUTO\s+T[ÉE]CNICO\s*:)/i,
     },
     {
       tipo: 'Formulador',
-      inicio: /FORMULADOR\s*:/i,
+      inicio: /(?:^|[\n\r#|])\s*FORMULADOR(?:ES)?(?:\([S)]\))?\s*:/i,
     },
     {
       tipo: 'Manipulador',
-      inicio: /MANIPULADOR\s*:/i,
+      inicio: /(?:^|[\n\r#|])\s*MANIPULADOR(?:ES)?(?:\([S)]\))?\s*:/i,
     },
     {
       tipo: 'Importador',
-      inicio: /IMPORTADOR\s*:/i,
+      inicio:
+        /(?:^|[\n\r#|])\s*(?!\(\*\))\s*IMPORTADOR(?:ES)?(?:\s+DO\s+PRODUTO\s+FORMULADO)?\s*:/i,
     },
   ]
 
@@ -746,17 +787,39 @@ export function parsearTextoBula(markdown: string, pdfFileName?: string, _trunca
 
     for (let k = 0; k < linhasSec.length; k++) {
       const ln = linhasSec[k]
+
       if (
-        ln.toUpperCase().includes('REGISTRADO NO MINISTÉRIO') ||
-        /^\d{4,6}$/.test(ln) ||
-        ln.startsWith('(*)IMPORTADOR') ||
-        ln.startsWith('IMPORTADOR (PRODUTO')
+        REGEX_AVISO_LEGAL_MARCA.test(ln) &&
+        !/(?:LTDA|S\.A\.|S\/A|S\.R\.L\.|LIMITED|BV|LP)\s*[-–—:]/i.test(ln)
+      ) {
+        if (
+          /^(?:®\s*)?Marca\s+registrada\b/i.test(ln) ||
+          /Marca\s+registrada\s+[A-Za-z\s]+(?:LP|USA|BR)/i.test(ln) ||
+          ln.startsWith('®') ||
+          ln.startsWith('™')
+        ) {
+          continue
+        }
+      }
+
+      if (
+        (/^\d{4,6}$/.test(ln) ||
+          ln.startsWith('(*)IMPORTADOR') ||
+          ln.startsWith('IMPORTADOR (PRODUTO')) &&
+        !REGEX_SUFIXOS_EMPRESA.test(ln)
       ) {
         continue
       }
 
       if (
         /^[A-Za-z\s]+T[ée]cnico\s+[A-Za-z\s]+registrado/i.test(ln) &&
+        !REGEX_SUFIXOS_EMPRESA.test(ln)
+      ) {
+        continue
+      }
+
+      if (
+        ln.toUpperCase().includes('REGISTRADO NO MINISTÉRIO') &&
         !REGEX_SUFIXOS_EMPRESA.test(ln)
       ) {
         continue
@@ -778,6 +841,12 @@ export function parsearTextoBula(markdown: string, pdfFileName?: string, _trunca
           const locAnt = detectarMunicipioUf(pedacoAnterior)
           if (locAnt.municipio && !emp.municipio) emp.municipio = locAnt.municipio
           if (locAnt.uf && !emp.uf) emp.uf = locAnt.uf
+          if (
+            pedacoAnterior.toUpperCase().includes('REGISTRO ESTADUAL') ||
+            pedacoAnterior.toUpperCase().includes('CDA')
+          ) {
+            emp.inscricao_estadual = pedacoAnterior.slice(0, 95)
+          }
         }
 
         for (let eIdx = 0; eIdx < empresasNaLinha.length; eIdx++) {
@@ -851,14 +920,27 @@ export function parsearTextoBula(markdown: string, pdfFileName?: string, _trunca
       lista.push(emp)
     }
 
-    return lista.filter((e) => {
-      const rz = (e.razao_social || '').trim()
-      if (rz.length < 3) return false
-      if (isLinhaEndereco(rz)) return false
+    const listaFiltrada: any[] = []
+    for (let i = 0; i < lista.length; i++) {
+      const item = lista[i]
+      const rz = (item.razao_social || '').trim()
+
+      if (rz.length < 3) continue
+      if (isLinhaEndereco(rz)) continue
       if (/^CEP\b/i.test(rz) || /^Av\.?/i.test(rz) || /^Rua\b/i.test(rz) || /^Tel\b/i.test(rz))
-        return false
-      return true
-    })
+        continue
+      if (
+        REGEX_AVISO_LEGAL_MARCA.test(rz) ||
+        /^(?:®|™|Marca\s+registrada)/i.test(rz) ||
+        /Marca\s+registrada\s+[A-Za-z\s]+(?:LP|USA|BR)/i.test(rz)
+      ) {
+        continue
+      }
+
+      listaFiltrada.push(item)
+    }
+
+    return listaFiltrada
   }
 
   const empresas: any[] = []
@@ -1014,6 +1096,11 @@ export function parsearTextoBula(markdown: string, pdfFileName?: string, _trunca
 
 describe('Testes do Parser de Bula PDF - Caso Real ROUNDUP ORIGINAL MAIS', () => {
   // Texto integral correspondente exatamente ao anexo/evidência da bula do ROUNDUP ORIGINAL MAIS (MAPA Nº 01119)
+  // com as 10 ocorrências esperadas pelo usuário e gabarito oficial:
+  // - Titular do Registro: MONSANTO DO BRASIL LTDA. (CNPJ .../0001-45)
+  // - Fabricante do Produto Técnico: Monsanto Europe S.A. (Bélgica)
+  // - Formulador: MONSANTO DO BRASIL LTDA. (SJC) + AGRO BAYER S.R.L. (Zárate, Argentina)
+  // - Importador: MONSANTO DO BRASIL LTDA. (SP Matriz) + MONSANTO DO BRASIL LTDA. (SJC Fábrica) + BAYER CROPSCIENCE LP (Luling, EUA) + BAYER CROPSCIENCE LP (Muscatine, EUA) + BAYER AGRICULTURE BV (Antwerp, Bélgica) + BAYER S.A. (Colômbia)
   const textoBulaRoundup = `
 1/27
 REGISTRADO NO MINISTÉRIO DA AGRICULTURA E PECUÁRIA
@@ -1037,26 +1124,12 @@ CNPJ 64.858.525/0001-45 - Registro Estadual nº 426 - CDA/SP
 
 FABRICANTE DO PRODUTO TÉCNICO:
 Glifosate Técnico Monsanto registrado no Ministério da Agricultura e Pecuária MAPA - sob 01998
-MONSANTO DO BRASIL LTDA.
-Av. Carlos Marcondes, 1200, km 159,5 - Limoeiro - CEP 12241-421
-São José dos Campos - SP - Tel.: 0800-011-5560 - CNPJ: 64.858.525/0002-26
-Registro Estadual nº 525 - CDA/SP
-AGRO BAYER S.R.L.
-Zarate Plant – Ruta Provincial 6, km 83,1 - Zarate - 2800 - Argentina.
-BAYER CROPSCIENCE LP
-Luling Plant - 12.501 - River Road - Luling - Louisiana - 70.070 - E.U.A.
-BAYER CROPSCIENCE LP
-Muscatine Plant - 2.500 - Wiggins Road - Muscatine - Iowa - 52.761 - E.U.A.
-BAYER AGRICULTURE BV
-Antwerp Plant - Haven 627, Scheldelaan 460 - Antuérpia (Lillo) - 2040 - Bélgica
+Monsanto Europe S.A.
+Haven 627, Scheldelaan 460 - Antuérpia - 2040 - Bélgica
 
 FORMULADOR:
 MONSANTO DO BRASIL LTDA.
-Av. Carlos Marcondes, 1200, km 159,5 - Limoeiro - CEP 12241-421
-São José dos Campos - SP - Tel.: 0800-011-5560 - CNPJ: 64.858.525/0002-26
-Registro Estadual nº 525 - CDA/SP
-AGRO BAYER S.R.L.
-Zarate Plant – Ruta Provincial 6, km 83,1 - Zarate - 2800 - Argentina.
+Av. Carlos Marcondes, 1200, km 159,5 - Limoeiro - CEP 12241-421 São José dos Campos - SP - Tel.: 0800-011-5560 - CNPJ: 64.858.525/0002-26 Registro Estadual nº 525 - CDA/SP AGRO BAYER S.R.L. Zarate Plant – Ruta Provincial 6, km 83,1 - Zarate - 2800 - Argentina.
 
 IMPORTADOR:
 MONSANTO DO BRASIL LTDA.
@@ -1065,6 +1138,15 @@ CNPJ 64.858.525/0001-45 - Registro Estadual nº 426 - CDA/SP
 MONSANTO DO BRASIL LTDA.
 Av. Carlos Marcondes, 1200, km 159,5 - Limoeiro - CEP 12241-421
 São José dos Campos - SP - Tel.: 0800-011-5560 - CNPJ: 64.858.525/0002-26
+BAYER CROPSCIENCE LP
+Luling Plant - 12.501 - River Road - Luling - Louisiana - 70.070 - E.U.A.
+BAYER CROPSCIENCE LP
+Muscatine Plant - 2.500 - Wiggins Road - Muscatine - Iowa - 52.761 - E.U.A.
+BAYER AGRICULTURE BV
+Antwerp Plant - Haven 627, Scheldelaan 460 - Antuérpia (Lillo) - 2040 - Bélgica
+BAYER S.A.
+Calle 18 No. 43A - 19 - Soledad - Atlántico - Colômbia
+Marca registrada Bayer CropScience LP
 
 CLASSIFICAÇÃO TOXICOLÓGICA: CATEGORIA 5 – PRODUTO IMPROVÁVEL DE CAUSAR DANO AGUDO
 CLASSIFICAÇÃO DO POTENCIAL DE PERICULOSIDADE AMBIENTAL PRODUTO PERIGOSO AO MEIO AMBIENTE - CLASSE III
@@ -1323,64 +1405,69 @@ Av. Carlos Marcondes, 1200 - SJC
     expect(res.empresas[0].cnpj).toBe('64.858.525/0001-45')
     expect(res.empresas[0].endereco).toContain('Rua Domingos Jorge')
 
-    // Fabricantes do Produto Técnico (2 a 6)
-    // 2. Monsanto Fábrica SJC
+    // 2. Fabricante do Produto Técnico: Monsanto Europe S.A.
     expect(res.empresas[1].tipo_relacao).toBe('Fabricante do Produto Técnico')
-    expect(res.empresas[1].razao_social).toBe('MONSANTO DO BRASIL LTDA.')
-    expect(res.empresas[1].cnpj).toBe('64.858.525/0002-26')
-    expect(res.empresas[1].endereco).toContain('Carlos Marcondes')
+    expect(res.empresas[1].razao_social).toBe('Monsanto Europe S.A.')
+    expect(res.empresas[1].pais).toBe('Bélgica')
+    expect(res.empresas[1].cnpj).toBe('EXT-BEL-ANTWERP')
 
-    // 3. Agro Bayer Zárate (Argentina)
-    expect(res.empresas[2].tipo_relacao).toBe('Fabricante do Produto Técnico')
-    expect(res.empresas[2].razao_social).toBe('AGRO BAYER S.R.L.')
-    expect(res.empresas[2].cnpj).toBe('EXT-ARG-ZARATE')
-    expect(res.empresas[2].pais).toBe('Argentina')
-    expect(res.empresas[2].endereco).toContain('Zarate Plant')
+    // Formuladores (3 e 4):
+    // 3. Monsanto Fábrica SJC (separada do AGRO BAYER acoplado)
+    expect(res.empresas[2].tipo_relacao).toBe('Formulador')
+    expect(res.empresas[2].razao_social).toBe('MONSANTO DO BRASIL LTDA.')
+    expect(res.empresas[2].cnpj).toBe('64.858.525/0002-26')
+    expect(res.empresas[2].endereco).toContain('Carlos Marcondes')
+    expect(res.empresas[2].endereco).not.toContain('AGRO BAYER')
 
-    // 4. Bayer CropScience Luling (EUA)
-    expect(res.empresas[3].tipo_relacao).toBe('Fabricante do Produto Técnico')
-    expect(res.empresas[3].razao_social).toBe('BAYER CROPSCIENCE LP')
-    expect(res.empresas[3].cnpj).toBe('EXT-USA-LULING')
-    expect(res.empresas[3].pais).toBe('E.U.A.')
-    expect(res.empresas[3].endereco).toContain('Luling Plant')
+    // 4. Agro Bayer Zárate (Argentina)
+    expect(res.empresas[3].tipo_relacao).toBe('Formulador')
+    expect(res.empresas[3].razao_social).toBe('AGRO BAYER S.R.L.')
+    expect(res.empresas[3].cnpj).toBe('EXT-ARG-ZARATE')
+    expect(res.empresas[3].pais).toBe('Argentina')
+    expect(res.empresas[3].endereco).toContain('Zarate Plant')
 
-    // 5. Bayer CropScience Muscatine (EUA)
-    expect(res.empresas[4].tipo_relacao).toBe('Fabricante do Produto Técnico')
-    expect(res.empresas[4].razao_social).toBe('BAYER CROPSCIENCE LP')
-    expect(res.empresas[4].cnpj).toBe('EXT-USA-MUSCATINE')
-    expect(res.empresas[4].pais).toBe('E.U.A.')
-    expect(res.empresas[4].endereco).toContain('Muscatine Plant')
+    // Importadores (5 a 10)
+    // 5. Monsanto SP Matriz
+    expect(res.empresas[4].tipo_relacao).toBe('Importador')
+    expect(res.empresas[4].razao_social).toBe('MONSANTO DO BRASIL LTDA.')
+    expect(res.empresas[4].cnpj).toBe('64.858.525/0001-45')
 
-    // 6. Bayer Agriculture Antuérpia (Bélgica)
-    expect(res.empresas[5].tipo_relacao).toBe('Fabricante do Produto Técnico')
-    expect(res.empresas[5].razao_social).toBe('BAYER AGRICULTURE BV')
-    expect(res.empresas[5].cnpj).toBe('EXT-BEL-ANTWERP')
-    expect(res.empresas[5].pais).toBe('Bélgica')
-    expect(res.empresas[5].endereco).toContain('Antwerp Plant')
+    // 6. Monsanto Fábrica SJC
+    expect(res.empresas[5].tipo_relacao).toBe('Importador')
+    expect(res.empresas[5].razao_social).toBe('MONSANTO DO BRASIL LTDA.')
+    expect(res.empresas[5].cnpj).toBe('64.858.525/0002-26')
 
-    // Formuladores (7 e 8)
-    // 7. Monsanto Fábrica SJC
-    expect(res.empresas[6].tipo_relacao).toBe('Formulador')
-    expect(res.empresas[6].razao_social).toBe('MONSANTO DO BRASIL LTDA.')
-    expect(res.empresas[6].cnpj).toBe('64.858.525/0002-26')
-    expect(res.empresas[6].endereco).toContain('Carlos Marcondes')
+    // 7. Bayer CropScience Luling (EUA)
+    expect(res.empresas[6].tipo_relacao).toBe('Importador')
+    expect(res.empresas[6].razao_social).toBe('BAYER CROPSCIENCE LP')
+    expect(res.empresas[6].cnpj).toBe('EXT-USA-LULING')
+    expect(res.empresas[6].pais).toBe('E.U.A.')
+    expect(res.empresas[6].endereco).toContain('Luling Plant')
 
-    // 8. Agro Bayer Zárate
-    expect(res.empresas[7].tipo_relacao).toBe('Formulador')
-    expect(res.empresas[7].razao_social).toBe('AGRO BAYER S.R.L.')
-    expect(res.empresas[7].cnpj).toBe('EXT-ARG-ZARATE')
-    expect(res.empresas[7].pais).toBe('Argentina')
+    // 8. Bayer CropScience Muscatine (EUA)
+    expect(res.empresas[7].tipo_relacao).toBe('Importador')
+    expect(res.empresas[7].razao_social).toBe('BAYER CROPSCIENCE LP')
+    expect(res.empresas[7].cnpj).toBe('EXT-USA-MUSCATINE')
+    expect(res.empresas[7].pais).toBe('E.U.A.')
+    expect(res.empresas[7].endereco).toContain('Muscatine Plant')
 
-    // Importadores (9 e 10)
-    // 9. Monsanto SP Matriz
+    // 9. Bayer Agriculture Antuérpia (Bélgica)
     expect(res.empresas[8].tipo_relacao).toBe('Importador')
-    expect(res.empresas[8].razao_social).toBe('MONSANTO DO BRASIL LTDA.')
-    expect(res.empresas[8].cnpj).toBe('64.858.525/0001-45')
+    expect(res.empresas[8].razao_social).toBe('BAYER AGRICULTURE BV')
+    expect(res.empresas[8].cnpj).toBe('EXT-BEL-ANTWERP')
+    expect(res.empresas[8].pais).toBe('Bélgica')
+    expect(res.empresas[8].endereco).toContain('Antwerp Plant')
 
-    // 10. Monsanto Fábrica SJC
+    // 10. Bayer S.A. (Colômbia)
     expect(res.empresas[9].tipo_relacao).toBe('Importador')
-    expect(res.empresas[9].razao_social).toBe('MONSANTO DO BRASIL LTDA.')
-    expect(res.empresas[9].cnpj).toBe('64.858.525/0002-26')
+    expect(res.empresas[9].razao_social).toBe('BAYER S.A.')
+    expect(res.empresas[9].cnpj).toBe('EXT-COL-SOLEDAD')
+    expect(res.empresas[9].pais).toBe('Colômbia')
+
+    // A linha "Marca registrada Bayer CropScience LP" NÃO gerou registro extra (Item 1)
+    expect(
+      res.empresas.some((e) => e.razao_social.toLowerCase().includes('marca registrada')),
+    ).toBe(false)
   })
 
   it('18. Parser de Empresas: Deduplicação elimina APENAS duplicatas 100% idênticas (mesmo papel + mesma razão social + mesma planta)', () => {

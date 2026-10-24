@@ -674,21 +674,50 @@ routerAdd('POST', '/backend/v1/bula/analisar-pdf', (e) => {
       return false
     }
 
+    // REGEX DE SUFIXOS CORPORATIVOS NACIONAIS E INTERNACIONAIS:
+    // Suporta LP, BV, NV, SAS, SRL, S.R.L., S.A., S/A, S.A.C.I.F., S.A.I.C., LTDA, LTD, LLC, INC, CORP, GMBH, AG, SL
+    // Usa (?!\w) no lugar de \b final para casar sufixos terminados com ponto (.)
     const REGEX_SUFIXOS_EMPRESA =
-      /\b(?:LTDA|S\.A\.|S\/A|S\.R\.L\.|LIMITED|LTD\.?|L\.P\.|LP|B\.V\.|BV|INC\.?|CORP\.?|GMBH|S\.L\.|A\.G\.|PVT\.?\s+LTD\.?)\b/i
+      /(?:\b(?:LTDA|LIMITED|LTD|LP|BV|INC|CORP|GMBH|AG|SAS|NV|LLC|SRL|SACIF|SAIC|SL)\b|\bS[\/.]?A\.?(?!\w)|\bS[\/.]?R[\/.]?L\.?(?!\w)|\bB[\/.]?V\.?(?!\w)|\bL[\/.]?P\.?(?!\w)|\bS[\/.]?L\.?(?!\w)|\bA[\/.]?G\.?(?!\w)|\bPVT\.?\s+LTD\.?(?!\w)|\bS\.?A\.?C\.?I\.?F\.?(?!\w)|\bS\.?A\.?I\.?C\.?(?!\w)|\bN\.?V\.?(?!\w)|\bS\.?A\.?S\.?(?!\w))/i
+
+    // REGEX DE LINHAS DE AVISO LEGAL / MARCA REGISTRADA / NOTAS DE RODAPÉ
+    // Qualquer ocorrência de marca registrada/aviso legal NÃO gera empresa (Item 1 da tarefa)
+    const REGEX_AVISO_LEGAL_MARCA =
+      /(?:®|™|\bmarca\s+registrada\b|\btrade\s*mark\b|\bpropriedade\s+(?:intelectual|industrial)\b|\bdireitos\s+reservados\b|\ball\s+rights\s+reserved\b|\baviso\s+legal\b)/i
 
     function extrairNomesEmpresaDeLinha(str) {
       if (!str) return []
       const s = str.trim()
+
+      // Descarte sumário de linha de marca registrada / aviso legal
+      if (
+        REGEX_AVISO_LEGAL_MARCA.test(s) &&
+        !/(?:LTDA|S\.A\.|S\/A|S\.R\.L\.|LIMITED|BV|LP)\s*[-–—:]/i.test(s)
+      ) {
+        // Se a linha for apenas declaração de marca (ex.: "® Marca registrada Bayer CropScience LP / USA"), descarta
+        if (
+          /^(?:®\s*)?Marca\s+registrada\b/i.test(s) ||
+          /Marca\s+registrada\s+[A-Za-z\s]+(?:LP|USA|BR)/i.test(s)
+        ) {
+          return []
+        }
+      }
+
       // Padrão de nome corporativo: 2 ou mais palavras terminando com sufixo corporativo (nacional ou internacional)
-      // Ex.: "AGRO BAYER S.R.L.", "BAYER CROPSCIENCE LP", "BAYER AGRICULTURE BV", "MONSANTO DO BRASIL LTDA."
-      // Suporta sufixos com ou sem ponto final (LP, BV, S.R.L., LTDA., etc.)
+      // Suporta sufixos pontuados ou sem ponto (S.A., S.R.L., BV, LP, LTDA., etc.)
       const regexNomeCorp =
-        /([A-ZÁÉÍÓÚÂÊÔÃÕÇ][A-Za-zÁÉÍÓÚÂÊÔÃÕÇ0-9&.\-'\s]{2,60}?\b(?:LTDA|S\.A\.|S\/A|S\.R\.L\.|LIMITED|LTD|L\.P\.|LP|B\.V\.|BV|INC|CORP|GMBH|S\.L\.|A\.G\.|PVT\.\s+LTD)\.?)/gi
+        /([A-ZÁÉÍÓÚÂÊÔÃÕÇ][A-Za-zÁÉÍÓÚÂÊÔÃÕÇ0-9&.\-'\s]{1,60}?\b(?:LTDA|LIMITED|LTD|LP|BV|INC|CORP|GMBH|AG|SAS|NV|LLC|SRL|SACIF|SAIC|SL)(?:\.|\b)|[A-ZÁÉÍÓÚÂÊÔÃÕÇ][A-Za-zÁÉÍÓÚÂÊÔÃÕÇ0-9&.\-'\s]{1,60}?\b(?:S[\/.]?A\.?|S[\/.]?R[\/.]?L\.?|B[\/.]?V\.?|L[\/.]?P\.?|S[\/.]?L\.?|A[\/.]?G\.?|PVT\.?\s+LTD\.?|S\.?A\.?C\.?I\.?F\.?|S\.?A\.?I\.?C\.?|N\.?V\.?|S\.?A\.?S\.?)(?!\w))/gi
+
       const matches = []
       let m
       while ((m = regexNomeCorp.exec(s)) !== null) {
-        let nome = m[1].trim().replace(/^[-–—,;:.\s]+|[-–—,;:.\s]+$/g, '')
+        let nome = m[1].trim().replace(/^[-–—,;:\s]+|[-–—,;:\s]+$/g, '')
+
+        // Se o nome capturado for nota de marca registrada, descarte imediato
+        if (REGEX_AVISO_LEGAL_MARCA.test(nome) || /^(?:®|™|Marca\s+registrada)/i.test(nome)) {
+          continue
+        }
+
         // Se o nome capturado começar com prefixos de endereço, registro estadual ou CDA, remove
         nome = nome
           .replace(
@@ -696,6 +725,7 @@ routerAdd('POST', '/backend/v1/bula/analisar-pdf', (e) => {
             '',
           )
           .trim()
+
         if (nome.length >= 3 && !isLinhaEndereco(nome) && REGEX_SUFIXOS_EMPRESA.test(nome)) {
           matches.push({
             nome: nome,
@@ -708,7 +738,10 @@ routerAdd('POST', '/backend/v1/bula/analisar-pdf', (e) => {
 
     function sanitizarRazaoSocial(str) {
       if (!str) return ''
-      let s = str.trim().replace(/^[-–—,;:.\s]+|[-–—,;:.\s]+$/g, '')
+      let s = str
+        .trim()
+        .replace(/^[-–—,;:.\s]+/, '')
+        .replace(/[-–—,;:\s]+$/, '')
       // Se tiver marcadores de endereço ou planta no final
       s = s.replace(
         /\s*[-–—]\s*(?:Av\.?|Rua|CEP|CNPJ|Tel|Rod\.|Zarate\s+Plant|Luling\s+Plant|Muscatine\s+Plant|Antwerp\s+Plant).*$/i,
@@ -719,6 +752,8 @@ routerAdd('POST', '/backend/v1/bula/analisar-pdf', (e) => {
         /^(?:Av\.?|Avenida|Rua|Rod\.?|Rodovia|Distrito|Bairro|CEP\b[^\s]*|CDA\/SP|SP\s+)\s*/i,
         '',
       )
+      // Remove resíduos de marca registrada
+      s = s.replace(/^(?:®\s*)?Marca\s+registrada\s+/i, '')
       return s.trim()
     }
 
@@ -729,7 +764,15 @@ routerAdd('POST', '/backend/v1/bula/analisar-pdf', (e) => {
       if (/Argentina|Zarate|Zárate/i.test(str)) return 'Argentina'
       if (/E\.U\.A\.|USA|United States|Louisiana|Iowa|Luling|Muscatine/i.test(str)) return 'E.U.A.'
       if (/Bélgica|Belgium|Antwerp|Antuérpia/i.test(str)) return 'Bélgica'
+      if (/Col[ôo]mbia|Colombia|Soledad|Atl[áa]ntico/i.test(str)) return 'Colômbia'
       if (/China/i.test(str)) return 'China'
+      if (/Alemanha|Germany|Leverkusen|Trostberg/i.test(str)) return 'Alemanha'
+      if (/Su[íi][çc]a|Switzerland|Muttenz/i.test(str)) return 'Suíça'
+      if (/Fran[çc]a|France/i.test(str)) return 'França'
+      if (/Jap[ãa]o|Japan/i.test(str)) return 'Japão'
+      if (/Guatemala|Amatitl[áa]n/i.test(str)) return 'Guatemala'
+      if (/M[ée]xico/i.test(str)) return 'México'
+      if (/Chile/i.test(str)) return 'Chile'
       return 'Brasil'
     }
 
@@ -749,6 +792,7 @@ routerAdd('POST', '/backend/v1/bula/analisar-pdf', (e) => {
       if (/Luling/i.test(str)) return { municipio: 'Luling', uf: 'LA' }
       if (/Muscatine/i.test(str)) return { municipio: 'Muscatine', uf: 'IA' }
       if (/Antu[ée]rpia|Antwerp/i.test(str)) return { municipio: 'Antuérpia', uf: '' }
+      if (/Soledad/i.test(str)) return { municipio: 'Soledad', uf: 'Atlántico' }
       if (/Cuddalore/i.test(str)) return { municipio: 'Cuddalore', uf: '' }
       return { municipio: '', uf: '' }
     }
@@ -763,7 +807,7 @@ routerAdd('POST', '/backend/v1/bula/analisar-pdf', (e) => {
     }
 
     function deduzirIdentificadorExterno(razaoSocial, endereco, pais, cnpj) {
-      if (cnpj && cnpj.length >= 14) return cnpj
+      if (cnpj && cnpj.length >= 14 && !cnpj.startsWith('EXT-')) return cnpj
       const str = `${razaoSocial} ${endereco} ${pais}`.toUpperCase()
       if (str.includes('ZARATE') || str.includes('ZÁRATE') || str.includes('ARGENTINA')) {
         return 'EXT-ARG-ZARATE'
@@ -782,13 +826,16 @@ routerAdd('POST', '/backend/v1/bula/analisar-pdf', (e) => {
       ) {
         return 'EXT-BEL-ANTWERP'
       }
+      if (str.includes('COLOMBIA') || str.includes('COLÔMBIA') || str.includes('SOLEDAD')) {
+        return 'EXT-COL-SOLEDAD'
+      }
       if (str.includes('CUDDALORE') || str.includes('INDIA') || str.includes('ÍNDIA')) {
         return 'EXT-IND-CUDDALORE'
       }
       if (str.includes('CANELONES') || str.includes('JUANICÓ') || str.includes('URUGUAI')) {
         return 'EXT-URY-CANELONES'
       }
-      const paisCode = pais === 'Brasil' ? 'BR' : pais ? pais.slice(0, 3).toUpperCase() : 'EXT'
+      const paisCode = pais === 'Brasil' ? 'EXT' : pais ? pais.slice(0, 3).toUpperCase() : 'EXT'
       const planta = extrairPlantaUnidade(endereco)
       if (planta) {
         const pNome = planta
@@ -802,26 +849,29 @@ routerAdd('POST', '/backend/v1/bula/analisar-pdf', (e) => {
     }
 
     // REGEXES DE CORTE ENTRE SEÇÕES (DELIMITAÇÃO EXATA, SEM PERDER O RESTO DA SEÇÃO)
+    // Cobertura robusta de variações reais (plural, parênteses, com ou sem dois-pontos)
     const SECAO_CABECALHO_MAP = [
       {
         tipo: 'Titular do Registro',
-        inicio: /TITULAR\s+DO\s+REGISTRO/i,
+        inicio: /(?:TITULAR(?:ES)?\s+DO\s+REGISTRO|REGISTRANTE\b)/i,
       },
       {
         tipo: 'Fabricante do Produto Técnico',
-        inicio: /FABRICANTE\s+DO\s+PRODUTO\s+T[ÉE]CNICO/i,
+        inicio:
+          /(?:FABRICANTE[S\s\(\)]*DO\s+PRODUTO\s+T[ÉE]CNICO|FABRICANTE\s+T[ÉE]CNICO|PRODUTO\s+T[ÉE]CNICO\s*:)/i,
       },
       {
         tipo: 'Formulador',
-        inicio: /FORMULADOR\s*:/i,
+        inicio: /(?:^|[\n\r#|])\s*FORMULADOR(?:ES)?(?:\([S\)]\))?\s*:/i,
       },
       {
         tipo: 'Manipulador',
-        inicio: /MANIPULADOR\s*:/i,
+        inicio: /(?:^|[\n\r#|])\s*MANIPULADOR(?:ES)?(?:\([S\)]\))?\s*:/i,
       },
       {
         tipo: 'Importador',
-        inicio: /IMPORTADOR\s*:/i,
+        inicio:
+          /(?:^|[\n\r#|])\s*(?!\(\*\))\s*IMPORTADOR(?:ES)?(?:\s+DO\s+PRODUTO\s+FORMULADO)?\s*:/i,
       },
     ]
 
@@ -879,6 +929,10 @@ routerAdd('POST', '/backend/v1/bula/analisar-pdf', (e) => {
         .map((l) => limparMarkdown(l))
         .filter((l) => l.length > 0)
 
+      console.log(
+        `[importar_bula_pdf] [Seção ${tipoRelacao}] Total de linhas delimitadas: ${linhasSec.length}`,
+      )
+
       // Remove a primeira linha se for o próprio cabeçalho da seção
       if (
         linhasSec.length > 0 &&
@@ -892,12 +946,35 @@ routerAdd('POST', '/backend/v1/bula/analisar-pdf', (e) => {
 
       for (let k = 0; k < linhasSec.length; k++) {
         const ln = linhasSec[k]
+
+        // 1. Descarte estrito de linhas de marca registrada / aviso legal (Item 1)
         if (
-          ln.toUpperCase().includes('REGISTRADO NO MINISTÉRIO') ||
-          /^\d{4,6}$/.test(ln) ||
-          ln.startsWith('(*)IMPORTADOR') ||
-          ln.startsWith('IMPORTADOR (PRODUTO')
+          REGEX_AVISO_LEGAL_MARCA.test(ln) &&
+          !/(?:LTDA|S\.A\.|S\/A|S\.R\.L\.|LIMITED|BV|LP)\s*[-–—:]/i.test(ln)
         ) {
+          if (
+            /^(?:®\s*)?Marca\s+registrada\b/i.test(ln) ||
+            /Marca\s+registrada\s+[A-Za-z\s]+(?:LP|USA|BR)/i.test(ln) ||
+            ln.startsWith('®') ||
+            ln.startsWith('™')
+          ) {
+            console.log(
+              `[importar_bula_pdf] [Seção ${tipoRelacao}] Linha descartada: "${ln.slice(0, 60)}" | Motivo: Aviso legal / Marca registrada`,
+            )
+            continue
+          }
+        }
+
+        // Descarte de cabeçalhos de nota de rodapé isolados
+        if (
+          (/^\d{4,6}$/.test(ln) ||
+            ln.startsWith('(*)IMPORTADOR') ||
+            ln.startsWith('IMPORTADOR (PRODUTO')) &&
+          !REGEX_SUFIXOS_EMPRESA.test(ln)
+        ) {
+          console.log(
+            `[importar_bula_pdf] [Seção ${tipoRelacao}] Linha descartada: "${ln.slice(0, 60)}" | Motivo: Nota de rodapé / Número solto`,
+          )
           continue
         }
 
@@ -906,16 +983,30 @@ routerAdd('POST', '/backend/v1/bula/analisar-pdf', (e) => {
           /^[A-Za-z\s]+T[ée]cnico\s+[A-Za-z\s]+registrado/i.test(ln) &&
           !REGEX_SUFIXOS_EMPRESA.test(ln)
         ) {
+          console.log(
+            `[importar_bula_pdf] [Seção ${tipoRelacao}] Linha descartada: "${ln.slice(0, 60)}" | Motivo: Texto de produto técnico intermediário`,
+          )
+          continue
+        }
+
+        // Linha com "REGISTRADO NO MINISTÉRIO": se não contiver empresa, descarta; se contiver empresa, processa a empresa!
+        if (
+          ln.toUpperCase().includes('REGISTRADO NO MINISTÉRIO') &&
+          !REGEX_SUFIXOS_EMPRESA.test(ln)
+        ) {
+          console.log(
+            `[importar_bula_pdf] [Seção ${tipoRelacao}] Linha descartada: "${ln.slice(0, 60)}" | Motivo: Menção a registro ministerial sem empresa`,
+          )
           continue
         }
 
         const linhaEhEndereco = isLinhaEndereco(ln)
         const empresasNaLinha = extrairNomesEmpresaDeLinha(ln)
 
-        // CASO A: Linha contém um ou mais nomes de empresa
+        // CASO A: Linha contém um ou mais nomes corporativos
         if (empresasNaLinha.length > 0) {
           // Se houver texto ANTES da primeira empresa encontrada e já tínhamos uma empresa corrente,
-          // esse trecho pertence à empresa anterior
+          // esse trecho pertence à empresa anterior (resolução robusta de acoplamento endereço-empresa, Item 3)
           const primEmpIdx = empresasNaLinha[0].index
           const pedacoAnterior = ln.slice(0, primEmpIdx).trim()
           if (emp && pedacoAnterior && (linhaEhEndereco || pedacoAnterior.length > 3)) {
@@ -928,6 +1019,12 @@ routerAdd('POST', '/backend/v1/bula/analisar-pdf', (e) => {
             const locAnt = detectarMunicipioUf(pedacoAnterior)
             if (locAnt.municipio && !emp.municipio) emp.municipio = locAnt.municipio
             if (locAnt.uf && !emp.uf) emp.uf = locAnt.uf
+            if (
+              pedacoAnterior.toUpperCase().includes('REGISTRO ESTADUAL') ||
+              pedacoAnterior.toUpperCase().includes('CDA')
+            ) {
+              emp.inscricao_estadual = pedacoAnterior.slice(0, 95)
+            }
           }
 
           // Para cada empresa encontrada nesta linha:
@@ -937,6 +1034,10 @@ routerAdd('POST', '/backend/v1/bula/analisar-pdf', (e) => {
             }
             const empItem = empresasNaLinha[eIdx]
             const rzLimpa = sanitizarRazaoSocial(empItem.nome)
+
+            console.log(
+              `[importar_bula_pdf] [Seção ${tipoRelacao}] Candidato encontrado: "${rzLimpa}"`,
+            )
 
             // Texto entre o fim desta empresa e o início da próxima (ou fim da linha)
             const inicioEste = empItem.index
@@ -1004,15 +1105,48 @@ routerAdd('POST', '/backend/v1/bula/analisar-pdf', (e) => {
         lista.push(emp)
       }
 
-      // Validação de segurança e saneamento de cada registro extraído
-      return lista.filter((e) => {
-        const rz = (e.razao_social || '').trim()
-        if (rz.length < 3) return false
-        if (isLinhaEndereco(rz)) return false
-        if (/^CEP\b/i.test(rz) || /^Av\.?/i.test(rz) || /^Rua\b/i.test(rz) || /^Tel\b/i.test(rz))
-          return false
-        return true
-      })
+      // Validação de segurança e saneamento de cada registro extraído com log detalhado de descarte (Item 6)
+      const listaFiltrada = []
+      for (let i = 0; i < lista.length; i++) {
+        const item = lista[i]
+        const rz = (item.razao_social || '').trim()
+
+        if (rz.length < 3) {
+          console.log(
+            `[importar_bula_pdf] [Seção ${tipoRelacao}] Registro descartado: "${rz}" | Motivo: Nome muito curto (< 3 caracteres)`,
+          )
+          continue
+        }
+        if (isLinhaEndereco(rz)) {
+          console.log(
+            `[importar_bula_pdf] [Seção ${tipoRelacao}] Registro descartado: "${rz}" | Motivo: É linha de endereço`,
+          )
+          continue
+        }
+        if (/^CEP\b/i.test(rz) || /^Av\.?/i.test(rz) || /^Rua\b/i.test(rz) || /^Tel\b/i.test(rz)) {
+          console.log(
+            `[importar_bula_pdf] [Seção ${tipoRelacao}] Registro descartado: "${rz}" | Motivo: Prefixo de endereço/telefone/CEP`,
+          )
+          continue
+        }
+        if (
+          REGEX_AVISO_LEGAL_MARCA.test(rz) ||
+          /^(?:®|™|Marca\s+registrada)/i.test(rz) ||
+          /Marca\s+registrada\s+[A-Za-z\s]+(?:LP|USA|BR)/i.test(rz)
+        ) {
+          console.log(
+            `[importar_bula_pdf] [Seção ${tipoRelacao}] Registro descartado: "${rz}" | Motivo: Nota legal / Marca registrada`,
+          )
+          continue
+        }
+
+        listaFiltrada.push(item)
+      }
+
+      console.log(
+        `[importar_bula_pdf] [Seção ${tipoRelacao}] Registros gerados: ${listaFiltrada.length}`,
+      )
+      return listaFiltrada
     }
 
     const empresas = []
