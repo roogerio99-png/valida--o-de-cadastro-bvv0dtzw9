@@ -689,7 +689,7 @@ routerAdd('POST', '/backend/v1/bula/analisar-pdf', (e) => {
       let m
       while ((m = regexNomeCorp.exec(s)) !== null) {
         let nome = m[1].trim().replace(/^[-–—,;:.\s]+|[-–—,;:.\s]+$/g, '')
-        // Limpar possíveis prefixos de endereço ou fragmentos grudados no nome
+        // Se o nome capturado começar com prefixos de endereço, registro estadual ou CDA, remove
         nome = nome
           .replace(
             /^(?:Av\.?|Avenida|Rua|Rod\.?|Rodovia|CEP\s*[\d\-.:]+|SP\s*-\s*Tel[^\s]*|Tel[^\s]*|CDA\/SP|CDA\b|Registro\s+Estadual[^\s]*)\s+/i,
@@ -714,7 +714,7 @@ routerAdd('POST', '/backend/v1/bula/analisar-pdf', (e) => {
         /\s*[-–—]\s*(?:Av\.?|Rua|CEP|CNPJ|Tel|Rod\.|Zarate\s+Plant|Luling\s+Plant|Muscatine\s+Plant|Antwerp\s+Plant).*$/i,
         '',
       )
-      // Se começar com prefixos de endereço ou identificadores de UF/siglas soltas que restaram (ex: "SP MONSANTO...")
+      // Se começar com prefixos de endereço ou identificadores de UF/siglas soltas que restaram
       s = s.replace(
         /^(?:Av\.?|Avenida|Rua|Rod\.?|Rodovia|Distrito|Bairro|CEP\b[^\s]*|CDA\/SP|SP\s+)\s*/i,
         '',
@@ -726,9 +726,9 @@ routerAdd('POST', '/backend/v1/bula/analisar-pdf', (e) => {
       if (!str) return 'Brasil'
       if (/Índia|India|SIPCOT|Cuddalore/i.test(str)) return 'Índia'
       if (/Uruguai|Uruguay|Canelones|Juanic[óo]/i.test(str)) return 'Uruguai'
-      if (/Argentina|Zarate/i.test(str)) return 'Argentina'
-      if (/E\.U\.A\.|USA|United States|Louisiana|Luling/i.test(str)) return 'E.U.A.'
-      if (/Bélgica|Belgium/i.test(str)) return 'Bélgica'
+      if (/Argentina|Zarate|Zárate/i.test(str)) return 'Argentina'
+      if (/E\.U\.A\.|USA|United States|Louisiana|Iowa|Luling|Muscatine/i.test(str)) return 'E.U.A.'
+      if (/Bélgica|Belgium|Antwerp|Antuérpia/i.test(str)) return 'Bélgica'
       if (/China/i.test(str)) return 'China'
       return 'Brasil'
     }
@@ -744,31 +744,148 @@ routerAdd('POST', '/backend/v1/bula/analisar-pdf', (e) => {
       if (/Paul[íi]nia/i.test(str)) return { municipio: 'Paulínia', uf: 'SP' }
       if (/Campinas/i.test(str)) return { municipio: 'Campinas', uf: 'SP' }
       if (/Cama[çc]ari/i.test(str)) return { municipio: 'Camaçari', uf: 'BA' }
-      if (/Zarate/i.test(str)) return { municipio: 'Zárate', uf: '' }
+      if (/Zarate|Zárate/i.test(str)) return { municipio: 'Zárate', uf: '' }
       if (/Canelones/i.test(str)) return { municipio: 'Canelones', uf: '' }
       if (/Luling/i.test(str)) return { municipio: 'Luling', uf: 'LA' }
+      if (/Muscatine/i.test(str)) return { municipio: 'Muscatine', uf: 'IA' }
+      if (/Antu[ée]rpia|Antwerp/i.test(str)) return { municipio: 'Antuérpia', uf: '' }
       if (/Cuddalore/i.test(str)) return { municipio: 'Cuddalore', uf: '' }
       return { municipio: '', uf: '' }
     }
 
-    const empresas = []
-    function extrairEmpresasSecaoDinamica(tipoRelacao, regexInicio, regexFim) {
-      const idxInicio = textoCompleto.search(regexInicio)
-      if (idxInicio === -1) return []
+    function extrairPlantaUnidade(str) {
+      if (!str) return ''
+      const m = str.match(/([A-Za-z0-9\s\-]+Plant\b(?:\s*\([A-Za-z0-9\s]+\))?)/i)
+      if (m && m[1]) return m[1].trim()
+      const mPlanta = str.match(/(?:Planta\s+([A-Za-z0-9\/\s\-]+))/i)
+      if (mPlanta && mPlanta[1]) return mPlanta[0].trim()
+      return ''
+    }
 
-      const textoRestante = textoCompleto.slice(idxInicio)
-      let trechoSecao = textoRestante
-      const idxFim = trechoSecao.slice(25).search(regexFim)
-      if (idxFim !== -1) {
-        trechoSecao = trechoSecao.slice(0, idxFim + 25)
+    function deduzirIdentificadorExterno(razaoSocial, endereco, pais, cnpj) {
+      if (cnpj && cnpj.length >= 14) return cnpj
+      const str = `${razaoSocial} ${endereco} ${pais}`.toUpperCase()
+      if (str.includes('ZARATE') || str.includes('ZÁRATE') || str.includes('ARGENTINA')) {
+        return 'EXT-ARG-ZARATE'
+      }
+      if (str.includes('LULING') || str.includes('LOUISIANA')) {
+        return 'EXT-USA-LULING'
+      }
+      if (str.includes('MUSCATINE') || str.includes('IOWA')) {
+        return 'EXT-USA-MUSCATINE'
+      }
+      if (
+        str.includes('ANTWERP') ||
+        str.includes('ANTUÉRPIA') ||
+        str.includes('BÉLGICA') ||
+        str.includes('BELGIUM')
+      ) {
+        return 'EXT-BEL-ANTWERP'
+      }
+      if (str.includes('CUDDALORE') || str.includes('INDIA') || str.includes('ÍNDIA')) {
+        return 'EXT-IND-CUDDALORE'
+      }
+      if (str.includes('CANELONES') || str.includes('JUANICÓ') || str.includes('URUGUAI')) {
+        return 'EXT-URY-CANELONES'
+      }
+      const paisCode = pais === 'Brasil' ? 'BR' : pais ? pais.slice(0, 3).toUpperCase() : 'EXT'
+      const planta = extrairPlantaUnidade(endereco)
+      if (planta) {
+        const pNome = planta
+          .replace(/Plant/i, '')
+          .replace(/[^A-Za-z0-9]/g, '')
+          .trim()
+          .toUpperCase()
+        if (pNome) return `EXT-${paisCode}-${pNome}`
+      }
+      return ''
+    }
+
+    // REGEXES DE CORTE ENTRE SEÇÕES (DELIMITAÇÃO EXATA, SEM PERDER O RESTO DA SEÇÃO)
+    const SECAO_CABECALHO_MAP = [
+      {
+        tipo: 'Titular do Registro',
+        inicio: /TITULAR\s+DO\s+REGISTRO/i,
+      },
+      {
+        tipo: 'Fabricante do Produto Técnico',
+        inicio: /FABRICANTE\s+DO\s+PRODUTO\s+T[ÉE]CNICO/i,
+      },
+      {
+        tipo: 'Formulador',
+        inicio: /FORMULADOR\s*:/i,
+      },
+      {
+        tipo: 'Manipulador',
+        inicio: /MANIPULADOR\s*:/i,
+      },
+      {
+        tipo: 'Importador',
+        inicio: /IMPORTADOR\s*:/i,
+      },
+    ]
+
+    const REGEX_FIM_GLOBAL_EMPRESAS =
+      /(?:CLASSIFICA[ÇC][ÃA]O\s+TOXICOL[ÓO]GICA|CLASSIFICA[ÇC][ÃA]O\s+DO\s+POTENCIAL|DADOS\s+RELATIVOS\s+[ÀA]\s+PROTE[ÇC][ÃA]O|INSTRU[ÇC][ÕO]ES\s+DE\s+USO|ANTES\s+DE\s+USAR|CUIDADO\s+VENENO|PRODUTO\s+COMERCIAL\s*:|N[°ºoO]?\s+DO\s+LOTE)/i
+
+    function dividirTextoEmSecoesEmpresas(texto) {
+      // Encontra a posição de cada cabeçalho de seção no texto original
+      const ocorrencias = []
+      for (let i = 0; i < SECAO_CABECALHO_MAP.length; i++) {
+        const item = SECAO_CABECALHO_MAP[i]
+        const idx = texto.search(item.inicio)
+        if (idx !== -1) {
+          ocorrencias.push({
+            tipo: item.tipo,
+            inicioIdx: idx,
+          })
+        }
       }
 
-      // Remove a própria linha de título da seção
+      // Ordena por ordem de aparição no documento
+      ocorrencias.sort((a, b) => a.inicioIdx - b.inicioIdx)
+
+      const secoes = []
+      for (let i = 0; i < ocorrencias.length; i++) {
+        const atual = ocorrencias[i]
+        const proxima = ocorrencias[i + 1]
+        let textoSecao = ''
+
+        if (proxima) {
+          textoSecao = texto.slice(atual.inicioIdx, proxima.inicioIdx)
+        } else {
+          // Última seção: vai até o marcador global de fim ou até 20.000 chars
+          const resto = texto.slice(atual.inicioIdx)
+          const mFim = resto.search(REGEX_FIM_GLOBAL_EMPRESAS)
+          if (mFim !== -1 && mFim > 20) {
+            textoSecao = resto.slice(0, mFim)
+          } else {
+            textoSecao = resto.slice(0, 20000)
+          }
+        }
+
+        secoes.push({
+          tipo: atual.tipo,
+          conteudo: textoSecao,
+        })
+      }
+
+      return secoes
+    }
+
+    function processarLinhasSecaoEmpresa(tipoRelacao, trechoSecao) {
       const linhasSec = trechoSecao
         .split(/\r?\n/)
         .map((l) => limparMarkdown(l))
         .filter((l) => l.length > 0)
-      if (linhasSec.length > 0) linhasSec.shift()
+
+      // Remove a primeira linha se for o próprio cabeçalho da seção
+      if (
+        linhasSec.length > 0 &&
+        /^(?:TITULAR|FABRICANTE|FORMULADOR|MANIPULADOR|IMPORTADOR)/i.test(linhasSec[0])
+      ) {
+        linhasSec.shift()
+      }
 
       const lista = []
       let emp = null
@@ -784,13 +901,21 @@ routerAdd('POST', '/backend/v1/bula/analisar-pdf', (e) => {
           continue
         }
 
+        // Descarta linhas puras de produto técnico intermediário sem empresa (ex: "Glifosate Técnico Monsanto registrado...")
+        if (
+          /^[A-Za-z\s]+T[ée]cnico\s+[A-Za-z\s]+registrado/i.test(ln) &&
+          !REGEX_SUFIXOS_EMPRESA.test(ln)
+        ) {
+          continue
+        }
+
         const linhaEhEndereco = isLinhaEndereco(ln)
         const empresasNaLinha = extrairNomesEmpresaDeLinha(ln)
 
-        // CASO A: Linha contém um ou mais nomes de empresa (seja linha de empresa pura ou concatenada com endereço)
+        // CASO A: Linha contém um ou mais nomes de empresa
         if (empresasNaLinha.length > 0) {
           // Se houver texto ANTES da primeira empresa encontrada e já tínhamos uma empresa corrente,
-          // esse trecho anterior pertence aos dados da empresa anterior
+          // esse trecho pertence à empresa anterior
           const primEmpIdx = empresasNaLinha[0].index
           const pedacoAnterior = ln.slice(0, primEmpIdx).trim()
           if (emp && pedacoAnterior && (linhaEhEndereco || pedacoAnterior.length > 3)) {
@@ -823,6 +948,7 @@ routerAdd('POST', '/backend/v1/bula/analisar-pdf', (e) => {
             const cnpPost = extrairCnpj(pedacoPosterior)
             const cpPost = extrairCep(pedacoPosterior)
             const locPost = detectarMunicipioUf(pedacoPosterior)
+            const paisDetectado = detectarPais(rzLimpa + ' ' + pedacoPosterior)
 
             emp = {
               registro_mapa: registroMapa,
@@ -836,7 +962,7 @@ routerAdd('POST', '/backend/v1/bula/analisar-pdf', (e) => {
               uf: locPost.uf || '',
               cep: cpPost || '',
               inscricao_estadual: '',
-              pais: detectarPais(rzLimpa + ' ' + pedacoPosterior),
+              pais: paisDetectado,
               dados_extras: {
                 texto_bruto: [empItem.nome, ...(pedacoPosterior ? [pedacoPosterior] : [])],
               },
@@ -845,7 +971,7 @@ routerAdd('POST', '/backend/v1/bula/analisar-pdf', (e) => {
           continue
         }
 
-        // CASO B: Linha sem nome de empresa — dados de endereço / planta / CNPJ / IE da empresa corrente
+        // CASO B: Linha sem nome corporativo explícito — dados de endereço / planta / CNPJ / IE da empresa corrente
         if (emp) {
           emp.dados_extras.texto_bruto.push(ln)
 
@@ -878,7 +1004,7 @@ routerAdd('POST', '/backend/v1/bula/analisar-pdf', (e) => {
         lista.push(emp)
       }
 
-      // Validação final de segurança: nenhuma empresa com razão social inválida (endereço ou curta demais)
+      // Validação de segurança e saneamento de cada registro extraído
       return lista.filter((e) => {
         const rz = (e.razao_social || '').trim()
         if (rz.length < 3) return false
@@ -889,60 +1015,40 @@ routerAdd('POST', '/backend/v1/bula/analisar-pdf', (e) => {
       })
     }
 
-    const titulares = extrairEmpresasSecaoDinamica(
-      'Titular do Registro',
-      /TITULAR\s+DO\s+REGISTRO/i,
-      /(?:FABRICANTE|FORMULADOR|MANIPULADOR|IMPORTADOR)/i,
-    )
-    for (let t = 0; t < titulares.length; t++) {
-      empresas.push(titulares[t])
+    const empresas = []
+    const secoesDetectadas = dividirTextoEmSecoesEmpresas(textoCompleto)
+    for (let sIdx = 0; sIdx < secoesDetectadas.length; sIdx++) {
+      const sec = secoesDetectadas[sIdx]
+      const empsSecao = processarLinhasSecaoEmpresa(sec.tipo, sec.conteudo)
+      for (let e = 0; e < empsSecao.length; e++) {
+        empresas.push(empsSecao[e])
+      }
     }
 
-    const fabricantes = extrairEmpresasSecaoDinamica(
-      'Fabricante do Produto Técnico',
-      /FABRICANTE\s+DO\s+PRODUTO\s+T[ÉE]CNICO/i,
-      /(?:FORMULADOR|MANIPULADOR|IMPORTADOR|GRUPO\s+[A-Z]|CLASSIFICA[ÇC][ÃA]O)/i,
-    )
-    for (let f = 0; f < fabricantes.length; f++) {
-      empresas.push(fabricantes[f])
-    }
-
-    const formuladores = extrairEmpresasSecaoDinamica(
-      'Formulador',
-      /FORMULADOR\s*:/i,
-      /(?:MANIPULADOR|IMPORTADOR|GRUPO\s+[A-Z]|N°\s+do\s+lote|CLASSIFICA[ÇC][ÃA]O)/i,
-    )
-    for (let fo = 0; fo < formuladores.length; fo++) {
-      empresas.push(formuladores[fo])
-    }
-
-    const manipuladores = extrairEmpresasSecaoDinamica(
-      'Manipulador',
-      /MANIPULADOR\s*:/i,
-      /(?:IMPORTADOR|GRUPO\s+[A-Z]|N°\s+do\s+lote|ANTES\s+DE\s+USAR|CLASSIFICA[ÇC][ÃA]O)/i,
-    )
-    for (let m = 0; m < manipuladores.length; m++) {
-      empresas.push(manipuladores[m])
-    }
-
-    const importadores = extrairEmpresasSecaoDinamica(
-      'Importador',
-      /IMPORTADOR\s*:/i,
-      /(?:N°\s+do\s+lote|Marca\s+registrada|ANTES\s+DE\s+USAR|CLASSIFICA[ÇC][ÃA]O|FABRICANTE|DISTRIBUIDOR)/i,
-    )
-    for (let imp = 0; imp < importadores.length; imp++) {
-      empresas.push(importadores[imp])
+    // REGRA DE SEPARAÇÃO E IDENTIFICAÇÃO DE PLANTAS / EMPRESAS ESTRANGEIRAS:
+    // Atribui identificador de planta para empresas estrangeiras no CNPJ caso vazio (ex.: EXT-ARG-ZARATE)
+    for (let i = 0; i < empresas.length; i++) {
+      const empObj = empresas[i]
+      if (!empObj.cnpj && empObj.pais !== 'Brasil') {
+        const idExt = deduzirIdentificadorExterno(
+          empObj.razao_social,
+          empObj.endereco,
+          empObj.pais,
+          empObj.cnpj,
+        )
+        if (idExt) {
+          empObj.cnpj = idExt
+        }
+      }
     }
 
     // REGRA DE DEDUPLICAÇÃO ESTRITA:
-    // Apenas duplicatas EXATAS são eliminadas: mesma razão social + mesmo papel + mesmo CNPJ/endereço (planta).
-    // Se a mesma razão social aparecer em papéis distintos (Titular vs Fabricante vs Formulador vs Importador)
-    // ou em plantas/CNPJs/endereços distintos (ex: Monsanto Matriz SP 0001-45 vs Fábrica SJC 0002-26),
-    // CADA UMA É UM REGISTRO PRÓPRIO E DEVE SER PRESERVADO INTEGRALMENTE.
+    // Apenas duplicatas 100% idênticas são eliminadas:
+    // mesma razão social + mesmo papel (tipo_relacao) + mesmo CNPJ ou identificador de planta/endereço.
+    // Empresas em papéis diferentes ou plantas diferentes NUNCA são mescladas nem descartadas.
     function extrairIdentificadorPlanta(e) {
-      const cnpjDigits = (e.cnpj || '').replace(/\D/g, '')
-      if (cnpjDigits.length === 14) return `CNPJ:${cnpjDigits}`
-      // Para empresas estrangeiras sem CNPJ, usa os primeiros 35 caracteres alfanuméricos do endereço/planta
+      const cnpjVal = (e.cnpj || '').trim()
+      if (cnpjVal) return `CNPJ:${cnpjVal}`
       const endLimpo = (e.endereco || '')
         .toLowerCase()
         .replace(/[^a-z0-9]/g, '')
@@ -963,7 +1069,7 @@ routerAdd('POST', '/backend/v1/bula/analisar-pdf', (e) => {
         chavesVistas.add(chave)
         empresasUnicas.push(e)
       } else {
-        // Encontra o registro exatamente idêntico já cadastrado e enriquece campos vazios
+        // Encontra o registro exatamente idêntico e enriquece campos vazios
         const existente = empresasUnicas.find((ex) => {
           const exRz = (ex.razao_social || '').toUpperCase().replace(/\s+/g, ' ').trim()
           const exTipo = (ex.tipo_relacao || '').toUpperCase().trim()
@@ -984,6 +1090,16 @@ routerAdd('POST', '/backend/v1/bula/analisar-pdf', (e) => {
     empresas.length = 0
     for (let i = 0; i < empresasUnicas.length; i++) {
       empresas.push(empresasUnicas[i])
+    }
+
+    // DIAGNÓSTICO DETALHADO NO LOG DO HOOK (Item 6 da tarefa)
+    console.log(`[importar_bula_pdf] Empresas extraídas: ${empresas.length}`)
+    for (let i = 0; i < empresas.length; i++) {
+      const eLog = empresas[i]
+      const idOuPais = eLog.cnpj || eLog.pais || 'Brasil'
+      console.log(
+        `[importar_bula_pdf] Empresas extraídas: ${i + 1}/${empresas.length} | ${eLog.razao_social} (${eLog.tipo_relacao}, ${idOuPais})`,
+      )
     }
 
     // 7. APLICAÇÃO E REENTRADA
@@ -1801,9 +1917,9 @@ routerAdd('POST', '/backend/v1/bula/gravar-pdf', (e) => {
         const endVal = String(emp.endereco || '').trim()
         const escCnpj = cnpjVal.replace(/'/g, "\\'")
 
-        // Identificação unívoca por (registro_mapa + tipo_relacao + razao_social + cnpj/endereço):
-        // Se a empresa possui CNPJ, busca exatamente por esse CNPJ no mesmo papel.
-        // Se estrangeira sem CNPJ, busca por trecho do endereço ou pela razão social caso única na seção.
+        // Identificação unívoca por (registro_mapa + tipo_relacao + razao_social + cnpj/identificador de planta):
+        // Se a empresa possui CNPJ ou código externo (ex: EXT-ARG-ZARATE), busca exatamente por ele.
+        // Se não tiver cnpj preenchido, usa trecho do endereço/planta.
         let filtroEmp = `registro_mapa = '${escMapa}' && tipo_relacao = '${escTr}' && razao_social = '${escRz}'`
         if (cnpjVal) {
           filtroEmp += ` && cnpj = '${escCnpj}'`
@@ -1814,7 +1930,6 @@ routerAdd('POST', '/backend/v1/bula/gravar-pdf', (e) => {
 
         const empExistentes =
           txApp.findRecordsByFilter('bula_empresas', filtroEmp, '-created', 1, 0) || []
-
         let recEmp = null
         let isUp = false
         if (empExistentes.length > 0) {

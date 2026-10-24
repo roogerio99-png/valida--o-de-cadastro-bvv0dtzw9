@@ -580,9 +580,9 @@ export function parsearTextoBula(markdown: string, pdfFileName?: string, _trunca
     if (!str) return 'Brasil'
     if (/Índia|India|SIPCOT|Cuddalore/i.test(str)) return 'Índia'
     if (/Uruguai|Uruguay|Canelones|Juanic[óo]/i.test(str)) return 'Uruguai'
-    if (/Argentina|Zarate/i.test(str)) return 'Argentina'
-    if (/E\.U\.A\.|USA|United States|Louisiana|Luling/i.test(str)) return 'E.U.A.'
-    if (/Bélgica|Belgium/i.test(str)) return 'Bélgica'
+    if (/Argentina|Zarate|Zárate/i.test(str)) return 'Argentina'
+    if (/E\.U\.A\.|USA|United States|Louisiana|Iowa|Luling|Muscatine/i.test(str)) return 'E.U.A.'
+    if (/Bélgica|Belgium|Antwerp|Antuérpia/i.test(str)) return 'Bélgica'
     if (/China/i.test(str)) return 'China'
     return 'Brasil'
   }
@@ -598,34 +598,148 @@ export function parsearTextoBula(markdown: string, pdfFileName?: string, _trunca
     if (/Paul[íi]nia/i.test(str)) return { municipio: 'Paulínia', uf: 'SP' }
     if (/Campinas/i.test(str)) return { municipio: 'Campinas', uf: 'SP' }
     if (/Cama[çc]ari/i.test(str)) return { municipio: 'Camaçari', uf: 'BA' }
-    if (/Zarate/i.test(str)) return { municipio: 'Zárate', uf: '' }
+    if (/Zarate|Zárate/i.test(str)) return { municipio: 'Zárate', uf: '' }
     if (/Canelones/i.test(str)) return { municipio: 'Canelones', uf: '' }
     if (/Luling/i.test(str)) return { municipio: 'Luling', uf: 'LA' }
+    if (/Muscatine/i.test(str)) return { municipio: 'Muscatine', uf: 'IA' }
+    if (/Antu[ée]rpia|Antwerp/i.test(str)) return { municipio: 'Antuérpia', uf: '' }
     if (/Cuddalore/i.test(str)) return { municipio: 'Cuddalore', uf: '' }
     return { municipio: '', uf: '' }
   }
 
-  const empresas: any[] = []
-  function extrairEmpresasSecaoDinamica(
-    tipoRelacao: string,
-    regexInicio: RegExp,
-    regexFim: RegExp,
-  ) {
-    const idxInicio = textoCompleto.search(regexInicio)
-    if (idxInicio === -1) return []
+  function extrairPlantaUnidade(str: string): string {
+    if (!str) return ''
+    const m = str.match(/([A-Za-z0-9\s-]+Plant\b(?:\s*\([A-Za-z0-9\s]+\))?)/i)
+    if (m && m[1]) return m[1].trim()
+    const mPlanta = str.match(/(?:Planta\s+([A-Za-z0-9/\s-]+))/i)
+    if (mPlanta && mPlanta[1]) return mPlanta[0].trim()
+    return ''
+  }
 
-    const textoRestante = textoCompleto.slice(idxInicio)
-    let trechoSecao = textoRestante
-    const idxFim = trechoSecao.slice(25).search(regexFim)
-    if (idxFim !== -1) {
-      trechoSecao = trechoSecao.slice(0, idxFim + 25)
+  function deduzirIdentificadorExterno(
+    razaoSocial: string,
+    endereco: string,
+    pais: string,
+    cnpj?: string,
+  ): string {
+    if (cnpj && cnpj.length >= 14) return cnpj
+    const str = `${razaoSocial} ${endereco} ${pais}`.toUpperCase()
+    if (str.includes('ZARATE') || str.includes('ZÁRATE') || str.includes('ARGENTINA')) {
+      return 'EXT-ARG-ZARATE'
+    }
+    if (str.includes('LULING') || str.includes('LOUISIANA')) {
+      return 'EXT-USA-LULING'
+    }
+    if (str.includes('MUSCATINE') || str.includes('IOWA')) {
+      return 'EXT-USA-MUSCATINE'
+    }
+    if (
+      str.includes('ANTWERP') ||
+      str.includes('ANTUÉRPIA') ||
+      str.includes('BÉLGICA') ||
+      str.includes('BELGIUM')
+    ) {
+      return 'EXT-BEL-ANTWERP'
+    }
+    if (str.includes('CUDDALORE') || str.includes('INDIA') || str.includes('ÍNDIA')) {
+      return 'EXT-IND-CUDDALORE'
+    }
+    if (str.includes('CANELONES') || str.includes('JUANICÓ') || str.includes('URUGUAI')) {
+      return 'EXT-URY-CANELONES'
+    }
+    const paisCode = pais === 'Brasil' ? 'BR' : pais ? pais.slice(0, 3).toUpperCase() : 'EXT'
+    const planta = extrairPlantaUnidade(endereco)
+    if (planta) {
+      const pNome = planta
+        .replace(/Plant/i, '')
+        .replace(/[^A-Za-z0-9]/g, '')
+        .trim()
+        .toUpperCase()
+      if (pNome) return `EXT-${paisCode}-${pNome}`
+    }
+    return ''
+  }
+
+  const SECAO_CABECALHO_MAP = [
+    {
+      tipo: 'Titular do Registro',
+      inicio: /TITULAR\s+DO\s+REGISTRO/i,
+    },
+    {
+      tipo: 'Fabricante do Produto Técnico',
+      inicio: /FABRICANTE\s+DO\s+PRODUTO\s+T[ÉE]CNICO/i,
+    },
+    {
+      tipo: 'Formulador',
+      inicio: /FORMULADOR\s*:/i,
+    },
+    {
+      tipo: 'Manipulador',
+      inicio: /MANIPULADOR\s*:/i,
+    },
+    {
+      tipo: 'Importador',
+      inicio: /IMPORTADOR\s*:/i,
+    },
+  ]
+
+  const REGEX_FIM_GLOBAL_EMPRESAS =
+    /(?:CLASSIFICA[ÇC][ÃA]O\s+TOXICOL[ÓO]GICA|CLASSIFICA[ÇC][ÃA]O\s+DO\s+POTENCIAL|DADOS\s+RELATIVOS\s+[ÀA]\s+PROTE[ÇC][ÃA]O|INSTRU[ÇC][ÕO]ES\s+DE\s+USO|ANTES\s+DE\s+USAR|CUIDADO\s+VENENO|PRODUTO\s+COMERCIAL\s*:|N[°ºoO]?\s+DO\s+LOTE)/i
+
+  function dividirTextoEmSecoesEmpresas(texto: string) {
+    const ocorrencias: Array<{ tipo: string; inicioIdx: number }> = []
+    for (let i = 0; i < SECAO_CABECALHO_MAP.length; i++) {
+      const item = SECAO_CABECALHO_MAP[i]
+      const idx = texto.search(item.inicio)
+      if (idx !== -1) {
+        ocorrencias.push({
+          tipo: item.tipo,
+          inicioIdx: idx,
+        })
+      }
     }
 
+    ocorrencias.sort((a, b) => a.inicioIdx - b.inicioIdx)
+
+    const secoes: Array<{ tipo: string; conteudo: string }> = []
+    for (let i = 0; i < ocorrencias.length; i++) {
+      const atual = ocorrencias[i]
+      const proxima = ocorrencias[i + 1]
+      let textoSecao = ''
+
+      if (proxima) {
+        textoSecao = texto.slice(atual.inicioIdx, proxima.inicioIdx)
+      } else {
+        const resto = texto.slice(atual.inicioIdx)
+        const mFim = resto.search(REGEX_FIM_GLOBAL_EMPRESAS)
+        if (mFim !== -1 && mFim > 20) {
+          textoSecao = resto.slice(0, mFim)
+        } else {
+          textoSecao = resto.slice(0, 20000)
+        }
+      }
+
+      secoes.push({
+        tipo: atual.tipo,
+        conteudo: textoSecao,
+      })
+    }
+
+    return secoes
+  }
+
+  function processarLinhasSecaoEmpresa(tipoRelacao: string, trechoSecao: string) {
     const linhasSec = trechoSecao
       .split(/\r?\n/)
       .map((l) => limparMarkdown(l))
       .filter((l) => l.length > 0)
-    if (linhasSec.length > 0) linhasSec.shift()
+
+    if (
+      linhasSec.length > 0 &&
+      /^(?:TITULAR|FABRICANTE|FORMULADOR|MANIPULADOR|IMPORTADOR)/i.test(linhasSec[0])
+    ) {
+      linhasSec.shift()
+    }
 
     const lista: any[] = []
     let emp: any = null
@@ -637,6 +751,13 @@ export function parsearTextoBula(markdown: string, pdfFileName?: string, _trunca
         /^\d{4,6}$/.test(ln) ||
         ln.startsWith('(*)IMPORTADOR') ||
         ln.startsWith('IMPORTADOR (PRODUTO')
+      ) {
+        continue
+      }
+
+      if (
+        /^[A-Za-z\s]+T[ée]cnico\s+[A-Za-z\s]+registrado/i.test(ln) &&
+        !REGEX_SUFIXOS_EMPRESA.test(ln)
       ) {
         continue
       }
@@ -675,6 +796,7 @@ export function parsearTextoBula(markdown: string, pdfFileName?: string, _trunca
           const cnpPost = extrairCnpj(pedacoPosterior)
           const cpPost = extrairCep(pedacoPosterior)
           const locPost = detectarMunicipioUf(pedacoPosterior)
+          const paisDetectado = detectarPais(rzLimpa + ' ' + pedacoPosterior)
 
           emp = {
             registro_mapa: registroMapa,
@@ -688,7 +810,7 @@ export function parsearTextoBula(markdown: string, pdfFileName?: string, _trunca
             uf: locPost.uf || '',
             cep: cpPost || '',
             inscricao_estadual: '',
-            pais: detectarPais(rzLimpa + ' ' + pedacoPosterior),
+            pais: paisDetectado,
             dados_extras: {
               texto_bruto: [empItem.nome, ...(pedacoPosterior ? [pedacoPosterior] : [])],
             },
@@ -739,54 +861,34 @@ export function parsearTextoBula(markdown: string, pdfFileName?: string, _trunca
     })
   }
 
-  const titulares = extrairEmpresasSecaoDinamica(
-    'Titular do Registro',
-    /TITULAR\s+DO\s+REGISTRO/i,
-    /(?:FABRICANTE|FORMULADOR|MANIPULADOR|IMPORTADOR)/i,
-  )
-  for (let t = 0; t < titulares.length; t++) {
-    empresas.push(titulares[t])
+  const empresas: any[] = []
+  const secoesDetectadas = dividirTextoEmSecoesEmpresas(textoCompleto)
+  for (let sIdx = 0; sIdx < secoesDetectadas.length; sIdx++) {
+    const sec = secoesDetectadas[sIdx]
+    const empsSecao = processarLinhasSecaoEmpresa(sec.tipo, sec.conteudo)
+    for (let e = 0; e < empsSecao.length; e++) {
+      empresas.push(empsSecao[e])
+    }
   }
 
-  const fabricantes = extrairEmpresasSecaoDinamica(
-    'Fabricante do Produto Técnico',
-    /FABRICANTE\s+DO\s+PRODUTO\s+T[ÉE]CNICO/i,
-    /(?:FORMULADOR|MANIPULADOR|IMPORTADOR|GRUPO\s+[A-Z]|CLASSIFICA[ÇC][ÃA]O)/i,
-  )
-  for (let f = 0; f < fabricantes.length; f++) {
-    empresas.push(fabricantes[f])
-  }
-
-  const formuladores = extrairEmpresasSecaoDinamica(
-    'Formulador',
-    /FORMULADOR\s*:/i,
-    /(?:MANIPULADOR|IMPORTADOR|GRUPO\s+[A-Z]|N°\s+do\s+lote|CLASSIFICA[ÇC][ÃA]O)/i,
-  )
-  for (let fo = 0; fo < formuladores.length; fo++) {
-    empresas.push(formuladores[fo])
-  }
-
-  const manipuladores = extrairEmpresasSecaoDinamica(
-    'Manipulador',
-    /MANIPULADOR\s*:/i,
-    /(?:IMPORTADOR|GRUPO\s+[A-Z]|N°\s+do\s+lote|ANTES\s+DE\s+USAR|CLASSIFICA[ÇC][ÃA]O)/i,
-  )
-  for (let m = 0; m < manipuladores.length; m++) {
-    empresas.push(manipuladores[m])
-  }
-
-  const importadores = extrairEmpresasSecaoDinamica(
-    'Importador',
-    /IMPORTADOR\s*:/i,
-    /(?:N°\s+do\s+lote|Marca\s+registrada|ANTES\s+DE\s+USAR|CLASSIFICA[ÇC][ÃA]O|FABRICANTE|DISTRIBUIDOR)/i,
-  )
-  for (let imp = 0; imp < importadores.length; imp++) {
-    empresas.push(importadores[imp])
+  for (let i = 0; i < empresas.length; i++) {
+    const empObj = empresas[i]
+    if (!empObj.cnpj && empObj.pais !== 'Brasil') {
+      const idExt = deduzirIdentificadorExterno(
+        empObj.razao_social,
+        empObj.endereco,
+        empObj.pais,
+        empObj.cnpj,
+      )
+      if (idExt) {
+        empObj.cnpj = idExt
+      }
+    }
   }
 
   function extrairIdentificadorPlanta(e: any): string {
-    const cnpjDigits = (e.cnpj || '').replace(/\D/g, '')
-    if (cnpjDigits.length === 14) return `CNPJ:${cnpjDigits}`
+    const cnpjVal = (e.cnpj || '').trim()
+    if (cnpjVal) return `CNPJ:${cnpjVal}`
     const endLimpo = (e.endereco || '')
       .toLowerCase()
       .replace(/[^a-z0-9]/g, '')
@@ -1180,6 +1282,9 @@ Av. Carlos Marcondes, 1200, km 159,5 - Limoeiro - CEP 12241-421 São José dos C
 Zarate Plant – Ruta Provincial 6, km 83,1 - Zarate - 2800 - Argentina.
 BAYER CROPSCIENCE LP
 Luling Plant - 12.501 - River Road - Luling - Louisiana - 70.070 - E.U.A.
+FORMULADOR:
+MONSANTO DO BRASIL LTDA.
+Av. Carlos Marcondes, 1200 - SJC
 `
     const res = parsearTextoBula(textoLinhaJunta)
     const agroBayer = res.empresas.find((e) => e.razao_social.includes('AGRO BAYER'))
@@ -1228,28 +1333,28 @@ Luling Plant - 12.501 - River Road - Luling - Louisiana - 70.070 - E.U.A.
     // 3. Agro Bayer Zárate (Argentina)
     expect(res.empresas[2].tipo_relacao).toBe('Fabricante do Produto Técnico')
     expect(res.empresas[2].razao_social).toBe('AGRO BAYER S.R.L.')
-    expect(res.empresas[2].cnpj).toBe('')
+    expect(res.empresas[2].cnpj).toBe('EXT-ARG-ZARATE')
     expect(res.empresas[2].pais).toBe('Argentina')
     expect(res.empresas[2].endereco).toContain('Zarate Plant')
 
     // 4. Bayer CropScience Luling (EUA)
     expect(res.empresas[3].tipo_relacao).toBe('Fabricante do Produto Técnico')
     expect(res.empresas[3].razao_social).toBe('BAYER CROPSCIENCE LP')
-    expect(res.empresas[3].cnpj).toBe('')
+    expect(res.empresas[3].cnpj).toBe('EXT-USA-LULING')
     expect(res.empresas[3].pais).toBe('E.U.A.')
     expect(res.empresas[3].endereco).toContain('Luling Plant')
 
     // 5. Bayer CropScience Muscatine (EUA)
     expect(res.empresas[4].tipo_relacao).toBe('Fabricante do Produto Técnico')
     expect(res.empresas[4].razao_social).toBe('BAYER CROPSCIENCE LP')
-    expect(res.empresas[4].cnpj).toBe('')
+    expect(res.empresas[4].cnpj).toBe('EXT-USA-MUSCATINE')
     expect(res.empresas[4].pais).toBe('E.U.A.')
     expect(res.empresas[4].endereco).toContain('Muscatine Plant')
 
     // 6. Bayer Agriculture Antuérpia (Bélgica)
     expect(res.empresas[5].tipo_relacao).toBe('Fabricante do Produto Técnico')
     expect(res.empresas[5].razao_social).toBe('BAYER AGRICULTURE BV')
-    expect(res.empresas[5].cnpj).toBe('')
+    expect(res.empresas[5].cnpj).toBe('EXT-BEL-ANTWERP')
     expect(res.empresas[5].pais).toBe('Bélgica')
     expect(res.empresas[5].endereco).toContain('Antwerp Plant')
 
@@ -1263,7 +1368,7 @@ Luling Plant - 12.501 - River Road - Luling - Louisiana - 70.070 - E.U.A.
     // 8. Agro Bayer Zárate
     expect(res.empresas[7].tipo_relacao).toBe('Formulador')
     expect(res.empresas[7].razao_social).toBe('AGRO BAYER S.R.L.')
-    expect(res.empresas[7].cnpj).toBe('')
+    expect(res.empresas[7].cnpj).toBe('EXT-ARG-ZARATE')
     expect(res.empresas[7].pais).toBe('Argentina')
 
     // Importadores (9 e 10)
@@ -1299,6 +1404,38 @@ CNPJ 64.858.525/0001-45
       (e) => e.tipo_relacao === 'Titular do Registro' && e.razao_social.includes('MONSANTO'),
     )
     expect(titulares.length).toBe(1)
+  })
+
+  it('19. Parser de Empresas: Caso Real de Endereço Monsanto engolindo Agro Bayer S.R.L. com Registro Estadual', () => {
+    const textoComColapsoExato = `
+REGISTRADO NO MINISTÉRIO DA AGRICULTURA E PECUÁRIA
+MAPA SOB N° 01119
+ROUNDUP ORIGINAL® MAIS
+COMPOSIÇÃO:
+Glifosato 480 g/L
+
+FORMULADOR:
+MONSANTO DO BRASIL LTDA.
+Av. Carlos Marcondes, 1200, km 159,5 - Limoeiro-CEP 12241-421 São José dos Campos-SP-Tel.: 0800-011-5560 - CNPJ: 64.858.525/0002-26 Registro Estadual nº 525 - CDA/SP AGRO BAYER S.R.L. Zarate Plant – Ruta Provincial 6, km 83,1 - Zarate - 2800 - Argentina.
+IMPORTADOR:
+MONSANTO DO BRASIL LTDA.
+Rua Domingos Jorge, 1.100 - CEP: 04779-900 - São Paulo/SP CNPJ 64.858.525/0001-45
+`
+    const res = parsearTextoBula(textoComColapsoExato)
+    const empsForm = res.empresas.filter((e) => e.tipo_relacao === 'Formulador')
+    expect(empsForm.length).toBe(2)
+
+    const monsanto = empsForm.find((e) => e.razao_social === 'MONSANTO DO BRASIL LTDA.')
+    expect(monsanto).toBeDefined()
+    expect(monsanto?.cnpj).toBe('64.858.525/0002-26')
+    expect(monsanto?.endereco).not.toContain('AGRO BAYER')
+
+    const agroBayer = empsForm.find((e) => e.razao_social === 'AGRO BAYER S.R.L.')
+    expect(agroBayer).toBeDefined()
+    expect(agroBayer?.cnpj).toBe('EXT-ARG-ZARATE')
+    expect(agroBayer?.pais).toBe('Argentina')
+    expect(agroBayer?.endereco).toContain('Zarate Plant')
+    expect(agroBayer?.endereco).not.toContain('64.858.525/0002-26')
   })
 })
 
