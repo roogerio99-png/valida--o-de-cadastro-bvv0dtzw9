@@ -1024,20 +1024,20 @@ export function Validar() {
                 <Button
                   variant="outline"
                   size="sm"
-                  onClick={() => handleCarregarExemplo('roundup')}
+                  onClick={() => handleCarregarExemplo('roundup_wg')}
                   className="text-xs h-8 text-[#1B5E20] border-emerald-300"
                 >
                   <Sparkles className="w-3.5 h-3.5 mr-1 text-[#F57F17]" />
-                  Carregar Exemplo Roundup
+                  Carregar Exemplo Roundup WG
                 </Button>
                 <Button
                   variant="outline"
                   size="sm"
-                  onClick={() => handleCarregarExemplo('priori')}
+                  onClick={() => handleCarregarExemplo('standak')}
                   className="text-xs h-8 text-[#1B5E20] border-emerald-300"
                 >
                   <Sparkles className="w-3.5 h-3.5 mr-1 text-[#F57F17]" />
-                  Exemplo Nota 2 TIPI
+                  Exemplo Standak Top
                 </Button>
               </div>
             </div>
