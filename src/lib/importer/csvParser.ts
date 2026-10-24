@@ -171,6 +171,12 @@ function findHeaderRowIndex(grid: (string | number | undefined)[][]): number {
       'condicao',
       'escopo',
       'subposicao',
+      'origem',
+      'destino',
+      'reducao',
+      'diferimento',
+      'fundamentacao',
+      'operacao',
     ]
 
     // Pontuar palavras-chave identificadas como nomes de colunas
@@ -183,6 +189,14 @@ function findHeaderRowIndex(grid: (string | number | undefined)[][]): number {
       (rowText.includes('ncm') || rowText.includes('codigo'))
     ) {
       score += 15
+    }
+
+    // Se contiver pares típicos de regra fiscal interestadual ("origem" e "destino" ou "origem" e "aliquota")
+    if (
+      rowText.includes('origem') &&
+      (rowText.includes('destino') || rowText.includes('aliquota') || rowText.includes('icms'))
+    ) {
+      score += 20
     }
 
     // Penalizar se a primeira célula tiver texto longo (linha mesclada de instrução ou notas)

@@ -37,6 +37,7 @@ import {
   sanitizarRegistroMapa,
   sanitizarMarcaComercial,
 } from '@/lib/motorCanonico'
+import { mapearLinhaSimRegraIcms, type RegraIcmsEstruturada } from '@/lib/simRegrasIcmsMapeamento'
 
 interface ZoneConfig {
   id: string
@@ -280,9 +281,13 @@ const DROP_ZONES: ZoneConfig[] = [
       'regras icms',
       'regra_icms',
       'regras_icms',
+      'regras icms interestaduais',
+      'regras_icms_interestaduais',
       'icms',
       'matriz icms',
       'tabela icms',
+      'regrasicms',
+      'regraicms',
     ],
     title: 'Simulador: Regras de ICMS',
     subtitle:
@@ -1989,88 +1994,44 @@ export function Importar() {
       // SIMULADOR: sim_regras_icms (Aba Regra ICMS)
       // ------------------------------------------------------------------
       else if (targetCol === 'sim_regras_icms') {
-        const ufOrigem = getFieldValue(row, [
-          'uf_origem',
-          'origem',
-          'uf_orig',
-          'estado_origem',
-          'orig',
-        ])
-          .trim()
-          .toUpperCase()
-        const ufDestino = getFieldValue(row, [
-          'uf_destino',
-          'destino',
-          'uf_dest',
-          'estado_destino',
-          'dest',
-        ])
-          .trim()
-          .toUpperCase()
-        const aliqIcms = cleanNumber(
-          getFieldValue(row, ['aliquota_icms', 'aliquota', 'icms', 'aliq_icms', 'aliq']),
-        )
-        const redBase = cleanNumber(
-          getFieldValue(row, ['reducao_base', 'reducao', 'red_base', 'perc_reducao']),
-        )
-        const aliqEfetivaRaw = getFieldValue(row, [
-          'aliquota_efetiva',
-          'aliq_efetiva',
-          'icms_efetivo',
-        ])
-        const aliqEfetiva = aliqEfetivaRaw
-          ? cleanNumber(aliqEfetivaRaw)
-          : aliqIcms * (1 - redBase / 100)
-        const diferimentoRaw = getFieldValue(row, ['diferimento', 'diferido', 'possui_diferimento'])
-        const diferimento =
-          diferimentoRaw.toLowerCase() === 'sim' ||
-          diferimentoRaw.toLowerCase() === 's' ||
-          diferimentoRaw.toLowerCase() === 'true'
-        const percDif = cleanNumber(
-          getFieldValue(row, ['percentual_diferimento', 'perc_diferimento', 'diferimento_perc']),
-        )
-        const fundLegal = getFieldValue(row, [
-          'fundamentacao_legal',
-          'fundamentacao',
-          'base_legal',
-          'dispositivo',
-          'observacao',
-          'obs',
-        ])
-        const tipoOp =
-          getFieldValue(row, ['tipo_operacao', 'operacao']) ||
-          (ufOrigem === ufDestino ? 'Interna' : 'Interestadual')
-
-        if (!ufOrigem || !ufDestino || ufOrigem.length !== 2 || ufDestino.length !== 2) {
+        // Ignorar linhas de cabeçalho ou notas informativas
+        const allText = Object.values(row).join(' ').trim()
+        const lowerAll = allText.toLowerCase()
+        if (
+          lowerAll.includes('como usar') ||
+          lowerAll.includes('regras oficiais') ||
+          lowerAll.includes('instruções') ||
+          lowerAll.includes('instrucoes')
+        ) {
           rejeitados.push({
             linhaOriginal: originalLineNum,
             linhaLote: idx + 1,
-            motivo: `Siglas de UF inválidas: Origem="${ufOrigem}", Destino="${ufDestino}". Devem conter 2 letras.`,
-            categoria: 'UF Inválida',
-            campo: 'UF',
-            valor: `${ufOrigem} -> ${ufDestino}`,
+            motivo: 'Linha informativa ou cabeçalho ignorado.',
+            categoria: 'Linha Informativa',
+            campo: 'Linha',
+            valor: allText.slice(0, 60),
             dados: row,
           })
           return
         }
 
-        const chaveOrigemDestino = `${ufOrigem}_${ufDestino}`
+        const resMapeamento = mapearLinhaSimRegraIcms(row)
+        if (!resMapeamento.sucesso) {
+          rejeitados.push({
+            linhaOriginal: originalLineNum,
+            linhaLote: idx + 1,
+            motivo: resMapeamento.motivo,
+            categoria: 'UF Inválida',
+            campo: resMapeamento.campo,
+            valor: resMapeamento.valor,
+            dados: row,
+          })
+          return
+        }
 
         validos.push({
           originalLine: originalLineNum,
-          data: {
-            uf_origem: ufOrigem,
-            uf_destino: ufDestino,
-            aliquota_icms: aliqIcms,
-            reducao_base: redBase,
-            aliquota_efetiva: aliqEfetiva,
-            diferimento: diferimento,
-            percentual_diferimento: percDif,
-            fundamentacao_legal: fundLegal || '',
-            tipo_operacao: tipoOp,
-            chave_origem_destino: chaveOrigemDestino,
-            dados_extras: row,
-          },
+          data: resMapeamento.regra as unknown as Record<string, unknown>,
         })
       }
     })

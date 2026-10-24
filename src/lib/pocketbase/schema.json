@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-10-24T22:11:32.827Z",
+  "generatedAt": "2026-10-24T22:41:23.446Z",
   "collections": [
     {
       "name": "users",
@@ -1905,7 +1905,7 @@
         {
           "name": "aliquota_icms",
           "type": "number",
-          "required": true,
+          "required": false,
           "system": false
         },
         {

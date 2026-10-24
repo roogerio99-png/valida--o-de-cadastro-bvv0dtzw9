@@ -247,6 +247,173 @@ routerAdd('POST', '/backend/v1/importar-lote', (e) => {
     }
 
     // -------------------------------------------------------------------------
+    // Helpers de Mapeamento Agnóstico de Colunas para sim_regras_icms
+    // -------------------------------------------------------------------------
+    const UFS_MAPA_SIGLAS = {
+      AC: 'AC',
+      ACRE: 'AC',
+      AL: 'AL',
+      ALAGOAS: 'AL',
+      AP: 'AP',
+      AMAPA: 'AP',
+      AMAPÁ: 'AP',
+      AM: 'AM',
+      AMAZONAS: 'AM',
+      BA: 'BA',
+      BAHIA: 'BA',
+      CE: 'CE',
+      CEARA: 'CE',
+      CEARÁ: 'CE',
+      DF: 'DF',
+      'DISTRITO FEDERAL': 'DF',
+      ES: 'ES',
+      'ESPIRITO SANTO': 'ES',
+      'ESPÍRITO SANTO': 'ES',
+      GO: 'GO',
+      GOIAS: 'GO',
+      GOIÁS: 'GO',
+      MA: 'MA',
+      MARANHAO: 'MA',
+      MARANHÃO: 'MA',
+      MT: 'MT',
+      'MATO GROSSO': 'MT',
+      MS: 'MS',
+      'MATO GROSSO DO SUL': 'MS',
+      MG: 'MG',
+      'MINAS GERAIS': 'MG',
+      PA: 'PA',
+      PARA: 'PA',
+      PARÁ: 'PA',
+      PB: 'PB',
+      PARAIBA: 'PB',
+      PARAÍBA: 'PB',
+      PR: 'PR',
+      PARANA: 'PR',
+      PARANÁ: 'PR',
+      PE: 'PE',
+      PERNAMBUCO: 'PE',
+      PI: 'PI',
+      PIAUI: 'PI',
+      PIAUÍ: 'PI',
+      RJ: 'RJ',
+      'RIO DE JANEIRO': 'RJ',
+      RN: 'RN',
+      'RIO GRANDE DO NORTE': 'RN',
+      RS: 'RS',
+      'RIO GRANDE DO SUL': 'RS',
+      RO: 'RO',
+      RONDONIA: 'RO',
+      RONDÔNIA: 'RO',
+      RR: 'RR',
+      RORAIMA: 'RR',
+      SC: 'SC',
+      'SANTA CATARINA': 'SC',
+      SP: 'SP',
+      'SAO PAULO': 'SP',
+      'SÃO PAULO': 'SP',
+      SE: 'SE',
+      SERGIPE: 'SE',
+      TO: 'TO',
+      TOCANTINS: 'TO',
+      EX: 'EX',
+      EXTERIOR: 'EX',
+    }
+
+    function extrairValorPorAliasesHook(obj, aliases) {
+      if (!obj || typeof obj !== 'object') return ''
+      const keys = Object.keys(obj)
+
+      // 1ª passada: match exato no nome normalizado
+      for (let a = 0; a < aliases.length; a++) {
+        const normAlias = normTxt(aliases[a])
+        for (let k = 0; k < keys.length; k++) {
+          const key = keys[k]
+          if (normTxt(key) === normAlias && obj[key] !== undefined && obj[key] !== null) {
+            const v = String(obj[key]).trim()
+            if (v.length > 0) return v
+          }
+        }
+      }
+
+      // 2ª passada: startsWith normalizado
+      for (let a = 0; a < aliases.length; a++) {
+        const normAlias = normTxt(aliases[a])
+        if (normAlias.length < 3) continue
+        for (let k = 0; k < keys.length; k++) {
+          const key = keys[k]
+          const normKey = normTxt(key)
+          if (normKey.indexOf(normAlias) === 0 && obj[key] !== undefined && obj[key] !== null) {
+            const v = String(obj[key]).trim()
+            if (v.length > 0) return v
+          }
+        }
+      }
+
+      // 3ª passada: substring match
+      for (let a = 0; a < aliases.length; a++) {
+        const normAlias = normTxt(aliases[a])
+        if (normAlias.length < 4) continue
+        for (let k = 0; k < keys.length; k++) {
+          const key = keys[k]
+          const normKey = normTxt(key)
+          if (normKey.indexOf(normAlias) !== -1 && obj[key] !== undefined && obj[key] !== null) {
+            const v = String(obj[key]).trim()
+            if (v.length > 0) return v
+          }
+        }
+      }
+
+      return ''
+    }
+
+    function normalizarUfHook(raw) {
+      if (!raw) return ''
+      let str = String(raw).trim().toUpperCase()
+      if (!str) return ''
+      if (str.length === 2 && UFS_MAPA_SIGLAS[str]) {
+        return str
+      }
+      const semAcentos = str.replace(/[\u0300-\u036f]/g, '').trim()
+      if (UFS_MAPA_SIGLAS[semAcentos]) {
+        return UFS_MAPA_SIGLAS[semAcentos]
+      }
+      const m = str.match(/\b([A-Z]{2})\b/)
+      if (m && UFS_MAPA_SIGLAS[m[1]]) {
+        return m[1]
+      }
+      return ''
+    }
+
+    function normalizarNumeroPercentualHook(raw) {
+      if (raw === undefined || raw === null || raw === '') return 0
+      if (typeof raw === 'number') {
+        if (isNaN(raw)) return 0
+        if (raw > 0 && raw < 1) {
+          return Math.round(raw * 10000) / 100
+        }
+        return raw
+      }
+      let str = String(raw).trim()
+      if (!str) return 0
+      const hasPercent = str.indexOf('%') !== -1
+      str = str.replace(/%/g, '').trim()
+      if (str.indexOf('.') !== -1 && str.indexOf(',') !== -1) {
+        str = str.replace(/\./g, '').replace(',', '.')
+      } else if (str.indexOf(',') !== -1) {
+        str = str.replace(',', '.')
+      }
+      const cleaned = str.replace(/[^\d.-]/g, '')
+      const parsed = parseFloat(cleaned)
+      if (isNaN(parsed)) return 0
+      if (hasPercent || (parsed > 0 && parsed < 1)) {
+        if (parsed > 0 && parsed < 1) {
+          return Math.round(parsed * 10000) / 100
+        }
+      }
+      return parsed
+    }
+
+    // -------------------------------------------------------------------------
     // Execução do Lote com Transação ACID
     // -------------------------------------------------------------------------
     let inseridos = 0
@@ -2482,53 +2649,188 @@ routerAdd('POST', '/backend/v1/importar-lote', (e) => {
       // CASO 12: sim_regras_icms (Aba Regra ICMS do Simulador Comercial)
       // =======================================================================
       if (collectionName === 'sim_regras_icms') {
+        const ALIASES_HOOK_UF_ORIGEM = [
+          'uf_origem',
+          'uforigem',
+          'origem',
+          'uf_orig',
+          'uforig',
+          'estado_origem',
+          'estadoorigem',
+          'orig',
+          'uf_saida',
+          'origem_uf',
+          'de_uf',
+          'de',
+        ]
+        const ALIASES_HOOK_UF_DESTINO = [
+          'uf_destino',
+          'ufdestino',
+          'destino',
+          'uf_dest',
+          'ufdest',
+          'estado_destino',
+          'estadodestino',
+          'dest',
+          'uf_entrada',
+          'destino_uf',
+          'para_uf',
+          'para',
+        ]
+        const ALIASES_HOOK_ALIQUOTA = [
+          'aliquota_icms',
+          'aliquotaicms',
+          'aliq_icms',
+          'aliqicms',
+          'aliquota',
+          'aliq',
+          'icms',
+          'aliq_nominal',
+          'icms_aliquota',
+          'taxa_icms',
+          'aliquota_nominal',
+        ]
+        const ALIASES_HOOK_REDUCAO = [
+          'reducao_base',
+          'reducaobase',
+          'red_base',
+          'redbase',
+          'reducao',
+          'perc_reducao',
+          'reducao_icms',
+          'beneficio_reducao',
+          'perc_red',
+        ]
+        const ALIASES_HOOK_EFETIVA = [
+          'aliquota_efetiva',
+          'aliquotaefetiva',
+          'aliq_efetiva',
+          'aliqefetiva',
+          'icms_efetivo',
+          'aliq_final',
+          'aliquota_final',
+          'efetiva',
+        ]
+        const ALIASES_HOOK_DIFERIMENTO = [
+          'diferimento',
+          'diferido',
+          'possui_diferimento',
+          'tem_diferimento',
+          'diferimento_icms',
+          'ind_diferimento',
+          'flag_diferimento',
+        ]
+        const ALIASES_HOOK_PERC_DIF = [
+          'percentual_diferimento',
+          'percentualdiferimento',
+          'perc_diferimento',
+          'percdiferimento',
+          'diferimento_perc',
+          'diferimento_percentual',
+          'perc_dif',
+          'diferimento_taxa',
+        ]
+        const ALIASES_HOOK_FUND_LEGAL = [
+          'fundamentacao_legal',
+          'fundamentacaolegal',
+          'fundamentacao',
+          'base_legal',
+          'baselegal',
+          'dispositivo',
+          'dispositivo_legal',
+          'legislacao',
+          'amparo_legal',
+          'observacao',
+          'observacoes',
+          'obs',
+        ]
+        const ALIASES_HOOK_TIPO_OP = [
+          'tipo_operacao',
+          'tipooperacao',
+          'operacao',
+          'tipo',
+          'natureza_operacao',
+          'escopo_operacao',
+        ]
+
         for (let i = 0; i < records.length; i++) {
           const itemWrapper = records[i]
           const data = itemWrapper.data || itemWrapper
           const rowNum = Number(itemWrapper.originalLine) || i + 1
 
-          const ufOrigem = String(data.uf_origem || data.origem || '')
-            .trim()
-            .toUpperCase()
-          const ufDestino = String(data.uf_destino || data.destino || '')
-            .trim()
-            .toUpperCase()
+          // 1. Extrair extras brutos se vieram
+          let rawObj = {}
+          if (data.dados_extras) {
+            try {
+              rawObj =
+                typeof data.dados_extras === 'string'
+                  ? JSON.parse(data.dados_extras)
+                  : Object.assign({}, data.dados_extras)
+            } catch (_) {
+              rawObj = {}
+            }
+          }
+          // Objeto unificado para resolução agnóstica de colunas
+          const objetoUnificado = Object.assign({}, rawObj, data)
 
-          if (!ufOrigem || !ufDestino || ufOrigem.length !== 2 || ufDestino.length !== 2) {
+          // 2. Extração agnóstica de UF Origem e Destino
+          const rawOrigem = extrairValorPorAliasesHook(objetoUnificado, ALIASES_HOOK_UF_ORIGEM)
+          const ufOrigem = normalizarUfHook(rawOrigem)
+
+          const rawDestino = extrairValorPorAliasesHook(objetoUnificado, ALIASES_HOOK_UF_DESTINO)
+          const ufDestino = normalizarUfHook(rawDestino)
+
+          if (!ufOrigem || !ufDestino) {
             registrarErro(
               rowNum,
               i + 1,
               'UF Inválida',
-              `Origem ("${ufOrigem}") e Destino ("${ufDestino}") devem ser siglas de estado válidas com 2 letras.`,
+              `Origem ("${rawOrigem}") e Destino ("${rawDestino}") devem ser siglas ou nomes de estados brasileiros válidos (ex.: SP, MT, PR).`,
               'uf_origem',
-              `${ufOrigem}->${ufDestino}`,
+              `${rawOrigem}->${rawDestino}`,
               data,
             )
             continue
           }
 
           const chaveOrigemDestino = `${ufOrigem}_${ufDestino}`
-          const aliqIcms =
-            Number(data.aliquota_icms !== undefined ? data.aliquota_icms : data.aliquota || 0) || 0
-          const reducaoBase = Number(data.reducao_base || data.reducao || 0) || 0
-          const aliqEfetiva =
-            Number(
-              data.aliquota_efetiva !== undefined
-                ? data.aliquota_efetiva
-                : aliqIcms * (1 - reducaoBase / 100),
-            ) || aliqIcms
-          const diferimento = !!(
-            data.diferimento === true ||
-            String(data.diferimento).toLowerCase() === 'sim' ||
-            String(data.diferimento).toLowerCase() === 'true'
-          )
-          const percDiferimento = Number(data.percentual_diferimento || 0) || 0
-          const fundamentacao = String(data.fundamentacao_legal || data.fundamentacao || '').trim()
-          const tipoOperacao = String(
-            data.tipo_operacao || (ufOrigem === ufDestino ? 'Interna' : 'Interestadual'),
-          ).trim()
 
-          // Upsert por chave_origem_destino
+          // 3. Extração de Alíquotas e Benefícios
+          const rawAliqIcms = extrairValorPorAliasesHook(objetoUnificado, ALIASES_HOOK_ALIQUOTA)
+          const aliqIcms = normalizarNumeroPercentualHook(rawAliqIcms)
+
+          const rawReducao = extrairValorPorAliasesHook(objetoUnificado, ALIASES_HOOK_REDUCAO)
+          const reducaoBase = normalizarNumeroPercentualHook(rawReducao)
+
+          const rawEfetiva = extrairValorPorAliasesHook(objetoUnificado, ALIASES_HOOK_EFETIVA)
+          let aliqEfetiva = 0
+          if (rawEfetiva) {
+            aliqEfetiva = normalizarNumeroPercentualHook(rawEfetiva)
+          } else {
+            aliqEfetiva = Math.round(aliqIcms * (1 - reducaoBase / 100) * 10000) / 10000
+          }
+
+          // 4. Diferimento
+          const rawDif = extrairValorPorAliasesHook(objetoUnificado, ALIASES_HOOK_DIFERIMENTO)
+          const rawPercDif = extrairValorPorAliasesHook(objetoUnificado, ALIASES_HOOK_PERC_DIF)
+          const percDiferimento = normalizarNumeroPercentualHook(rawPercDif)
+          const strDif = String(rawDif).toLowerCase().trim()
+          const diferimento =
+            rawDif === true ||
+            strDif === 'sim' ||
+            strDif === 's' ||
+            strDif === 'true' ||
+            strDif === '1' ||
+            percDiferimento > 0
+
+          // 5. Fundamentação e Tipo de Operação
+          let fundamentacao = extrairValorPorAliasesHook(objetoUnificado, ALIASES_HOOK_FUND_LEGAL)
+          if (fundamentacao.length > 2000) fundamentacao = fundamentacao.slice(0, 2000)
+
+          const rawTipoOp = extrairValorPorAliasesHook(objetoUnificado, ALIASES_HOOK_TIPO_OP)
+          const tipoOperacao = rawTipoOp || (ufOrigem === ufDestino ? 'Interna' : 'Interestadual')
+
+          // 6. Upsert por chave_origem_destino
           const escChave = chaveOrigemDestino.replace(/'/g, "\\'")
           const achados =
             txApp.findRecordsByFilter(
@@ -2560,7 +2862,12 @@ routerAdd('POST', '/backend/v1/importar-lote', (e) => {
           record.set('tipo_operacao', tipoOperacao)
           record.set('chave_origem_destino', chaveOrigemDestino)
           if (data.dados_extras) {
-            record.set('dados_extras', data.dados_extras)
+            record.set(
+              'dados_extras',
+              typeof data.dados_extras === 'string'
+                ? data.dados_extras
+                : JSON.stringify(data.dados_extras),
+            )
           }
 
           try {
@@ -2586,6 +2893,26 @@ routerAdd('POST', '/backend/v1/importar-lote', (e) => {
         }
       }
     })
+
+    // Log detalhado de diagnóstico para observabilidade da importação em lote
+    const totalDescartados = erros.length
+    console.log(
+      `[IMPORTAR_LOTE] Coleção="${collectionName}" | Total Recebidas=${records.length} | ` +
+        `Inseridas=${inseridos} | Atualizadas=${atualizados} | Descartadas=${totalDescartados}`,
+    )
+    if (totalDescartados > 0) {
+      console.log(
+        `[IMPORTAR_LOTE] Motivos de descarte (${collectionName}): ` +
+          JSON.stringify(resumoCategorias),
+      )
+      // Logar os primeiros 5 erros detalhadamente
+      for (let eIdx = 0; eIdx < Math.min(erros.length, 5); eIdx++) {
+        const item = erros[eIdx]
+        console.log(
+          `[IMPORTAR_LOTE] Erro #${eIdx + 1}: Linha=${item.linhaOriginal} | Cat="${item.categoria}" | Campo="${item.campo || '-'}" | Motivo="${item.motivo}" | Valor="${item.valor || '-'}"`,
+        )
+      }
+    }
 
     return e.json(200, {
       sucesso: true,
