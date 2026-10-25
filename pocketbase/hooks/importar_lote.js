@@ -893,41 +893,128 @@ routerAdd('POST', '/backend/v1/importar-lote', (e) => {
             }
           }
 
-          // Checagem de Duplicidade (Trava 4) para Upsert Idempotente
+          // Checagem de Duplicidade Canônica da Base Mestre (Upsert Idempotente):
+          // Considera ESTRITAMENTE a COMBINAÇÃO dos 4 campos:
+          // (1) nome comercial do produto
+          // (2) princípio ativo
+          // (3) quantidade da embalagem
+          // (4) código MAPA (registro MAPA)
+          // Registros com mesma marca mas embalagem diferente convivem como registros próprios.
+
+          // Extrair quantidade numérica normalizada da embalagem
+          let qtdEmbalagemVal = 0
+          if (
+            data.quantidade_embalagem_principal !== undefined &&
+            data.quantidade_embalagem_principal !== null &&
+            Number(data.quantidade_embalagem_principal) > 0
+          ) {
+            qtdEmbalagemVal = Number(data.quantidade_embalagem_principal)
+          } else {
+            const mMulti = String(embLimpa).match(/(\d+)\s*[xX×]\s*(\d+(?:[.,]\d+)?)/)
+            if (mMulti) {
+              qtdEmbalagemVal = parseFloat(mMulti[2].replace(',', '.'))
+            } else {
+              const mNum = String(embLimpa).match(/(\d+(?:[.,]\d+)?)/)
+              if (mNum) {
+                qtdEmbalagemVal = parseFloat(mNum[1].replace(',', '.'))
+              }
+            }
+          }
+          if (isNaN(qtdEmbalagemVal) || qtdEmbalagemVal <= 0) qtdEmbalagemVal = 20
+
+          // Normalizar código MAPA para busca (unifica zeros à esquerda e "ISENTO")
           const mapaDigits = regMapaFormatado.replace(/\D/g, '')
-          const marcaNorm = normTxt(marcaPadronizada)
-          const escMarcaNorm = marcaPadronizada.replace(/'/g, "\\'")
+          const mapaNormalizadoChave =
+            mapaDigits.length > 0 &&
+            /^\d+$/.test(regMapaFormatado.replace(/^N[º°.]\s*/i, '').trim())
+              ? String(parseInt(mapaDigits, 10))
+              : regMapaFormatado
+                ? normTxt(regMapaFormatado)
+                : 'ISENTO'
+
+          // Chave canônica de 4 campos no lote para contagem de duplicadas intra-planilha
+          const nomeNormChave = normTxt(marcaPadronizada || nomeCompleto)
+          const paNormChave = normTxt(paDeclarado)
+          const chaveUnica4Campos = `${nomeNormChave}__||__${paNormChave}__||__${qtdEmbalagemVal}__||__${mapaNormalizadoChave}`
+          const rotuloLegivelLote = `${marcaPadronizada || nomeCompleto} • P.A.: ${paDeclarado} • Emb: ${qtdEmbalagemVal} • MAPA: ${regMapaFormatado || 'ISENTO'}`
+
+          if (codigosVistosNoLote[chaveUnica4Campos]) {
+            codigosVistosNoLote[chaveUnica4Campos]++
+            duplicadasNoLote[rotuloLegivelLote] = codigosVistosNoLote[chaveUnica4Campos]
+          } else {
+            codigosVistosNoLote[chaveUnica4Campos] = 1
+          }
 
           let matchRecord = null
 
-          // Critério A: Registro MAPA válido
+          // Busca candidatos na base_mestre por registros com nome ou MAPA aproximado para conferência dos 4 campos
+          const escMarcaNorm = marcaPadronizada.replace(/'/g, "\\'")
+          const escMapa = regMapaFormatado.replace(/'/g, "\\'")
+          let candidatosBase = []
+
           if (mapaDigits && mapaDigits.length >= 4) {
-            const escMapa = regMapaFormatado.replace(/'/g, "\\'")
-            const porMapa =
+            candidatosBase =
               txApp.findRecordsByFilter(
                 'base_mestre',
-                `registro_mapa = '${escMapa}'`,
+                `registro_mapa ~ '${escMapa}' || marca_padronizada = '${escMarcaNorm}' || nome_produto = '${escMarcaNorm}'`,
                 '-created',
-                1,
+                20,
                 0,
               ) || []
-            if (porMapa.length > 0) {
-              matchRecord = porMapa[0]
-            }
+          } else if (escMarcaNorm) {
+            candidatosBase =
+              txApp.findRecordsByFilter(
+                'base_mestre',
+                `marca_padronizada = '${escMarcaNorm}' || nome_produto = '${escMarcaNorm}' || nome_completo ~ '${escMarcaNorm}'`,
+                '-created',
+                20,
+                0,
+              ) || []
           }
 
-          // Critério B: Marca padronizada + NCM
-          if (!matchRecord && marcaNorm) {
-            const porMarcaNcm =
-              txApp.findRecordsByFilter(
-                'base_mestre',
-                `(marca_padronizada = '${escMarcaNorm}' || nome_produto = '${escMarcaNorm}') && (ncm = '${digitsNcm}' || ncm_padrao = '${ncmMascara}')`,
-                '-created',
-                1,
-                0,
-              ) || []
-            if (porMarcaNcm.length > 0) {
-              matchRecord = porMarcaNcm[0]
+          // Conferir os 4 campos na lista de candidatos
+          for (let cIdx = 0; cIdx < candidatosBase.length; cIdx++) {
+            const cand = candidatosBase[cIdx]
+            const candNome =
+              cand.getString('marca_padronizada') ||
+              cand.getString('nome_produto') ||
+              cand.getString('nome_completo')
+            const candNomeNorm = normTxt(candNome)
+
+            const candPa = cand.getString('principio_ativo')
+            const candPaNorm = normTxt(candPa)
+
+            let candQtd = Number(cand.getInt('quantidade_embalagem_principal'))
+            if (!candQtd || candQtd <= 0) {
+              const candEmbStr = cand.getString('embalagem') || ''
+              const mMultiC = candEmbStr.match(/(\d+)\s*[xX×]\s*(\d+(?:[.,]\d+)?)/)
+              if (mMultiC) {
+                candQtd = parseFloat(mMultiC[2].replace(',', '.'))
+              } else {
+                const mNumC = candEmbStr.match(/(\d+(?:[.,]\d+)?)/)
+                if (mNumC) candQtd = parseFloat(mNumC[1].replace(',', '.'))
+              }
+            }
+            if (isNaN(candQtd) || candQtd <= 0) candQtd = 20
+
+            const candMapa = cand.getString('registro_mapa') || ''
+            const candMapaDigits = candMapa.replace(/\D/g, '')
+            const candMapaNorm =
+              candMapaDigits.length > 0 && /^\d+$/.test(candMapa.replace(/^N[º°.]\s*/i, '').trim())
+                ? String(parseInt(candMapaDigits, 10))
+                : candMapa
+                  ? normTxt(candMapa)
+                  : 'ISENTO'
+
+            // Verificação estrita dos 4 campos
+            const matchNome = candNomeNorm === nomeNormChave
+            const matchPa = candPaNorm === paNormChave
+            const matchQtd = Math.abs(candQtd - qtdEmbalagemVal) < 0.001
+            const matchMapa = candMapaNorm === mapaNormalizadoChave
+
+            if (matchNome && matchPa && matchQtd && matchMapa) {
+              matchRecord = cand
+              break
             }
           }
 
@@ -2058,15 +2145,14 @@ routerAdd('POST', '/backend/v1/importar-lote', (e) => {
             const ncmMascara = fmtNcmMascara(ncmEsp)
             const ncmLimpo = ncmMascara.replace(/\D/g, '')
 
-            // IDEMPOTÊNCIA: chave natural = registro_mapa sanitizado + quantidade + unidade + acondicionamento
-            const escAcond = acond.replace(/'/g, "\\'")
-            const escUnPrinc = unPrinc.replace(/'/g, "\\'")
+            // IDEMPOTÊNCIA CANÔNICA (4 campos): nome comercial + princípio ativo + quantidade embalagem + código MAPA
+            const escMapa = regMapa.replace(/'/g, "\\'")
+            const escMarca = marcaPad.replace(/'/g, "\\'")
             let filtroMestre = ''
             if (regMapa && regMapa.indexOf('LINHA-') !== 0) {
-              filtroMestre = `registro_mapa = '${escMapa}' && quantidade_embalagem_principal = ${qtdPrinc} && unidade_medida_principal = '${escUnPrinc}' && forma_acondicionamento = '${escAcond}'`
+              filtroMestre = `(registro_mapa = '${escMapa}' || marca_padronizada = '${escMarca}') && quantidade_embalagem_principal = ${qtdPrinc}`
             } else {
-              const escMarca = marcaPad.replace(/'/g, "\\'")
-              filtroMestre = `marca_padronizada = '${escMarca}' && quantidade_embalagem_principal = ${qtdPrinc} && unidade_medida_principal = '${escUnPrinc}' && forma_acondicionamento = '${escAcond}'`
+              filtroMestre = `marca_padronizada = '${escMarca}' && quantidade_embalagem_principal = ${qtdPrinc}`
             }
 
             const mestreExistentes =

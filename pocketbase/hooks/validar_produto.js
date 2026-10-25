@@ -1760,9 +1760,38 @@ routerAdd('GET', '/backend/v1/relatorio-duplicidades', (e) => {
 
     const norm = (s) =>
       String(s || '')
+        .trim()
         .toLowerCase()
+        .normalize('NFD')
         .replace(/[\u0300-\u036f]/g, '')
-        .replace(/[^a-z0-9]/g, '')
+        .replace(/\s+/g, ' ')
+
+    const parseQtdNumero = (r) => {
+      let q = Number(r.getInt('quantidade_embalagem_principal'))
+      if (!q || q <= 0) {
+        const emb = r.getString('embalagem') || ''
+        const mMulti = emb.match(/(\d+)\s*[xX×]\s*(\d+(?:[.,]\d+)?)/)
+        if (mMulti) {
+          q = parseFloat(mMulti[2].replace(',', '.'))
+        } else {
+          const mNum = emb.match(/(\d+(?:[.,]\d+)?)/)
+          if (mNum) q = parseFloat(mNum[1].replace(',', '.'))
+        }
+      }
+      return !isNaN(q) && q > 0 ? q : 20
+    }
+
+    const normMapaNum = (s) => {
+      const semPre = String(s || '')
+        .trim()
+        .replace(/^N[º°.]\s*/i, '')
+        .trim()
+      const d = semPre.replace(/\D/g, '')
+      if (d.length > 0 && /^\d+$/.test(semPre)) {
+        return String(parseInt(d, 10))
+      }
+      return semPre ? norm(semPre) : 'ISENTO'
+    }
 
     const simplifyRecord = (r) => ({
       id: r.id,
@@ -1770,6 +1799,9 @@ routerAdd('GET', '/backend/v1/relatorio-duplicidades', (e) => {
       marca_padronizada: r.getString('marca_padronizada') || r.getString('nome_produto'),
       ncm_padrao: r.getString('ncm_padrao') || r.getString('ncm'),
       embalagem: r.getString('embalagem'),
+      quantidade_embalagem_principal: parseQtdNumero(r),
+      unidade_medida_principal:
+        r.getString('unidade_medida_principal') || r.getString('unidade') || 'L',
       principio_ativo: r.getString('principio_ativo'),
       titular_fabricante: r.getString('titular_fabricante') || r.getString('fabricante'),
       registro_mapa: r.getString('registro_mapa'),
@@ -1780,59 +1812,30 @@ routerAdd('GET', '/backend/v1/relatorio-duplicidades', (e) => {
 
     for (let i = 0; i < records.length; i++) {
       const rec = records[i]
-      const ncm = String(rec.getString('ncm_padrao') || rec.getString('ncm') || '').replace(
-        /\D/g,
-        '',
-      )
-      const nome = rec.getString('nome_completo') || rec.getString('nome_produto')
-      const marca = rec.getString('marca_padronizada') || nome
-      const marcaNorm = norm(marca)
-      const pa = rec.getString('principio_ativo')
+      const nome =
+        rec.getString('marca_padronizada') ||
+        rec.getString('nome_produto') ||
+        rec.getString('nome_completo') ||
+        ''
+      const nomeNorm = norm(nome)
+      const pa = rec.getString('principio_ativo') || ''
       const paNorm = norm(pa)
-      const mapa = rec.getString('registro_mapa')
-      const mapaDigits = mapa.replace(/\D/g, '')
+      const qtdNorm = parseQtdNumero(rec)
+      const mapa = rec.getString('registro_mapa') || ''
+      const mapaNorm = normMapaNum(mapa)
 
       const item = simplifyRecord(rec)
 
-      // Critério C: Marca Comercial / Nome Normalizado + NCM
-      if (marcaNorm && ncm && ncm.length === 8) {
-        const key = `c_nome_ncm:${marcaNorm}_${ncm}`
+      // Regra Canônica dos 4 Campos solicitada pelo usuário:
+      // (1) nome comercial, (2) princípio ativo, (3) quantidade da embalagem, (4) código MAPA
+      if (nomeNorm) {
+        const key = `bm_4campos:${nomeNorm}__||__${paNorm}__||__${qtdNorm}__||__${mapaNorm}`
         if (!gruposMap[key]) {
           gruposMap[key] = {
             id: key,
-            criterio: 'Marca Padronizada + NCM',
-            criterio_tipo: 'nome_ncm',
-            chave: `${marca} (NCM ${ncm})`,
-            registros: [],
-          }
-        }
-        gruposMap[key].registros.push(item)
-      }
-
-      // Critério B: Registro MAPA repetido
-      if (mapaDigits.length >= 4) {
-        const key = `b_mapa:${mapaDigits}`
-        if (!gruposMap[key]) {
-          gruposMap[key] = {
-            id: key,
-            criterio: 'Registro MAPA Duplicado',
-            criterio_tipo: 'registro_mapa',
-            chave: `MAPA ${mapa}`,
-            registros: [],
-          }
-        }
-        gruposMap[key].registros.push(item)
-      }
-
-      // Critério A: NCM + Princípio Ativo Normalizado
-      if (ncm && ncm.length === 8 && paNorm && paNorm !== 'naoinformado' && paNorm !== 'padrao') {
-        const key = `a_ncm_pa:${ncm}_${paNorm}`
-        if (!gruposMap[key]) {
-          gruposMap[key] = {
-            id: key,
-            criterio: 'NCM + Princípio Ativo',
-            criterio_tipo: 'ncm_pa',
-            chave: `NCM ${ncm} + ${pa}`,
+            criterio: 'Combinação dos 4 Campos (Nome + P.A. + Embalagem + MAPA)',
+            criterio_tipo: 'quatro_campos',
+            chave: `${nome} • P.A.: ${pa || 'Não Informado'} • Emb: ${qtdNorm} • MAPA: ${mapa || 'ISENTO'}`,
             registros: [],
           }
         }
