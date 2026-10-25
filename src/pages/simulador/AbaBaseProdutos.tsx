@@ -46,6 +46,8 @@ import {
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog'
 import { ScrollableTable } from '@/components/ScrollableTable'
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
+import { ModalLimparBase } from '@/components/ModalLimparBase'
 import { useAuth } from '@/contexts/AuthContext'
 import { useToast } from '@/hooks/use-toast'
 import {
@@ -108,6 +110,7 @@ export function AbaBaseProdutos({ ativa }: AbaBaseProdutosProps) {
   const [itemExcluindo, setItemExcluindo] = useState<SimProdutoBaseItem | null>(null)
   const [modalExcluirAberto, setModalExcluirAberto] = useState<boolean>(false)
   const [executandoExclusao, setExecutandoExclusao] = useState<boolean>(false)
+  const [modalLimparOpen, setModalLimparOpen] = useState<boolean>(false)
 
   // Constrói filtro PocketBase seguro
   const buildFilter = useCallback(() => {
@@ -405,6 +408,32 @@ export function AbaBaseProdutos({ ativa }: AbaBaseProdutosProps) {
               />
               Atualizar
             </Button>
+
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <span>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setModalLimparOpen(true)}
+                    disabled={!isAdmin || totalCount === 0}
+                    className="text-xs h-9 border-red-200 text-red-700 hover:bg-red-50 hover:text-red-800 disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    <Trash2 className="w-3.5 h-3.5 mr-1.5 text-red-600" />
+                    Excluir toda a base
+                  </Button>
+                </span>
+              </TooltipTrigger>
+              {!isAdmin ? (
+                <TooltipContent side="bottom" className="text-xs max-w-xs">
+                  Exclusão total restrita a administradores.
+                </TooltipContent>
+              ) : totalCount === 0 ? (
+                <TooltipContent side="bottom" className="text-xs">
+                  A base de produtos já está vazia.
+                </TooltipContent>
+              ) : null}
+            </Tooltip>
           </div>
         </div>
       </Card>
@@ -1109,6 +1138,21 @@ export function AbaBaseProdutos({ ativa }: AbaBaseProdutosProps) {
           </div>
         </div>
       </Card>
+
+      {/* Modal de Limpeza Total da Base de Produtos */}
+      <ModalLimparBase
+        open={modalLimparOpen}
+        onOpenChange={setModalLimparOpen}
+        alvo="sim_produtos_base"
+        tituloAlvo="Base de Produtos (Simulador Comercial)"
+        totalRegistros={totalCount}
+        onSucesso={() => {
+          setItems([])
+          setTotalCount(0)
+          setTotalPages(1)
+          setPage(1)
+        }}
+      />
     </div>
   )
 }

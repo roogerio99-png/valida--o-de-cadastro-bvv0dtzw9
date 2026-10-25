@@ -21,7 +21,11 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
+import { Trash2 } from 'lucide-react'
 import { ScrollableTable } from '@/components/ScrollableTable'
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
+import { ModalLimparBase } from '@/components/ModalLimparBase'
+import { useAuth } from '@/contexts/AuthContext'
 import { listarRegrasIcmsSimulador, SimRegraIcmsItem } from '@/services/agroService'
 
 interface AbaRegrasFiscaisProps {
@@ -29,6 +33,7 @@ interface AbaRegrasFiscaisProps {
 }
 
 export function AbaRegrasFiscais({ ativa }: AbaRegrasFiscaisProps) {
+  const { isAdmin } = useAuth()
   const [items, setItems] = useState<SimRegraIcmsItem[]>([])
   const [totalCount, setTotalCount] = useState<number>(0)
   const [totalPages, setTotalPages] = useState<number>(1)
@@ -37,6 +42,7 @@ export function AbaRegrasFiscais({ ativa }: AbaRegrasFiscaisProps) {
   const [search, setSearch] = useState<string>('')
   const [loading, setLoading] = useState<boolean>(false)
   const [hasLoadedOnce, setHasLoadedOnce] = useState<boolean>(false)
+  const [modalLimparOpen, setModalLimparOpen] = useState<boolean>(false)
   const [, startTransition] = useTransition()
 
   // Constrói filtro PocketBase seguro (busca por UF origem, UF destino e grupo tributário)
@@ -139,6 +145,32 @@ export function AbaRegrasFiscais({ ativa }: AbaRegrasFiscaisProps) {
               />
               Atualizar
             </Button>
+
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <span>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setModalLimparOpen(true)}
+                    disabled={!isAdmin || totalCount === 0}
+                    className="text-xs h-9 border-red-200 text-red-700 hover:bg-red-50 hover:text-red-800 disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    <Trash2 className="w-3.5 h-3.5 mr-1.5 text-red-600" />
+                    Excluir toda a base
+                  </Button>
+                </span>
+              </TooltipTrigger>
+              {!isAdmin ? (
+                <TooltipContent side="bottom" className="text-xs max-w-xs">
+                  Exclusão total restrita a administradores.
+                </TooltipContent>
+              ) : totalCount === 0 ? (
+                <TooltipContent side="bottom" className="text-xs">
+                  A base de regras fiscais já está vazia.
+                </TooltipContent>
+              ) : null}
+            </Tooltip>
           </div>
         </div>
       </Card>
@@ -356,6 +388,21 @@ export function AbaRegrasFiscais({ ativa }: AbaRegrasFiscaisProps) {
           </div>
         </div>
       </Card>
+
+      {/* Modal de Limpeza Total das Regras Fiscais */}
+      <ModalLimparBase
+        open={modalLimparOpen}
+        onOpenChange={setModalLimparOpen}
+        alvo="sim_regras_icms"
+        tituloAlvo="Regras Fiscais ICMS (Simulador Comercial)"
+        totalRegistros={totalCount}
+        onSucesso={() => {
+          setItems([])
+          setTotalCount(0)
+          setTotalPages(1)
+          setPage(1)
+        }}
+      />
     </div>
   )
 }

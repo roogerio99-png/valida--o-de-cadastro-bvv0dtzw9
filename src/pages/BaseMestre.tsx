@@ -41,6 +41,7 @@ import {
   DialogFooter,
   DialogDescription,
 } from '@/components/ui/dialog'
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { toast } from '@/hooks/use-toast'
 import {
   listarBaseMestre,
