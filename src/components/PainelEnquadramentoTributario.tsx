@@ -27,6 +27,7 @@ interface PainelEnquadramentoTributarioProps {
   produto: DadosEntradaProdutoEnquadramento & {
     id?: string
     marca_padronizada?: string
+    nome_produto?: string
     nome_completo?: string
     ncm_especifica?: string
     ncm_padrao?: string
@@ -78,14 +79,69 @@ Resumo Técnico: ${tributo.resumoClaro}`
   }
 
   const tributosList = [
+    { key: 'ICMS', data: enquadramento.icms, cor: 'purple' },
     { key: 'PIS', data: enquadramento.pis, cor: 'amber' },
     { key: 'COFINS', data: enquadramento.cofins, cor: 'orange' },
     { key: 'IBS', data: enquadramento.ibs, cor: 'blue' },
     { key: 'CBS', data: enquadramento.cbs, cor: 'emerald' },
   ]
 
+  const handleCopiarTodaFundamentacao = () => {
+    const texto = `ENQUADRAMENTO TRIBUTÁRIO OFICIAL — ${produto.marca_padronizada || produto.nome_produto || produto.nome_completo || 'PRODUTO'}
+NCM: ${enquadramento.ncmLimpa || 'Não informada'} | Categoria: ${enquadramento.categoriaProduto}
+
+1. ICMS (Estadual / Interestadual):
+   Regime: ${enquadramento.icms.regime}
+   Alíquota/Carga: ${enquadramento.icms.aliquotaTexto}
+   Fundamentação: ${enquadramento.icms.citacao.norma} — ${enquadramento.icms.citacao.artigo}${enquadramento.icms.citacao.inciso ? `, ${enquadramento.icms.citacao.inciso}` : ''}${enquadramento.icms.citacao.paragrafo ? `, ${enquadramento.icms.citacao.paragrafo}` : ''}
+   Teor Normativo: "${enquadramento.icms.citacao.textoArtigo}"
+   Resumo: ${enquadramento.icms.resumoClaro}
+
+2. PIS (Federal):
+   Regime: ${enquadramento.pis.regime}
+   Alíquota: ${enquadramento.pis.aliquotaTexto}
+   Fundamentação: ${enquadramento.pis.citacao.norma} — ${enquadramento.pis.citacao.artigo}${enquadramento.pis.citacao.inciso ? `, ${enquadramento.pis.citacao.inciso}` : ''}
+   Teor Normativo: "${enquadramento.pis.citacao.textoArtigo}"
+   Resumo: ${enquadramento.pis.resumoClaro}
+
+3. COFINS (Federal):
+   Regime: ${enquadramento.cofins.regime}
+   Alíquota: ${enquadramento.cofins.aliquotaTexto}
+   Fundamentação: ${enquadramento.cofins.citacao.norma} — ${enquadramento.cofins.citacao.artigo}${enquadramento.cofins.citacao.inciso ? `, ${enquadramento.cofins.citacao.inciso}` : ''}
+   Teor Normativo: "${enquadramento.cofins.citacao.textoArtigo}"
+   Resumo: ${enquadramento.cofins.resumoClaro}
+
+4. IBS (Reforma Tributária - Estados/Municípios):
+   Regime: ${enquadramento.ibs.regime}
+   Alíquota: ${enquadramento.ibs.aliquotaTexto}
+   Fundamentação: ${enquadramento.ibs.citacao.norma} — ${enquadramento.ibs.citacao.artigo}
+   Resumo: ${enquadramento.ibs.resumoClaro}
+
+5. CBS (Reforma Tributária - União):
+   Regime: ${enquadramento.cbs.regime}
+   Alíquota: ${enquadramento.cbs.aliquotaTexto}
+   Fundamentação: ${enquadramento.cbs.citacao.norma} — ${enquadramento.cbs.citacao.artigo}
+   Resumo: ${enquadramento.cbs.resumoClaro}
+
+Síntese Geral: ${enquadramento.resumoGeral}`
+
+    navigator.clipboard.writeText(texto)
+    setCopiado('TODOS')
+    setTimeout(() => setCopiado(null), 2500)
+  }
+
   const getCorTema = (cor: string) => {
     switch (cor) {
+      case 'purple':
+        return {
+          bg: 'bg-purple-50/70',
+          border: 'border-purple-200',
+          badge: 'bg-purple-100 text-purple-900 border-purple-300',
+          title: 'text-purple-950',
+          icon: 'text-purple-700',
+          accent: 'text-purple-800',
+          legalBg: 'bg-purple-100/40 border-purple-200',
+        }
       case 'amber':
         return {
           bg: 'bg-amber-50/60',
@@ -157,13 +213,29 @@ Resumo Técnico: ${tributo.resumoClaro}`
           </Badge>
         </div>
 
-        <span className="text-[11px] text-[#5A6D5A] italic">
-          Citações exatas de Lei Federal, Artigo, Inciso e Parágrafo
-        </span>
+        <div className="flex items-center gap-2">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={handleCopiarTodaFundamentacao}
+            className="h-7 text-xs bg-white text-[#1B5E20] border-[#A8C5A8] hover:bg-emerald-50 font-semibold"
+            title="Copiar fundamentação legal completa dos 5 tributos"
+          >
+            {copiado === 'TODOS' ? (
+              <Check className="w-3.5 h-3.5 text-emerald-600 mr-1.5" />
+            ) : (
+              <Copy className="w-3.5 h-3.5 mr-1.5" />
+            )}
+            {copiado === 'TODOS' ? 'Fundamentação Copiada!' : 'Copiar Fundamentação Legal'}
+          </Button>
+          <span className="text-[11px] text-[#5A6D5A] italic hidden sm:inline">
+            5 tributos: ICMS, PIS, COFINS, IBS e CBS
+          </span>
+        </div>
       </div>
 
-      {/* Grid com os 4 Impostos: PIS, COFINS, IBS, CBS */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5">
+      {/* Grid com os 5 Impostos: ICMS (roxo/violeta), PIS (âmbar), COFINS (laranja), IBS (azul), CBS (verde) */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3.5">
         {tributosList.map(({ key, data, cor }) => {
           const tema = getCorTema(cor)
           const isOpen = Boolean(detalhesAbertos[key])

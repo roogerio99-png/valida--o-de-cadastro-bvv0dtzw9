@@ -480,6 +480,9 @@ export function BaseMestre() {
       'cst_saida',
       'cst_entrada',
       'ibs_cbs_2027',
+      'enquadramento_icms_regime',
+      'enquadramento_icms_norma',
+      'enquadramento_icms_artigo',
       'enquadramento_pis_lei',
       'enquadramento_pis_artigo',
       'enquadramento_pis_inciso',
@@ -528,6 +531,9 @@ export function BaseMestre() {
         `"${(p.cst_saida || 'CST 06').replace(/"/g, '""')}"`,
         `"${(p.cst_entrada || 'CST 73').replace(/"/g, '""')}"`,
         `"${(p.ibs_cbs_2027 || '').replace(/"/g, '""')}"`,
+        `"${enq.icms.regime.replace(/"/g, '""')}"`,
+        `"${enq.icms.citacao.norma.replace(/"/g, '""')}"`,
+        `"${(enq.icms.citacao.artigo + (enq.icms.citacao.inciso ? ', ' + enq.icms.citacao.inciso : '')).replace(/"/g, '""')}"`,
         `"${enq.pis.citacao.norma.replace(/"/g, '""')}"`,
         `"${enq.pis.citacao.artigo.replace(/"/g, '""')}"`,
         `"${(enq.pis.citacao.inciso || '').replace(/"/g, '""')}"`,
@@ -545,7 +551,7 @@ export function BaseMestre() {
     const url = URL.createObjectURL(blob)
     const link = document.createElement('a')
     link.href = url
-    link.download = `base_mestre_28_campos_canonica_${new Date().toISOString().slice(0, 10)}.csv`
+    link.download = `base_mestre_tributaria_canonica_${new Date().toISOString().slice(0, 10)}.csv`
     document.body.appendChild(link)
     link.click()
     document.body.removeChild(link)
@@ -553,7 +559,8 @@ export function BaseMestre() {
 
     toast({
       title: 'Download Concluído',
-      description: 'O CSV com os 28 campos canônicos oficiais foi gerado com sucesso.',
+      description:
+        'O CSV com os campos canônicos oficiais e os 5 tributos (ICMS, PIS, COFINS, IBS e CBS) foi gerado com sucesso.',
     })
   }
 
@@ -768,8 +775,8 @@ export function BaseMestre() {
           >
             <Download className="w-3.5 h-3.5 mr-1.5 text-[#1B5E20]" />
             {selectedIds.length > 0
-              ? `Exportar 28 Campos (${selectedIds.length})`
-              : 'Exportar CSV (28 Campos)'}
+              ? `Exportar Base (${selectedIds.length})`
+              : 'Exportar CSV (5 Tributos)'}
           </Button>
 
           <Tooltip>
@@ -1123,9 +1130,13 @@ export function BaseMestre() {
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="todos">Todos Enquadramentos</SelectItem>
-                <SelectItem value="agro">Insumo Agro (Redução 60% IBS/CBS)</SelectItem>
-                <SelectItem value="defensivos">Defensivos (Posição 38.08)</SelectItem>
-                <SelectItem value="fertilizantes">Fertilizantes (Capítulo 31)</SelectItem>
+                <SelectItem value="agro">Insumos Beneficiados (Conv. 100/97 e IBS/CBS)</SelectItem>
+                <SelectItem value="defensivos">Defensivos (NCM 3808 - 60% ICMS)</SelectItem>
+                <SelectItem value="fertilizantes">
+                  Fertilizantes (Cap. 31 - Carga 4% ICMS)
+                </SelectItem>
+                <SelectItem value="corretivos">Corretivos de Solo (Cap. 25)</SelectItem>
+                <SelectItem value="sementes">Sementes / Mudas (Cláusula 1ª, V)</SelectItem>
                 <SelectItem value="geral">Regime Padrão / Geral</SelectItem>
               </SelectContent>
             </Select>
@@ -1239,6 +1250,16 @@ export function BaseMestre() {
                     if (
                       enquadramentoFilter === 'fertilizantes' &&
                       !enquadramento.categoriaProduto.includes('Adubo')
+                    )
+                      return null
+                    if (
+                      enquadramentoFilter === 'corretivos' &&
+                      !enquadramento.categoriaProduto.includes('Corretivo')
+                    )
+                      return null
+                    if (
+                      enquadramentoFilter === 'sementes' &&
+                      !enquadramento.categoriaProduto.includes('Semente')
                     )
                       return null
                     if (enquadramentoFilter === 'geral' && enquadramento.qualificadoAgro)
@@ -1414,11 +1435,11 @@ export function BaseMestre() {
                               e.stopPropagation()
                               setModalEnquadramentoItem(p)
                             }}
-                            className="h-7 text-[11px] font-semibold bg-emerald-50/70 hover:bg-emerald-100 text-[#1B5E20] border-emerald-200 px-2 py-0"
-                            title="Ver enquadramento tributário completo com artigos, incisos e parágrafos"
+                            className="h-7 text-[11px] font-semibold bg-purple-50/70 hover:bg-purple-100 text-purple-900 border-purple-200 px-2 py-0"
+                            title="Ver enquadramento tributário completo nos 5 impostos (ICMS, PIS, COFINS, IBS e CBS)"
                           >
-                            <Scale className="w-3 h-3 mr-1" />
-                            <span>Ver 4 Impostos</span>
+                            <Scale className="w-3 h-3 mr-1 text-purple-700" />
+                            <span>Ver Impostos</span>
                           </Button>
                         </td>
 
@@ -1712,15 +1733,15 @@ export function BaseMestre() {
               <DialogTitle className="text-base font-bold text-[#1C2B1C] flex items-center gap-2">
                 <Scale className="w-5 h-5 text-[#1B5E20]" />
                 <span>
-                  Enquadramento Tributário —{' '}
+                  Ver Impostos — Enquadramento Tributário:{' '}
                   {modalEnquadramentoItem.marca_padronizada ||
                     modalEnquadramentoItem.nome_produto ||
                     modalEnquadramentoItem.nome_completo}
                 </span>
               </DialogTitle>
               <DialogDescription className="text-xs text-[#5A6D5A]">
-                Citação jurídica e fundamentação legal exata por imposto: PIS, COFINS, IBS e CBS
-                para a embalagem e NCM cadastrados.
+                Citação jurídica e fundamentação legal exata por tributo: ICMS (Convênio ICMS
+                100/97), PIS, COFINS, IBS e CBS para a embalagem e NCM cadastrados.
               </DialogDescription>
             </DialogHeader>
 

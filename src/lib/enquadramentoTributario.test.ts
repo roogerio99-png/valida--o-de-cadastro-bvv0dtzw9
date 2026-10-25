@@ -21,6 +21,21 @@ describe('Módulo de Enquadramento Tributário Canônico', () => {
     expect(res.qualificadoAgro).toBe(true)
     expect(res.categoriaProduto).toContain('Defensivo Agropecuário')
 
+    // ICMS (Convênio ICMS 100/97)
+    expect(res.icms.tributo).toBe('ICMS')
+    expect(res.icms.citacao.norma).toContain('Convênio ICMS nº 100/1997')
+    expect(res.icms.citacao.artigo).toContain('Cláusula primeira')
+    expect(res.icms.citacao.inciso).toContain('Inciso I')
+    expect(res.icms.citacao.inciso).toContain('Convênio ICMS nº 99/2004')
+    expect(res.icms.citacao.paragrafo).toContain('Cláusula terceira')
+    expect(res.icms.citacao.paragrafo).toContain('Cláusula sétima')
+    expect(res.icms.citacao.paragrafo).toContain('Conv. ICMS 79/2025')
+    expect(res.icms.citacao.textoArtigo).toContain('reduzida em 60%')
+    expect(res.icms.citacao.textoArtigo).toContain('inseticidas, fungicidas')
+    expect(res.icms.resumoClaro).toContain('4,8%')
+    expect(res.icms.resumoClaro).toContain('31/12/2027')
+    expect(res.icms.observacaoOperacional).toContain('Ajuste SINIEF 10/12')
+
     // PIS
     expect(res.pis.tributo).toBe('PIS')
     expect(res.pis.citacao.norma).toContain('Lei nº 10.925/2004')
@@ -65,6 +80,20 @@ describe('Módulo de Enquadramento Tributário Canônico', () => {
 
     expect(res.qualificadoAgro).toBe(true)
     expect(res.categoriaProduto).toContain('Adubo ou Fertilizante')
+
+    // ICMS Fertilizantes (Cláusula terceira-A, Convênio ICMS 26/2021)
+    expect(res.icms.tributo).toBe('ICMS')
+    expect(res.icms.citacao.norma).toContain('Convênio ICMS nº 100/1997')
+    expect(res.icms.citacao.artigo).toContain('Cláusula terceira-A')
+    expect(res.icms.citacao.artigo).toContain('Convênio ICMS nº 26/2021')
+    expect(res.icms.citacao.inciso).toContain('Incisos I e II')
+    expect(res.icms.citacao.paragrafo).toContain('Conv. ICMS 104/2021')
+    expect(res.icms.citacao.paragrafo).toContain('Cláusula terceira-B')
+    expect(res.icms.citacao.textoArtigo).toContain('equivalente a aplicação do percentual de 4%')
+    expect(res.icms.citacao.textoArtigo).toContain('REVOGADO pelo Conv. ICMS 26/2021')
+    expect(res.icms.aliquotaTexto).toContain('4,00%')
+    expect(res.icms.resumoClaro).toContain('4%')
+
     expect(res.pis.citacao.artigo).toBe('Art. 1º')
     expect(res.pis.citacao.inciso).toBe('Inciso I')
     expect(res.pis.citacao.textoArtigo).toContain('Capítulo 31')
@@ -83,6 +112,13 @@ describe('Módulo de Enquadramento Tributário Canônico', () => {
 
     expect(res.qualificadoAgro).toBe(true)
     expect(res.categoriaProduto).toContain('Corretivo de Solo Mineral')
+
+    // ICMS Corretivo de solo (Cláusula primeira, IV)
+    expect(res.icms.tributo).toBe('ICMS')
+    expect(res.icms.citacao.inciso).toContain('Inciso IV')
+    expect(res.icms.citacao.textoArtigo).toContain('calcário e gesso')
+    expect(res.icms.aliquotaTexto).toContain('60%')
+
     expect(res.pis.citacao.inciso).toBe('Inciso IV')
     expect(res.cofins.citacao.inciso).toBe('Inciso IV')
     expect(res.pis.citacao.textoArtigo).toContain('Capítulo 25 da TIPI')
@@ -97,6 +133,12 @@ describe('Módulo de Enquadramento Tributário Canônico', () => {
 
     expect(res.qualificadoAgro).toBe(true)
     expect(res.categoriaProduto).toContain('Inoculante Agrícola')
+
+    // ICMS Inoculante (Cláusula primeira, I, parte final)
+    expect(res.icms.tributo).toBe('ICMS')
+    expect(res.icms.citacao.inciso).toContain('Inciso I')
+    expect(res.icms.citacao.textoArtigo).toContain('inclusive inoculantes')
+
     expect(res.pis.citacao.inciso).toBe('Inciso VI')
     expect(res.cofins.citacao.inciso).toBe('Inciso VI')
   })
@@ -110,6 +152,13 @@ describe('Módulo de Enquadramento Tributário Canônico', () => {
 
     expect(res.qualificadoAgro).toBe(true)
     expect(res.categoriaProduto).toContain('Semente Certificada')
+
+    // ICMS Sementes (Cláusula primeira, V)
+    expect(res.icms.tributo).toBe('ICMS')
+    expect(res.icms.citacao.inciso).toContain('Inciso V')
+    expect(res.icms.citacao.inciso).toContain('Convênio ICMS nº 16/2005')
+    expect(res.icms.citacao.textoArtigo).toContain('semente genética, semente básica')
+
     expect(res.pis.citacao.inciso).toBe('Inciso III')
     expect(res.cofins.citacao.inciso).toBe('Inciso III')
   })
@@ -122,6 +171,11 @@ describe('Módulo de Enquadramento Tributário Canônico', () => {
     })
 
     expect(res.qualificadoAgro).toBe(false)
+
+    // ICMS Não beneficiado
+    expect(res.icms.statusBeneficio).toBe('tributado')
+    expect(res.icms.citacao.norma).toContain('Lei Complementar nº 87/1996')
+
     expect(res.pis.statusBeneficio).toBe('tributado')
     expect(res.pis.citacao.norma).toContain('Lei nº 10.637/2002')
     expect(res.cofins.citacao.norma).toContain('Lei nº 10.833/2003')
@@ -137,6 +191,7 @@ describe('Módulo de Enquadramento Tributário Canônico', () => {
     })
 
     expect(res.qualificadoAgro).toBe(false)
+    expect(res.icms.statusBeneficio).toBe('a_confirmar')
     expect(res.pis.statusBeneficio).toBe('a_confirmar')
     expect(res.cofins.statusBeneficio).toBe('a_confirmar')
     expect(res.ibs.statusBeneficio).toBe('a_confirmar')
