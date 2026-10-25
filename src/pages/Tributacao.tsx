@@ -597,7 +597,7 @@ export function Tributacao() {
             </div>
             <div>
               <h2 className="text-lg font-bold text-[#1C2B1C] flex items-center gap-2">
-                <span>Especialista em Tributação Agro</span>
+                <span>Chat Especialista</span>
                 <Badge className="bg-emerald-100 text-emerald-800 border-emerald-300 text-[10px] font-semibold py-0">
                   Agente Nativo Skip Cloud
                 </Badge>

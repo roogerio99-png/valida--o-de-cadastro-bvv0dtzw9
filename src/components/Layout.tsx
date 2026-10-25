@@ -49,7 +49,7 @@ const navItems = [
   { path: '/bula', label: 'Cadastro de Bula', icon: FileText },
   { path: '/travas', label: 'Travas de Auditoria', icon: ShieldAlert },
   { path: '/parametrizacao', label: 'Parametrização Fiscal', icon: Percent },
-  { path: '/tributacao', label: 'Tributação Agro', icon: Scale },
+  { path: '/tributacao', label: 'Chat Especialista', icon: Scale },
   { path: '/importar', label: 'Importar Planilhas', icon: UploadCloud },
   { path: '/configuracoes', label: 'Configurações', icon: User },
 ]
