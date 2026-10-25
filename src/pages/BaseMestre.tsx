@@ -707,18 +707,31 @@ export function BaseMestre() {
               : 'Exportar CSV (28 Campos)'}
           </Button>
 
-          {isAdmin && (
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => setModalLimparOpen(true)}
-              className="text-xs h-9 border-red-200 text-red-700 hover:bg-red-50 hover:text-red-800"
-              title="Apaga permanentemente todos os registros da Base Mestre para recomeçar do zero"
-            >
-              <Trash2 className="w-3.5 h-3.5 mr-1.5 text-red-600" />
-              Limpar Base
-            </Button>
-          )}
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <span>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setModalLimparOpen(true)}
+                  disabled={!isAdmin || totalCount === 0}
+                  className="text-xs h-9 border-red-200 text-red-700 hover:bg-red-50 hover:text-red-800 disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  <Trash2 className="w-3.5 h-3.5 mr-1.5 text-red-600" />
+                  Excluir toda a base
+                </Button>
+              </span>
+            </TooltipTrigger>
+            {!isAdmin ? (
+              <TooltipContent side="bottom" className="text-xs max-w-xs">
+                Exclusão total restrita a administradores.
+              </TooltipContent>
+            ) : totalCount === 0 ? (
+              <TooltipContent side="bottom" className="text-xs">
+                A base mestre já está vazia.
+              </TooltipContent>
+            ) : null}
+          </Tooltip>
         </div>
       </div>
 
@@ -1540,7 +1553,8 @@ export function BaseMestre() {
         open={modalLimparOpen}
         onOpenChange={setModalLimparOpen}
         alvo="base_mestre"
-        tituloAlvo="Base Mestre de Produtos"
+        tituloAlvo="Base Mestre"
+        totalRegistros={totalCount}
         onSucesso={() => {
           setSelectedIds([])
           carregarProdutos()

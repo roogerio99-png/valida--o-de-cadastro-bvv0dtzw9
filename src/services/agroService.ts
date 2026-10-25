@@ -463,8 +463,10 @@ export interface RespostaLimpezaBases {
   executado_por?: string
   alvo: string
   apagados: {
-    base_mestre: number
-    dicionario_principios_ativos: number
+    base_mestre?: number
+    dicionario_principios_ativos?: number
+    sim_produtos_base?: number
+    sim_regras_icms?: number
     total: number
   }
   preservados: string[]
@@ -472,13 +474,93 @@ export interface RespostaLimpezaBases {
 }
 
 export async function limparBases(params: {
-  alvo: 'todas' | 'base_mestre' | 'dicionario_principios_ativos'
+  alvo:
+    | 'todas'
+    | 'base_mestre'
+    | 'dicionario_principios_ativos'
+    | 'sim_produtos_base'
+    | 'sim_regras_icms'
   confirmar: string
 }): Promise<RespostaLimpezaBases> {
   return pb.send<RespostaLimpezaBases>('/backend/v1/limpar-bases', {
     method: 'POST',
     body: params,
   })
+}
+
+/**
+ * Exclusão total de uma coleção em lotes resilientes (ex.: 500 IDs por vez).
+ * Tenta primeiro o endpoint atômico do servidor (/backend/v1/limpar-bases).
+ * Caso não esteja disponível ou ocorra falha, executa exclusão paginada em lotes client-side
+ * via SDK, reportando progresso e contagem parcial precisa.
+ */
+export async function excluirTodaBaseColecao(params: {
+  colecao: 'base_mestre' | 'sim_produtos_base' | 'sim_regras_icms'
+  loteSize?: number
+  onProgress?: (apagados: number, total: number) => void
+}): Promise<{ totalApagados: number }> {
+  const { colecao, loteSize = 500, onProgress } = params
+
+  // 1. Tentar primeiro o endpoint de limpeza otimizada do servidor
+  try {
+    const res = await limparBases({
+      alvo: colecao,
+      confirmar: 'LIMPAR',
+    })
+    const count =
+      (colecao === 'base_mestre'
+        ? res.apagados.base_mestre
+        : colecao === 'sim_produtos_base'
+          ? res.apagados.sim_produtos_base
+          : res.apagados.sim_regras_icms) ??
+      res.apagados.total ??
+      0
+    if (onProgress) onProgress(count, count)
+    return { totalApagados: count }
+  } catch (endpointErr) {
+    console.warn(
+      `Endpoint rápido /backend/v1/limpar-bases falhou para ${colecao}, usando fallback em lotes:`,
+      endpointErr,
+    )
+  }
+
+  // 2. Fallback: Paginar IDs e deletar em lotes controlados
+  let totalApagados = 0
+  const totalEstimado = await pb
+    .collection(colecao)
+    .getList(1, 1, { fields: 'id' })
+    .then((r) => r.totalItems)
+    .catch(() => 0)
+
+  // Enquanto houver registros, busca a 1ª página com até loteSize IDs
+  while (true) {
+    const pagina = await pb.collection(colecao).getList(1, loteSize, {
+      fields: 'id',
+      sort: '-id',
+    })
+
+    if (!pagina.items || pagina.items.length === 0) {
+      break
+    }
+
+    const ids = pagina.items.map((it) => it.id)
+    // Deleta em sub-lotes paralelos de 15 para não estourar conexões do navegador
+    const SUB_LOTE = 15
+    for (let i = 0; i < ids.length; i += SUB_LOTE) {
+      const slice = ids.slice(i, i + SUB_LOTE)
+      await Promise.all(
+        slice.map(async (id) => {
+          await pb.collection(colecao).delete(id)
+          totalApagados++
+        }),
+      )
+      if (onProgress) {
+        onProgress(totalApagados, totalEstimado || totalApagados)
+      }
+    }
+  }
+
+  return { totalApagados }
 }
 
 /**

@@ -18,8 +18,14 @@ import { limparBases } from '@/services/agroService'
 interface ModalLimparBaseProps {
   open: boolean
   onOpenChange: (open: boolean) => void
-  alvo: 'todas' | 'base_mestre' | 'dicionario_principios_ativos'
+  alvo:
+    | 'todas'
+    | 'base_mestre'
+    | 'dicionario_principios_ativos'
+    | 'sim_produtos_base'
+    | 'sim_regras_icms'
   tituloAlvo: string
+  totalRegistros?: number
   onSucesso: () => void
 }
 
@@ -28,6 +34,7 @@ export function ModalLimparBase({
   onOpenChange,
   alvo,
   tituloAlvo,
+  totalRegistros,
   onSucesso,
 }: ModalLimparBaseProps) {
   const { isAdmin } = useAuth()
@@ -48,23 +55,44 @@ export function ModalLimparBase({
     if (!ehValido) return
     setExecutando(true)
 
+    const qtdAvisada =
+      totalRegistros !== undefined
+        ? `${totalRegistros.toLocaleString('pt-BR')} registros`
+        : 'registros'
+    toast({
+      title: 'Excluindo base...',
+      description: `Excluindo ${qtdAvisada} em processamento...`,
+    })
+
     try {
       const res = await limparBases({
         alvo,
         confirmar: 'LIMPAR',
       })
 
-      const totalApagado = res.apagados.total
+      const totalApagado =
+        alvo === 'base_mestre'
+          ? (res.apagados.base_mestre ?? res.apagados.total)
+          : alvo === 'sim_produtos_base'
+            ? (res.apagados.sim_produtos_base ?? res.apagados.total)
+            : alvo === 'sim_regras_icms'
+              ? (res.apagados.sim_regras_icms ?? res.apagados.total)
+              : res.apagados.total
+
       const detalheMsg =
         alvo === 'todas'
-          ? `${res.apagados.base_mestre} produtos e ${res.apagados.dicionario_principios_ativos} princípios ativos apagados.`
+          ? `${res.apagados.base_mestre || 0} produtos e ${res.apagados.dicionario_principios_ativos || 0} princípios ativos apagados.`
           : alvo === 'base_mestre'
-            ? `${res.apagados.base_mestre} produtos apagados da Base Mestre.`
-            : `${res.apagados.dicionario_principios_ativos} registros apagados do Dicionário.`
+            ? `${totalApagado} registros apagados da Base Mestre.`
+            : alvo === 'sim_produtos_base'
+              ? `${totalApagado} produtos apagados da Base de Produtos.`
+              : alvo === 'sim_regras_icms'
+                ? `${totalApagado} regras fiscais apagadas.`
+                : `${totalApagado} registros apagados do Dicionário.`
 
       toast({
-        title: 'Base limpa com sucesso',
-        description: `Total de ${totalApagado} registros removidos. ${detalheMsg}`,
+        title: 'Base excluída',
+        description: `Base excluída: ${totalApagado.toLocaleString('pt-BR')} registros removidos. ${detalheMsg}`,
       })
 
       setConfirmacaoTexto('')
@@ -74,7 +102,7 @@ export function ModalLimparBase({
       const msg = err instanceof Error ? err.message : 'Falha ao executar a limpeza da base.'
       toast({
         variant: 'destructive',
-        title: 'Erro na limpeza da base',
+        title: 'Erro na exclusão da base',
         description: msg,
       })
     } finally {
@@ -97,12 +125,22 @@ export function ModalLimparBase({
             <AlertTriangle className="w-6 h-6" />
           </div>
           <DialogTitle className="text-base font-bold text-red-950">
-            Limpar {tituloAlvo}
+            Excluir TODOS os registros da {tituloAlvo}?
           </DialogTitle>
           <DialogDescription className="text-xs text-[#5A6D5A] leading-relaxed">
-            Esta ação é <strong className="text-red-700">irreversível</strong>. TODOS os registros
-            da coleção selecionada serão apagados permanentemente do banco de dados para recomeçar
-            do zero.
+            Esta ação é{' '}
+            <strong className="text-red-700">definitiva e apaga TODOS os registros</strong>
+            {totalRegistros !== undefined ? (
+              <>
+                {' '}
+                (atualmente{' '}
+                <strong className="text-red-800 font-mono font-bold">
+                  {totalRegistros.toLocaleString('pt-BR')} registros
+                </strong>
+                )
+              </>
+            ) : null}{' '}
+            da base de dados para recomeçar do zero.
           </DialogDescription>
         </DialogHeader>
 
@@ -175,12 +213,12 @@ export function ModalLimparBase({
               {executando ? (
                 <>
                   <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                  Apagando registros...
+                  Excluindo registros...
                 </>
               ) : (
                 <>
                   <Trash2 className="w-3.5 h-3.5" />
-                  Confirmar Limpeza Total
+                  Confirmar Exclusão Total
                 </>
               )}
             </Button>

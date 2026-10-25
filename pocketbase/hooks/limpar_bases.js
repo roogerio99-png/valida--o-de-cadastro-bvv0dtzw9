@@ -51,9 +51,13 @@ routerAdd('POST', '/backend/v1/limpar-bases', (e) => {
     .toLowerCase()
   const limparBaseMestre = alvo === 'todas' || alvo === 'base_mestre'
   const limparPrincipios = alvo === 'todas' || alvo === 'dicionario_principios_ativos'
+  const limparSimProdutos = alvo === 'sim_produtos_base'
+  const limparSimRegras = alvo === 'sim_regras_icms'
 
   let apagadosBaseMestre = 0
   let apagadosDicionarioPa = 0
+  let apagadosSimProdutos = 0
+  let apagadosSimRegras = 0
 
   // 1. Limpeza de base_mestre
   if (limparBaseMestre) {
@@ -115,6 +119,57 @@ routerAdd('POST', '/backend/v1/limpar-bases', (e) => {
     }
   }
 
+  // 3. Limpeza de sim_produtos_base (Simulador Comercial)
+  if (limparSimProdutos) {
+    try {
+      apagadosSimProdutos = $app.countRecords('sim_produtos_base')
+    } catch (_) {
+      apagadosSimProdutos = 0
+    }
+
+    try {
+      const colSimProd = $app.findCollectionByNameOrId('sim_produtos_base')
+      $app.truncateCollection(colSimProd)
+    } catch (err) {
+      console.log('Aviso ao truncar sim_produtos_base:', err.message)
+      try {
+        $app.db().newQuery('DELETE FROM sim_produtos_base').execute()
+      } catch (sqlErr) {
+        return e.json(500, {
+          sucesso: false,
+          error: 'Falha ao limpar sim_produtos_base: ' + sqlErr.message,
+        })
+      }
+    }
+  }
+
+  // 4. Limpeza de sim_regras_icms (Simulador Comercial)
+  if (limparSimRegras) {
+    try {
+      apagadosSimRegras = $app.countRecords('sim_regras_icms')
+    } catch (_) {
+      apagadosSimRegras = 0
+    }
+
+    try {
+      const colSimRegras = $app.findCollectionByNameOrId('sim_regras_icms')
+      $app.truncateCollection(colSimRegras)
+    } catch (err) {
+      console.log('Aviso ao truncar sim_regras_icms:', err.message)
+      try {
+        $app.db().newQuery('DELETE FROM sim_regras_icms').execute()
+      } catch (sqlErr) {
+        return e.json(500, {
+          sucesso: false,
+          error: 'Falha ao limpar sim_regras_icms: ' + sqlErr.message,
+        })
+      }
+    }
+  }
+
+  const totalGeral =
+    apagadosBaseMestre + apagadosDicionarioPa + apagadosSimProdutos + apagadosSimRegras
+
   return e.json(200, {
     sucesso: true,
     mensagem: 'Limpeza de base executada com sucesso.',
@@ -123,7 +178,9 @@ routerAdd('POST', '/backend/v1/limpar-bases', (e) => {
     apagados: {
       base_mestre: apagadosBaseMestre,
       dicionario_principios_ativos: apagadosDicionarioPa,
-      total: apagadosBaseMestre + apagadosDicionarioPa,
+      sim_produtos_base: apagadosSimProdutos,
+      sim_regras_icms: apagadosSimRegras,
+      total: totalGeral,
     },
     preservados: [
       'log_validacoes',
