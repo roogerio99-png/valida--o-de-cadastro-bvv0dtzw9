@@ -61,7 +61,7 @@ const ETAPAS_PROGRESSO = [
 ]
 
 export function Validar() {
-  // Modo de validação: "novo" (Validar Cadastro) ou "existente" (Validar Existente)
+  // Modo de validação: "novo" (Validar Produto) ou "existente" (Validar Existente)
   const [modo, setModo] = useState<'novo' | 'existente'>('novo')
 
   // Campos de entrada do escopo (NCM removida da digitação — resolvida exclusivamente na Base Mestre)
@@ -507,7 +507,7 @@ export function Validar() {
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
         <div>
           <h2 className="text-xl font-bold text-[#1C2B1C] flex items-center gap-2">
-            <span>Validar Cadastro de Produtos</span>
+            <span>Validar Produto</span>
             <Badge className="bg-emerald-100 text-emerald-800 border-0 text-xs font-semibold">
               Motor Bula Oficial & AGROFIT
             </Badge>
@@ -932,7 +932,7 @@ export function Validar() {
                       <>
                         <ShieldCheck className="w-4 h-4" />
                         <span>
-                          {modo === 'novo' ? 'Validar Cadastro' : 'Validar Cadastro Existente'}
+                          {modo === 'novo' ? 'Validar Produto' : 'Validar Cadastro Existente'}
                         </span>
                       </>
                     )}

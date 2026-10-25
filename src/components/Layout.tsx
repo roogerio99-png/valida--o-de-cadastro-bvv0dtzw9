@@ -41,7 +41,7 @@ import { cn } from '@/lib/utils'
 
 const navItems = [
   { path: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
-  { path: '/validar', label: 'Validar Cadastro', icon: CheckCircle2 },
+  { path: '/validar', label: 'Validar Produto', icon: CheckCircle2 },
   { path: '/sincronizacao', label: 'Sincronização de Produtos', icon: CloudSync },
   { path: '/regras', label: 'Regras NCM × Embalagem', icon: FileSpreadsheet },
   { path: '/principios-ativos', label: 'Princípios Ativos', icon: FlaskConical },

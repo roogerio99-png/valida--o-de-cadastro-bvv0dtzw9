@@ -191,7 +191,7 @@ export function Travas() {
         <CardContent className="h-72">
           {stats.every((s) => s.totalDisparado === 0) ? (
             <div className="h-full flex items-center justify-center text-xs text-[#5A6D5A]">
-              Nenhuma validação registrada ainda. Teste um produto na tela "Validar Cadastro".
+              Nenhuma validação registrada ainda. Teste um produto na tela "Validar Produto".
             </div>
           ) : (
             <ResponsiveContainer width="100%" height="100%">
