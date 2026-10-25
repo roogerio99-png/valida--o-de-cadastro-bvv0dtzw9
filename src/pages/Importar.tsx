@@ -38,6 +38,11 @@ import {
   sanitizarRegistroMapa,
   sanitizarMarcaComercial,
 } from '@/lib/motorCanonico'
+import {
+  gerarChaveDuplicidadeBaseMestre,
+  formatarRotuloLegivelDuplicada,
+  type PayloadItemBaseMestre,
+} from '@/lib/baseMestreDedupe'
 
 interface ZoneConfig {
   id: string
@@ -1743,24 +1748,54 @@ export function Importar() {
       }
 
       // Pré-cálculo de chaves de identificação únicas no lote para detectar duplicidades intra-planilha
+      // Para base_mestre, usa estritamente a chave canônica dos 4 campos (Nome + P.A. + Embalagem + MAPA)
       const contagemChavesPlanilha: Record<string, number> = {}
+      const chavesParaRotulos: Record<string, string> = {}
+
       validos.forEach((v) => {
         const itemData = v.data as Record<string, unknown>
         let chave: string | null = null
+        let rotuloLegivel: string | null = null
+
         if (targetCol === 'base_mestre') {
-          chave = (itemData.codigo as string) || (itemData.nome_comercial as string) || null
+          const payloadDedupe: PayloadItemBaseMestre = {
+            nome_comercial:
+              (itemData.marca_padronizada as string) ||
+              (itemData.nome_produto as string) ||
+              (itemData.nome_completo as string),
+            marca_padronizada: itemData.marca_padronizada as string,
+            nome_produto: itemData.nome_produto as string,
+            nome_completo: itemData.nome_completo as string,
+            principio_ativo: itemData.principio_ativo as string,
+            quantidade_embalagem_principal:
+              (itemData.quantidade_embalagem_principal as number | string) || undefined,
+            embalagem: itemData.embalagem as string,
+            registro_mapa: itemData.registro_mapa as string,
+            ncm: (itemData.ncm as string) || (itemData.ncm_padrao as string),
+          }
+          chave = gerarChaveDuplicidadeBaseMestre(payloadDedupe)
+          rotuloLegivel = formatarRotuloLegivelDuplicada(payloadDedupe)
         } else if (targetCol === 'bula_produtos') {
           chave = (itemData.registro_mapa as string) || (itemData.nome_comercial as string) || null
+          rotuloLegivel = chave
+        } else {
+          chave = (itemData.codigo as string) || (itemData.id as string) || null
+          rotuloLegivel = chave
         }
+
         if (chave) {
           contagemChavesPlanilha[chave] = (contagemChavesPlanilha[chave] || 0) + 1
+          if (rotuloLegivel) {
+            chavesParaRotulos[chave] = rotuloLegivel
+          }
         }
       })
 
       const duplicadasPlanilhaMap: Record<string, number> = {}
       Object.entries(contagemChavesPlanilha).forEach(([k, count]) => {
         if (count > 1) {
-          duplicadasPlanilhaMap[k] = count
+          const chaveLegivel = chavesParaRotulos[k] || k
+          duplicadasPlanilhaMap[chaveLegivel] = count
         }
       })
 
