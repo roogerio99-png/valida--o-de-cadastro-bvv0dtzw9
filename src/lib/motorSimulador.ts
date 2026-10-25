@@ -30,6 +30,7 @@ export interface ProdutoBaseSimulador {
   fabricante?: string
   moeda?: string
   preco_base_sugerido?: number
+  gr_trib?: string
   dados_extras?: Record<string, unknown>
 }
 
@@ -45,6 +46,8 @@ export interface RegraIcmsSimulador {
   fundamentacao_legal?: string
   tipo_operacao?: string
   chave_origem_destino: string
+  grupo_tributario_codigo?: string
+  grupo_tributario_descricao?: string
 }
 
 export interface SimuladorInput {
@@ -121,6 +124,7 @@ export interface SimuladorResultado {
   // Tributos destacados
   icms: DetalhamentoTributo
   temRegraIcms: boolean
+  statusRegraIcms?: 'exata_grtrib' | 'fallback_uf' | 'sem_regra'
   avisoIcms?: string
 
   pis: DetalhamentoTributo
@@ -203,18 +207,49 @@ export function executarCalculoSimulador(input: SimuladorInput): SimuladorResult
     `Mercadoria: R$ ${valorMercadoriaReais.toFixed(2)} + Despesas (Frete/Seguro/Outros): R$ ${totalDespesasAcessorias.toFixed(2)} = Base Comercial R$ ${valorTotalOperacao.toFixed(2)}`,
   )
 
-  // 3. Regra de ICMS Origem -> Destino
+  // 3. Regra de ICMS Origem -> Destino com cruzamento por gr_trib
   const ufOrigem = (input.ufOrigem || 'SP').trim().toUpperCase()
   const ufDestino = (input.ufDestino || 'MT').trim().toUpperCase()
   const operacao: 'Interna' | 'Interestadual' = ufOrigem === ufDestino ? 'Interna' : 'Interestadual'
+  const produtoGrTrib = (produto.gr_trib || '').trim()
 
   let icmsDetalhe: DetalhamentoTributo
   let temRegraIcms = false
+  let statusRegraIcms: 'exata_grtrib' | 'fallback_uf' | 'sem_regra' = 'sem_regra'
   let avisoIcms: string | undefined
 
   if (input.regraIcms) {
-    temRegraIcms = true
     const r = input.regraIcms
+    const regraGrTrib = (r.grupo_tributario_codigo || '').trim()
+
+    // Validação estrita de cruzamento GrTrib
+    if (produtoGrTrib && regraGrTrib && produtoGrTrib === regraGrTrib) {
+      statusRegraIcms = 'exata_grtrib'
+      temRegraIcms = true
+    } else if (!produtoGrTrib && regraGrTrib) {
+      statusRegraIcms = 'fallback_uf'
+      temRegraIcms = true
+      alertas.push(
+        `Produto sem Grupo Tributário (GrTrib) cadastrado. Aplicada regra genérica do par ${ufOrigem} → ${ufDestino} (GrTrib ${regraGrTrib}).`,
+      )
+    } else if (produtoGrTrib && !regraGrTrib) {
+      statusRegraIcms = 'fallback_uf'
+      temRegraIcms = true
+      alertas.push(
+        `Não há regra específica para GrTrib "${produtoGrTrib}" em ${ufOrigem} → ${ufDestino}. Aplicada regra geral da UF.`,
+      )
+    } else if (produtoGrTrib && regraGrTrib && produtoGrTrib !== regraGrTrib) {
+      // Regra de outro grupo não deve ser assumida silenciosamente!
+      statusRegraIcms = 'fallback_uf'
+      temRegraIcms = true
+      alertas.push(
+        `Atenção: Produto é GrTrib "${produtoGrTrib}", mas a regra aplicada pertence a GrTrib "${regraGrTrib}" para ${ufOrigem} → ${ufDestino}.`,
+      )
+    } else {
+      statusRegraIcms = 'fallback_uf'
+      temRegraIcms = true
+    }
+
     const aliqNominal = Number(r.aliquota_icms) || 0
     const redBasePerc = Number(r.reducao_base) || 0
     const diferimento = !!r.diferimento
@@ -256,12 +291,14 @@ export function executarCalculoSimulador(input: SimuladorInput): SimuladorResult
           : 'Tributação normal',
     }
 
+    const descGr = r.grupo_tributario_descricao ? ` [${r.grupo_tributario_descricao}]` : ''
     memoriaCalculo.push(
-      `ICMS (${ufOrigem} → ${ufDestino}): Alíquota nominal ${aliqNominal.toFixed(2)}%, Redução de base ${redBasePerc}%, Efetiva ${aliqEfetiva.toFixed(2)}% → R$ ${valorIcms.toFixed(2)}`,
+      `ICMS (${ufOrigem} → ${ufDestino}${produtoGrTrib ? ` | GrTrib ${produtoGrTrib}` : ''}): Alíquota nominal ${aliqNominal.toFixed(2)}%, Redução de base ${redBasePerc}%, Efetiva ${aliqEfetiva.toFixed(2)}%${descGr} → R$ ${valorIcms.toFixed(2)}`,
     )
   } else {
     temRegraIcms = false
-    avisoIcms = `Sem regra de ICMS para origem ${ufOrigem} → destino ${ufDestino}. Importe a aba 'Regra ICMS' na central de importação ou cadastre a regra correspondente.`
+    statusRegraIcms = 'sem_regra'
+    avisoIcms = `Sem regra de ICMS para origem ${ufOrigem} → destino ${ufDestino}${produtoGrTrib ? ` (GrTrib ${produtoGrTrib})` : ''}. Importe a aba 'Regra ICMS' na central de importação ou cadastre a regra correspondente.`
     alertas.push(avisoIcms)
 
     // Fallback conservador padrão interestadual
@@ -411,6 +448,7 @@ export function executarCalculoSimulador(input: SimuladorInput): SimuladorResult
     valorTotalOperacao,
     icms: icmsDetalhe,
     temRegraIcms,
+    statusRegraIcms,
     avisoIcms,
     pis: pisDetalhe,
     cofins: cofinsDetalhe,

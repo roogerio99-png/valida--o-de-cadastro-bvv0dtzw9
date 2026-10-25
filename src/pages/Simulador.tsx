@@ -229,8 +229,13 @@ export function Simulador() {
 
     setCalculando(true)
     try {
-      // 1. Busca regra de ICMS para o par no banco
-      const regra = await obterRegraIcmsSimulador(ufOrigem, ufDestino)
+      // 1. Busca regra de ICMS para o par no banco com preferência para gr_trib
+      const resRegra = await obterRegraIcmsSimulador(
+        ufOrigem,
+        ufDestino,
+        produtoSelecionado.gr_trib,
+      )
+      const regra = resRegra.regra
       setRegraIcmsAtual(regra)
 
       // 2. Executa cálculo canônico
@@ -451,17 +456,29 @@ export function Simulador() {
                         <span className="font-bold text-xs truncate">
                           {produtoSelecionado.descricao}
                         </span>
-                        <Badge className="text-[10px] h-4 bg-emerald-700 text-white font-mono">
-                          {produtoSelecionado.ncm || '3808.93.29'}
-                        </Badge>
+                        <div className="flex items-center gap-1.5">
+                          {produtoSelecionado.gr_trib && (
+                            <Badge
+                              className="text-[10px] h-4 bg-blue-700 text-white font-mono"
+                              title="Grupo Tributário"
+                            >
+                              GrTrib {produtoSelecionado.gr_trib}
+                            </Badge>
+                          )}
+                          <Badge className="text-[10px] h-4 bg-emerald-700 text-white font-mono">
+                            {produtoSelecionado.ncm || '3808.93.29'}
+                          </Badge>
+                        </div>
                       </div>
                       <div className="flex items-center justify-between text-[11px] text-emerald-800">
-                        <span>Embalagem: {produtoSelecionado.embalagem || 'Padrão'}</span>
+                        <span>
+                          Embalagem: {produtoSelecionado.embalagem || 'Padrão'} (
+                          {produtoSelecionado.unidade || 'L'})
+                        </span>
                         <span>Fabricante: {produtoSelecionado.fabricante || 'Geral'}</span>
                       </div>
                     </div>
                   )}
-
                   {/* Rota da Operação: Origem -> Destino */}
                   <div className="grid grid-cols-2 gap-3 pt-1">
                     <div className="space-y-1">

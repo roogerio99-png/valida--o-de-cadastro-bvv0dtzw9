@@ -200,4 +200,62 @@ describe('Motor de Cálculo Comercial do AgroSimulador (Fase 1 - MVP)', () => {
     expect(resReonerado.pis.valorImposto).toBeGreaterThan(0)
     expect(resReonerado.cofins.valorImposto).toBeGreaterThan(0)
   })
+
+  it('6. Deve priorizar regra com gr_trib idêntico e emitir aviso quando houver divergência', () => {
+    const produtoComGrTrib = {
+      descricao: 'SYNPROLE 480 SC 1X20L (IMP) SS',
+      codigo: '007243',
+      unidade: 'L',
+      embalagem: '1X20L',
+      gr_trib: '001',
+    }
+
+    const regraExata = {
+      uf_origem: 'SP',
+      uf_destino: 'MT',
+      aliquota_icms: 4.0,
+      reducao_base: 0,
+      chave_origem_destino: 'SP_MT',
+      grupo_tributario_codigo: '001',
+      grupo_tributario_descricao: 'DEFENSIVOS AGRICOLAS',
+    }
+
+    const resExato = executarCalculoSimulador({
+      produto: produtoComGrTrib,
+      ufOrigem: 'SP',
+      ufDestino: 'MT',
+      quantidade: 10,
+      precoUnitario: 100,
+      moeda: 'BRL',
+      regraIcms: regraExata,
+    })
+
+    expect(resExato.temRegraIcms).toBe(true)
+    expect(resExato.statusRegraIcms).toBe('exata_grtrib')
+    expect(resExato.alertas.length).toBe(0)
+
+    // Divergência de GrTrib: regra pertence a 002 enquanto produto é 001
+    const regraOutroGrupo = {
+      uf_origem: 'SP',
+      uf_destino: 'MT',
+      aliquota_icms: 7.0,
+      reducao_base: 0,
+      chave_origem_destino: 'SP_MT',
+      grupo_tributario_codigo: '002',
+    }
+
+    const resDivergente = executarCalculoSimulador({
+      produto: produtoComGrTrib,
+      ufOrigem: 'SP',
+      ufDestino: 'MT',
+      quantidade: 10,
+      precoUnitario: 100,
+      moeda: 'BRL',
+      regraIcms: regraOutroGrupo,
+    })
+
+    expect(resDivergente.temRegraIcms).toBe(true)
+    expect(resDivergente.statusRegraIcms).toBe('fallback_uf')
+    expect(resDivergente.alertas.some((a) => a.includes('Atenção: Produto é GrTrib'))).toBe(true)
+  })
 })

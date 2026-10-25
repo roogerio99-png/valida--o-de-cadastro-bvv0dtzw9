@@ -28,6 +28,7 @@ routerAdd('POST', '/backend/v1/simulador/calcular', (e) => {
     const produtoId = String(body.produto_id || '').trim()
     const produtoNomeManual = String(body.produto_nome || '').trim()
     const ncmManual = String(body.ncm || '').trim()
+    const grTribManual = String(body.gr_trib || '').trim()
     const ufOrigem = String(body.uf_origem || 'SP')
       .trim()
       .toUpperCase()
@@ -87,6 +88,9 @@ routerAdd('POST', '/backend/v1/simulador/calcular', (e) => {
         codigo
     }
 
+    const grTrib =
+      (produtoEncontrado && produtoEncontrado.getString('gr_trib')) || grTribManual || ''
+
     const isImportado =
       origem.toUpperCase().includes('IMP') ||
       descricao.toUpperCase().includes('(IMP)') ||
@@ -118,25 +122,58 @@ routerAdd('POST', '/backend/v1/simulador/calcular', (e) => {
     const totalDespesas = frete + seguro + outrasDespesas
     const baseOperacao = valorMercadoriaReais + totalDespesas
 
-    // 2. Consulta da Regra de ICMS para ufOrigem -> ufDestino
+    // 2. Consulta da Regra de ICMS para ufOrigem -> ufDestino com cruzamento por gr_trib
     const chavePar = `${ufOrigem}_${ufDestino}`
     let regraIcmsEncontrada = null
     let temRegraIcms = false
+    let statusRegra = 'sem_regra'
     let avisoIcms = null
 
     try {
       const escChave = chavePar.replace(/'/g, "\\'")
-      const recordsIcms =
-        $app.findRecordsByFilter(
-          'sim_regras_icms',
-          `chave_origem_destino = '${escChave}'`,
-          '-created',
-          1,
-          0,
-        ) || []
-      if (recordsIcms.length > 0) {
-        regraIcmsEncontrada = recordsIcms[0]
-        temRegraIcms = true
+
+      // 2.1 Se houver gr_trib no produto, tenta busca exata por par + grupo_tributario_codigo
+      if (grTrib) {
+        const escGr = grTrib.replace(/'/g, "\\'")
+        const recordsExatos =
+          $app.findRecordsByFilter(
+            'sim_regras_icms',
+            `chave_origem_destino = '${escChave}' && grupo_tributario_codigo = '${escGr}'`,
+            '-created',
+            1,
+            0,
+          ) || []
+        if (recordsExatos.length > 0) {
+          regraIcmsEncontrada = recordsExatos[0]
+          temRegraIcms = true
+          statusRegra = 'exata_grtrib'
+        }
+      }
+
+      // 2.2 Fallback: busca pelo par de UFs sem filtro ou geral
+      if (!regraIcmsEncontrada) {
+        const recordsIcms =
+          $app.findRecordsByFilter(
+            'sim_regras_icms',
+            `chave_origem_destino = '${escChave}'`,
+            '-created',
+            1,
+            0,
+          ) || []
+        if (recordsIcms.length > 0) {
+          regraIcmsEncontrada = recordsIcms[0]
+          temRegraIcms = true
+          statusRegra = 'fallback_uf'
+          if (grTrib) {
+            alertas.push(
+              `Não há regra específica para GrTrib "${grTrib}" em ${ufOrigem} → ${ufDestino}. Aplicada regra geral da UF.`,
+            )
+          } else {
+            alertas.push(
+              `Produto sem Grupo Tributário (GrTrib). Aplicada regra genérica do par ${ufOrigem} → ${ufDestino}.`,
+            )
+          }
+        }
       }
     } catch (eIcms) {
       console.log('Aviso ao consultar sim_regras_icms:', eIcms.message || eIcms)
@@ -169,11 +206,12 @@ routerAdd('POST', '/backend/v1/simulador/calcular', (e) => {
         icmsValor = Math.max(0, icmsValor * (1 - icmsPercDif / 100))
         icmsAliqEfetiva = icmsAliqEfetiva * (1 - icmsPercDif / 100)
       }
+      const regCod = regraIcmsEncontrada.getString('grupo_tributario_codigo')
       memoriaCalculo.push(
-        `ICMS Regra Encontrada (${ufOrigem} → ${ufDestino}): Nominal ${icmsAliqNominal}%, Redução ${icmsRedBase}%, Efetiva ${icmsAliqEfetiva.toFixed(2)}% → R$ ${icmsValor.toFixed(2)}`,
+        `ICMS Regra Encontrada (${ufOrigem} → ${ufDestino}${regCod ? ` | GrTrib ${regCod}` : ''}): Nominal ${icmsAliqNominal}%, Redução ${icmsRedBase}%, Efetiva ${icmsAliqEfetiva.toFixed(2)}% → R$ ${icmsValor.toFixed(2)}`,
       )
     } else {
-      avisoIcms = `Sem regra de ICMS para origem ${ufOrigem} → destino ${ufDestino}. Importe a planilha de regras ou cadastre o par na central.`
+      avisoIcms = `Sem regra de ICMS para origem ${ufOrigem} → destino ${ufDestino}${grTrib ? ` (GrTrib ${grTrib})` : ''}. Importe a planilha de regras ou cadastre o par na central.`
       alertas.push(avisoIcms)
 
       const aliqFallback =
@@ -220,6 +258,7 @@ routerAdd('POST', '/backend/v1/simulador/calcular', (e) => {
         ncm: ncm,
         unidade: unidade,
         origem: origem,
+        gr_trib: grTrib,
         is_importado: isImportado,
       },
       operacao: {
@@ -251,6 +290,7 @@ routerAdd('POST', '/backend/v1/simulador/calcular', (e) => {
           percentual_diferimento: icmsPercDif,
           valor: icmsValor,
           tem_regra: temRegraIcms,
+          status_regra: statusRegra,
           aviso: avisoIcms,
           fundamentacao: icmsFundamentacao,
         },

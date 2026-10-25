@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-10-25T01:00:13.271Z",
+  "generatedAt": "2026-10-25T01:19:51.937Z",
   "collections": [
     {
       "name": "users",
@@ -1871,6 +1871,12 @@
           "required": false,
           "system": false,
           "autodateTriggers": ["onCreate", "onUpdate"]
+        },
+        {
+          "name": "gr_trib",
+          "type": "text",
+          "required": false,
+          "system": false
         }
       ],
       "indexes": [

@@ -904,6 +904,7 @@ export interface SimProdutoBaseItem {
   fabricante?: string
   moeda?: string
   preco_base_sugerido?: number
+  gr_trib?: string
   dados_extras?: Record<string, unknown>
   created: string
   updated: string
@@ -965,15 +966,42 @@ export async function listarRegrasIcmsSimulador(params?: {
   })
 }
 
-export async function obterRegraIcmsSimulador(ufOrigem: string, ufDestino: string) {
+export async function obterRegraIcmsSimulador(
+  ufOrigem: string,
+  ufDestino: string,
+  grTrib?: string,
+): Promise<{
+  regra: SimRegraIcmsItem | null
+  statusCorrespondencia: 'exata' | 'fallback_uf' | 'nao_encontrada'
+}> {
   const chave = `${ufOrigem.toUpperCase()}_${ufDestino.toUpperCase()}`
+  const grTribLimpo = (grTrib || '').trim()
+
   try {
-    const res = await pb.collection('sim_regras_icms').getList<SimRegraIcmsItem>(1, 1, {
+    // 1. Se o produto tem gr_trib, busca prioritariamente pela regra exata (par de UFs + grupo tributário)
+    if (grTribLimpo) {
+      const escGr = grTribLimpo.replace(/'/g, "\\'")
+      const resExata = await pb.collection('sim_regras_icms').getList<SimRegraIcmsItem>(1, 1, {
+        filter: `chave_origem_destino = '${chave}' && grupo_tributario_codigo = '${escGr}'`,
+        sort: '-created',
+      })
+      if (resExata.items.length > 0) {
+        return { regra: resExata.items[0], statusCorrespondencia: 'exata' }
+      }
+    }
+
+    // 2. Fallback: regra do par de UFs sem filtro de grupo ou quando produto não tem gr_trib
+    const resUf = await pb.collection('sim_regras_icms').getList<SimRegraIcmsItem>(1, 1, {
       filter: `chave_origem_destino = '${chave}'`,
+      sort: '-created',
     })
-    return res.items[0] || null
+    if (resUf.items.length > 0) {
+      return { regra: resUf.items[0], statusCorrespondencia: 'fallback_uf' }
+    }
+
+    return { regra: null, statusCorrespondencia: 'nao_encontrada' }
   } catch (_) {
-    return null
+    return { regra: null, statusCorrespondencia: 'nao_encontrada' }
   }
 }
 
@@ -981,6 +1009,7 @@ export async function executarSimulacaoServidor(payload: {
   produto_id?: string
   produto_nome?: string
   ncm?: string
+  gr_trib?: string
   uf_origem: string
   uf_destino: string
   quantidade: number

@@ -1816,7 +1816,7 @@ export function Importar() {
           ncmFormatado = `${padded.slice(0, 4)}.${padded.slice(4, 6)}.${padded.slice(6, 8)}`
         }
 
-        // 4. Embalagem: coluna explícita ou dedução via regex da descrição (ex. "1X20L", "4X5L", "200L", "20KG")
+        // 4. Embalagem: coluna explícita ou dedução refinada (preferindo padrão \d+X\d+ no fim)
         let emb = getFieldValue(row, [
           'embalagem',
           'tipo_embalagem',
@@ -1824,24 +1824,87 @@ export function Importar() {
           'recipiente',
         ])
         if (!emb && desc) {
-          const mEmb = desc.match(
-            /\b(\d+\s*[xX]\s*\d+(?:[.,]\d+)?\s*(?:L|LT|KG|G|ML|SC|DOSES)|\d+(?:[.,]\d+)?\s*(?:L|LT|KG|G|ML|SC|DOSES))\b/i,
+          const sDesc = String(desc).trim()
+          const mMult = sDesc.match(
+            /\b(\d+)\s*[xX]\s*(\d+(?:[.,]\d+)?)\s*(L|LT|KG|G|ML|SC|DOSES)\b/i,
           )
-          if (mEmb) {
-            emb = mEmb[1].replace(/\s+/g, '').replace('X', 'x')
+          if (mMult) {
+            let un = mMult[3].toUpperCase()
+            if (un === 'LT') un = 'L'
+            emb = `${mMult[1]}X${mMult[2]}${un}`
+          } else {
+            const regexFim = /\b(\d+(?:[.,]\d+)?)\s*(L|LT|KG|G|ML|SC|DOSES)\b/gi
+            let match: RegExpExecArray | null
+            let lastMatch: RegExpExecArray | null = null
+            while ((match = regexFim.exec(sDesc)) !== null) {
+              lastMatch = match
+            }
+            if (lastMatch) {
+              let un = lastMatch[2].toUpperCase()
+              if (un === 'LT') un = 'L'
+              emb = `${lastMatch[1]}${un}`
+            }
           }
         }
 
-        // 5. Unidade: coluna de unidade ou dedução pela embalagem
-        let unid = getFieldValue(row, ['b1_um', 'unidade', 'und', 'uom', 'unid'])
-        if (!unid && emb) {
-          const embUpper = emb.toUpperCase()
-          if (embUpper.includes('KG') || embUpper.includes('G')) unid = 'KG'
-          else if (embUpper.includes('SC')) unid = 'SC'
-          else if (embUpper.includes('DOSES')) unid = 'DOSES'
-          else unid = 'L'
+        // 5. Unidade: dedução por tipo de produto e embalagem
+        const rawUnid = getFieldValue(row, ['b1_um', 'unidade', 'und', 'uom', 'unid'])
+        const embUpper = (emb || '').toUpperCase()
+        const dUpper = `${desc || ''} ${bmDesc || ''} ${b1Grupo || ''}`.toUpperCase()
+        let unid = ''
+
+        if (
+          /\b\d+\s*[xX]\s*\d+(?:[.,]\d+)?\s*(L|LT|ML)\b/i.test(embUpper) ||
+          /\b\d+(?:[.,]\d+)?\s*(L|LT|ML)\b/i.test(embUpper) ||
+          embUpper.endsWith('L') ||
+          embUpper.endsWith('LT') ||
+          embUpper.endsWith('ML')
+        ) {
+          unid = 'L'
+        } else if (
+          /\b\d+\s*[xX]\s*\d+(?:[.,]\d+)?\s*(KG|G|TON|T)\b/i.test(embUpper) ||
+          /\b\d+(?:[.,]\d+)?\s*(KG|G|TON|T)\b/i.test(embUpper) ||
+          embUpper.endsWith('KG') ||
+          embUpper.endsWith('G')
+        ) {
+          unid = 'KG'
+        } else if (
+          dUpper.includes('GRANULADO') ||
+          dUpper.includes('GRANULADOS') ||
+          dUpper.includes('FARELO') ||
+          dUpper.includes('PO SOLUVEL') ||
+          dUpper.includes('PÓ SOLÚVEL') ||
+          dUpper.includes('SÓLIDO') ||
+          dUpper.includes('SOLIDO') ||
+          dUpper.includes('CALCARIO') ||
+          dUpper.includes('GESSO')
+        ) {
+          const uUp = (rawUnid || '').toUpperCase()
+          unid = ['SC', 'SACO', 'SACAS'].includes(uUp) ? 'SC' : 'KG'
+        } else if (rawUnid) {
+          const uUp = rawUnid.toUpperCase()
+          if (['L', 'LT', 'LITROS', 'ML'].includes(uUp)) unid = 'L'
+          else if (['KG', 'KILOS', 'QUILOS', 'TON', 'T', 'G'].includes(uUp)) unid = 'KG'
+          else if (['SC', 'SACO', 'SACAS'].includes(uUp)) unid = 'SC'
+          else if (['DOSES', 'DOSE'].includes(uUp)) unid = 'DOSES'
+          else if (['UN', 'FRASCO', 'BOMBONA', 'TAMBOR', 'LATA'].includes(uUp)) unid = 'UN'
         }
-        if (!unid) unid = 'L'
+
+        if (!unid) {
+          if (
+            /\b(SC|SL|EC|EW|FS|OD|CS|SE)\b/.test(dUpper) ||
+            dUpper.includes('OLEO') ||
+            dUpper.includes('ÓLEO') ||
+            dUpper.includes('LIQUIDO') ||
+            dUpper.includes('LÍQUIDO')
+          ) {
+            unid = 'L'
+          } else if (/\b(WG|WP|GR|DP|SP)\b/.test(dUpper)) {
+            unid = 'KG'
+          } else {
+            unid = 'L'
+          }
+        }
 
         // 6. Origem: coluna x5_tabela ou sufixo (IMP)/(SS)
         const x5Origem = getFieldValue(row, [
@@ -1926,16 +1989,27 @@ export function Importar() {
           }
         }
 
-        // 9. Moeda e Preço
+        // 9. Grupo Tributário: B1_GRTRIB2 prioridade máxima
+        const grTrib = getFieldValue(row, [
+          'b1_grtrib2',
+          'grtrib2',
+          'gr_trib',
+          'grtrib',
+          'grupo_tributario',
+          'grupo_tributario_codigo',
+          'cod_grtrib',
+        ])
+
+        // 10. Moeda e Preço
         const moeda =
           getFieldValue(row, ['moeda', 'currency']) || (origem === 'Importado' ? 'USD' : 'BRL')
         const precoBase = cleanNumber(
           getFieldValue(row, [
             'preco_base_sugerido',
             'preco_base',
-            'preco',
             'b1_prv1',
             'prv1',
+            'preco',
             'preco_venda',
             'valor_unitario',
             'valor',
@@ -1988,6 +2062,7 @@ export function Importar() {
             fabricante: fab || '',
             moeda: moeda.toUpperCase(),
             preco_base_sugerido: precoBase,
+            gr_trib: grTrib || '',
             dados_extras: {
               ...row,
               ...(bmDesc ? { BM_DESC_ORIGINAL: bmDesc } : {}),

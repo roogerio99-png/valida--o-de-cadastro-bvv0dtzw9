@@ -2484,20 +2484,90 @@ routerAdd('POST', '/backend/v1/importar-lote', (e) => {
           const rawNcm = String(data.ncm || rawObj.B1_POSIPI || rawObj.b1_posipi || '').trim()
           const ncm = fmtNcmMascara(rawNcm)
 
-          // 5. Embalagem: extrair ou derivar da descrição
+          // 5. Embalagem: extrair ou derivar preferindo quantidade × conteúdo no fim
           let embalagem = String(data.embalagem || '').trim()
           if (!embalagem && descricao) {
-            const mEmb = descricao.match(
-              /\b(\d+\s*[xX]\s*\d+(?:[.,]\d+)?\s*(?:L|LT|KG|G|ML|SC|DOSES)|\d+(?:[.,]\d+)?\s*(?:L|LT|KG|G|ML|SC|DOSES))\b/i,
+            const sDesc = String(descricao).trim()
+            const mMult = sDesc.match(
+              /\b(\d+)\s*[xX]\s*(\d+(?:[.,]\d+)?)\s*(L|LT|KG|G|ML|SC|DOSES)\b/i,
             )
-            if (mEmb) {
-              embalagem = mEmb[1].replace(/\s+/g, '').replace('X', 'x')
+            if (mMult) {
+              let un = mMult[3].toUpperCase()
+              if (un === 'LT') un = 'L'
+              embalagem = `${mMult[1]}X${mMult[2]}${un}`
+            } else {
+              const regexFim = /\b(\d+(?:[.,]\d+)?)\s*(L|LT|KG|G|ML|SC|DOSES)\b/gi
+              let match
+              let lastMatch = null
+              while ((match = regexFim.exec(sDesc)) !== null) {
+                lastMatch = match
+              }
+              if (lastMatch) {
+                let un = lastMatch[2].toUpperCase()
+                if (un === 'LT') un = 'L'
+                embalagem = `${lastMatch[1]}${un}`
+              }
             }
           }
 
-          // 6. Unidade
+          // 6. Unidade: deduzida por tipo de produto e embalagem
           const rawUnid = String(data.unidade || rawObj.B1_UM || rawObj.b1_um || '').trim()
-          const unidade = normalizarUnidade(rawUnid, embalagem)
+          const embUp = (embalagem || '').toUpperCase()
+          const dUpper = `${descricao || ''} ${bmDesc || ''} ${rawObj.B1_GRUPO || ''}`.toUpperCase()
+          let unidade = ''
+
+          if (
+            /\b\d+\s*[xX]\s*\d+(?:[.,]\d+)?\s*(L|LT|ML)\b/i.test(embUp) ||
+            /\b\d+(?:[.,]\d+)?\s*(L|LT|ML)\b/i.test(embUp) ||
+            embUp.endsWith('L') ||
+            embUp.endsWith('LT') ||
+            embUp.endsWith('ML')
+          ) {
+            unidade = 'L'
+          } else if (
+            /\b\d+\s*[xX]\s*\d+(?:[.,]\d+)?\s*(KG|G|TON|T)\b/i.test(embUp) ||
+            /\b\d+(?:[.,]\d+)?\s*(KG|G|TON|T)\b/i.test(embUp) ||
+            embUp.endsWith('KG') ||
+            embUp.endsWith('G')
+          ) {
+            unidade = 'KG'
+          } else if (
+            dUpper.includes('GRANULADO') ||
+            dUpper.includes('GRANULADOS') ||
+            dUpper.includes('FARELO') ||
+            dUpper.includes('PO SOLUVEL') ||
+            dUpper.includes('PÓ SOLÚVEL') ||
+            dUpper.includes('SÓLIDO') ||
+            dUpper.includes('SOLIDO') ||
+            dUpper.includes('CALCARIO') ||
+            dUpper.includes('GESSO')
+          ) {
+            const uUp = rawUnid.toUpperCase()
+            unidade = ['SC', 'SACO', 'SACAS'].includes(uUp) ? 'SC' : 'KG'
+          } else if (rawUnid) {
+            const uUp = rawUnid.toUpperCase()
+            if (['L', 'LT', 'LITROS', 'ML'].includes(uUp)) unidade = 'L'
+            else if (['KG', 'KILOS', 'QUILOS', 'TON', 'T', 'G'].includes(uUp)) unidade = 'KG'
+            else if (['SC', 'SACO', 'SACAS'].includes(uUp)) unidade = 'SC'
+            else if (['DOSES', 'DOSE'].includes(uUp)) unidade = 'DOSES'
+            else if (['UN', 'FRASCO', 'BOMBONA', 'TAMBOR', 'LATA'].includes(uUp)) unidade = 'UN'
+          }
+
+          if (!unidade) {
+            if (
+              /\b(SC|SL|EC|EW|FS|OD|CS|SE)\b/.test(dUpper) ||
+              dUpper.includes('OLEO') ||
+              dUpper.includes('ÓLEO') ||
+              dUpper.includes('LIQUIDO') ||
+              dUpper.includes('LÍQUIDO')
+            ) {
+              unidade = 'L'
+            } else if (/\b(WG|WP|GR|DP|SP)\b/.test(dUpper)) {
+              unidade = 'KG'
+            } else {
+              unidade = 'L'
+            }
+          }
 
           // 7. Tipo de Produto
           let tipoProduto = String(data.tipo_produto || '').trim()
@@ -2549,7 +2619,20 @@ routerAdd('POST', '/backend/v1/importar-lote', (e) => {
           // 10. Princípio Ativo
           const principioAtivo = String(data.principio_ativo || '').trim()
 
-          // 11. Moeda e Preço
+          // 11. Grupo Tributário (gr_trib / B1_GRTRIB2)
+          const grTrib = String(
+            data.gr_trib ||
+              rawObj.B1_GRTRIB2 ||
+              rawObj.b1_grtrib2 ||
+              rawObj.GRTRIB2 ||
+              rawObj.grtrib2 ||
+              rawObj.gr_trib ||
+              rawObj.grtrib ||
+              rawObj.grupo_tributario ||
+              '',
+          ).trim()
+
+          // 12. Moeda e Preço
           const moeda = String(data.moeda || (origem.toLowerCase().includes('imp') ? 'USD' : 'BRL'))
             .trim()
             .toUpperCase()
@@ -2611,6 +2694,7 @@ routerAdd('POST', '/backend/v1/importar-lote', (e) => {
           record.set('fabricante', fabricante)
           record.set('moeda', moeda)
           record.set('preco_base_sugerido', precoBase)
+          record.set('gr_trib', grTrib)
 
           // Preservar dados_extras íntegros
           if (data.dados_extras) {

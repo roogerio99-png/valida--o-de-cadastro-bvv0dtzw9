@@ -26,6 +26,7 @@ export interface LinhaPlanilhaProdutoBase {
   BM_DESC?: string
   X5_TABELA?: string
   X5_DESC?: string
+  gr_trib?: string
   [key: string]: unknown
 }
 
@@ -41,6 +42,7 @@ export interface ProdutoBaseEstruturado {
   fabricante: string
   moeda: 'BRL' | 'USD'
   preco_base_sugerido: number
+  gr_trib?: string
   dados_extras?: Record<string, unknown>
 }
 
@@ -65,12 +67,31 @@ export function formatarNcmCanonico(raw: string | number | undefined | null): st
  */
 export function extrairEmbalagemDescricao(desc: string | undefined | null): string {
   if (!desc) return ''
-  const m = String(desc).match(
-    /\b(\d+\s*[xX]\s*\d+(?:[.,]\d+)?\s*(?:L|LT|KG|G|ML|SC|DOSES)|\d+(?:[.,]\d+)?\s*(?:L|LT|KG|G|ML|SC|DOSES))\b/i,
-  )
-  if (m) {
-    return m[1].replace(/\s+/g, '').replace('X', 'x')
+  const s = String(desc).trim()
+
+  // 1. Preferência absoluta para quantidade × conteúdo: \d+\s*[xX]\s*\d+(?:[.,]\d+)?\s*(?:L|LT|KG|G|ML|SC|DOSES)
+  // Exemplo: "SYNPROLE 480 SC 1X20L (IMP) SS" -> "1x20L" (e não 480SC)
+  const mMult = s.match(/\b(\d+)\s*[xX]\s*(\d+(?:[.,]\d+)?)\s*(L|LT|KG|G|ML|SC|DOSES)\b/i)
+  if (mMult) {
+    let un = mMult[3].toUpperCase()
+    if (un === 'LT') un = 'L'
+    return `${mMult[1]}x${mMult[2]}${un}`
   }
+
+  // 2. Em sua ausência: número + unidade mais próximo ao final da descrição
+  const regexFim = /\b(\d+(?:[.,]\d+)?)\s*(L|LT|KG|G|ML|SC|DOSES)\b/gi
+  let match: RegExpExecArray | null
+  let lastMatch: RegExpExecArray | null = null
+  while ((match = regexFim.exec(s)) !== null) {
+    lastMatch = match
+  }
+
+  if (lastMatch) {
+    let un = lastMatch[2].toUpperCase()
+    if (un === 'LT') un = 'L'
+    return `${lastMatch[1]}${un}`
+  }
+
   return ''
 }
 
@@ -116,20 +137,80 @@ export function derivarOrigemProduto(
 /**
  * Deriva a unidade a partir de B1_UM ou da embalagem
  */
-export function normalizarUnidadeProduto(u?: string | null, emb?: string | null): string {
-  if (u) {
-    const up = String(u).trim().toUpperCase()
-    if (['L', 'KG', 'SC', 'UN', 'DOSES'].includes(up)) return up
-    if (up === 'LT' || up === 'LITROS' || up === 'ML') return 'L'
-    if (up === 'G' || up === 'KILOS' || up === 'QUILOS' || up === 'TON' || up === 'T') return 'KG'
-    if (up === 'SACO' || up === 'SACAS') return 'SC'
-    if (up === 'FRASCO' || up === 'BOMBONA' || up === 'TAMBOR' || up === 'LATA') return 'UN'
-  }
+export function normalizarUnidadeProduto(
+  u?: string | null,
+  emb?: string | null,
+  desc?: string | null,
+  bmDesc?: string | null,
+  b1Grupo?: string | null,
+): string {
   const embUp = String(emb || '').toUpperCase()
-  if (embUp.includes('KG') || embUp.includes('QUILO') || embUp.includes('G')) return 'KG'
-  if (embUp.includes('SC') || embUp.includes('SACO')) return 'SC'
-  if (embUp.includes('DOSE')) return 'DOSES'
-  if (embUp.includes('UN')) return 'UN'
+  const dUp = `${String(desc || '')} ${String(bmDesc || '')} ${String(b1Grupo || '')}`.toUpperCase()
+  const uUp = String(u || '')
+    .trim()
+    .toUpperCase()
+
+  // 1. Líquidos (embalagem em L/ML ou formulação líquida) -> "L"
+  const embIsLiquido =
+    /\b\d+\s*[xX]\s*\d+(?:[.,]\d+)?\s*(L|LT|ML)\b/i.test(embUp) ||
+    /\b\d+(?:[.,]\d+)?\s*(L|LT|ML)\b/i.test(embUp) ||
+    embUp.endsWith('L') ||
+    embUp.endsWith('LT') ||
+    embUp.endsWith('ML')
+
+  // 2. Granulados / Sólidos (embalagem em KG/G ou formulação sólida) -> "KG"
+  const embIsSolido =
+    /\b\d+\s*[xX]\s*\d+(?:[.,]\d+)?\s*(KG|G|TON|T)\b/i.test(embUp) ||
+    /\b\d+(?:[.,]\d+)?\s*(KG|G|TON|T)\b/i.test(embUp) ||
+    embUp.endsWith('KG') ||
+    embUp.endsWith('G')
+
+  if (embIsLiquido) {
+    return 'L'
+  }
+  if (embIsSolido) {
+    return 'KG'
+  }
+
+  // 3. Sólidos/granulados identificados pela descrição ou grupo do ERP (ex: Fertilizantes Granulados)
+  if (
+    dUp.includes('GRANULADO') ||
+    dUp.includes('GRANULADOS') ||
+    dUp.includes('FARELO') ||
+    dUp.includes('PO SOLUVEL') ||
+    dUp.includes('PÓ SOLÚVEL') ||
+    dUp.includes('SÓLIDO') ||
+    dUp.includes('SOLIDO') ||
+    dUp.includes('CALCARIO') ||
+    dUp.includes('GESSO')
+  ) {
+    if (['SC', 'SACAS', 'SACO'].includes(uUp)) return 'SC'
+    return 'KG'
+  }
+
+  // 4. Se a unidade informada do ERP for coerente
+  if (uUp) {
+    if (['L', 'LT', 'LITROS', 'ML'].includes(uUp)) return 'L'
+    if (['KG', 'KILOS', 'QUILOS', 'TON', 'T', 'G'].includes(uUp)) return 'KG'
+    if (['SC', 'SACO', 'SACAS'].includes(uUp)) return 'SC'
+    if (['DOSES', 'DOSE'].includes(uUp)) return 'DOSES'
+    if (['UN', 'FRASCO', 'BOMBONA', 'TAMBOR', 'LATA'].includes(uUp)) return 'UN'
+  }
+
+  // 5. Termos de formulação na descrição: SC/SL/EC são suspensões/líquidos; WG/WP/GR são sólidos
+  if (
+    /\b(SC|SL|EC|EW|FS|OD|CS|SE)\b/.test(dUp) ||
+    dUp.includes('OLEO') ||
+    dUp.includes('ÓLEO') ||
+    dUp.includes('LIQUIDO') ||
+    dUp.includes('LÍQUIDO')
+  ) {
+    return 'L'
+  }
+  if (/\b(WG|WP|GR|DP|SP)\b/.test(dUp)) {
+    return 'KG'
+  }
+
   return 'L'
 }
 
@@ -191,8 +272,28 @@ export function mapearLinhaSimProdutoBase(
   const b1Grupo = String(row.B1_GRUPO || row.b1_grupo || '').trim()
   const b1Posipi = String(row.B1_POSIPI || row.b1_posipi || row.ncm || '').trim()
   const b1Um = String(row.B1_UM || row.b1_um || row.unidade || '').trim()
+  const b1Grtrib2 = String(
+    row.B1_GRTRIB2 ||
+      row.b1_grtrib2 ||
+      row.gr_trib ||
+      row.grtrib ||
+      row.grupo_tributario ||
+      row.grupo_tributario_codigo ||
+      '',
+  ).trim()
   const x5 = String(row.X5_TABELA || row.X5_DESC || row.x5_tabela || row.origem || '').trim()
-  const b1Prv1 = row.B1_PRV1 || row.b1_prv1 || row.preco_base_sugerido || row.preco || 0
+  const b1Prv1 =
+    row.B1_PRV1 !== undefined
+      ? row.B1_PRV1
+      : row.b1_prv1 !== undefined
+        ? row.b1_prv1
+        : row.preco_base_sugerido !== undefined
+          ? row.preco_base_sugerido
+          : row.preco !== undefined
+            ? row.preco
+            : row.valor !== undefined
+              ? row.valor
+              : 0
 
   // 1. Descrição: prioridade absoluta B1_DESC; NUNCA BM_DESC
   let descricaoFinal = b1Desc
@@ -208,11 +309,17 @@ export function mapearLinhaSimProdutoBase(
   // 2. NCM Canônico
   const ncmFinal = formatarNcmCanonico(b1Posipi)
 
-  // 3. Embalagem
+  // 3. Embalagem (preferindo padrão quantidade×conteúdo)
   const embalagemFinal = extrairEmbalagemDescricao(descricaoFinal)
 
-  // 4. Unidade
-  const unidadeFinal = normalizarUnidadeProduto(b1Um, embalagemFinal)
+  // 4. Unidade (líquidos em L/ML -> L, sólidos/granulados -> KG)
+  const unidadeFinal = normalizarUnidadeProduto(
+    b1Um,
+    embalagemFinal,
+    descricaoFinal,
+    bmDesc,
+    b1Grupo,
+  )
 
   // 5. Origem
   const origemFinal = derivarOrigemProduto(x5, descricaoFinal, embalagemFinal)
@@ -240,6 +347,7 @@ export function mapearLinhaSimProdutoBase(
     fabricante: fabricanteFinal,
     moeda: moedaFinal,
     preco_base_sugerido: precoFinal,
+    gr_trib: b1Grtrib2,
     dados_extras: row as Record<string, unknown>,
   }
 }

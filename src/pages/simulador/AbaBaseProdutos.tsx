@@ -155,13 +155,16 @@ export function AbaBaseProdutos({ ativa }: AbaBaseProdutosProps) {
               <tr className="bg-[#F5F7F1] border-b border-[#DCE5DC] text-left text-[#5A6D5A]">
                 <th className="py-3 px-3 font-semibold w-24 whitespace-nowrap">Código</th>
                 <th className="py-3 px-3 font-semibold min-w-[240px]">Descrição (B1_DESC)</th>
-                <th className="py-3 px-3 font-semibold w-32 whitespace-nowrap">NCM</th>
-                <th className="py-3 px-3 font-semibold w-32 whitespace-nowrap">Embalagem</th>
-                <th className="py-3 px-3 font-semibold w-28 whitespace-nowrap">Origem</th>
-                <th className="py-3 px-3 font-semibold w-24 text-center whitespace-nowrap">
+                <th className="py-3 px-3 font-semibold w-24 whitespace-nowrap text-center">
+                  GrTrib
+                </th>
+                <th className="py-3 px-3 font-semibold w-28 whitespace-nowrap">NCM</th>
+                <th className="py-3 px-3 font-semibold w-28 whitespace-nowrap">Embalagem</th>
+                <th className="py-3 px-3 font-semibold w-24 whitespace-nowrap">Origem</th>
+                <th className="py-3 px-3 font-semibold w-20 text-center whitespace-nowrap">
                   Moeda
                 </th>
-                <th className="py-3 px-3 font-semibold w-32 text-right whitespace-nowrap">
+                <th className="py-3 px-3 font-semibold w-28 text-right whitespace-nowrap">
                   Preço Base
                 </th>
               </tr>
@@ -169,14 +172,14 @@ export function AbaBaseProdutos({ ativa }: AbaBaseProdutosProps) {
             <tbody className="divide-y divide-[#F0F4F0]">
               {loading ? (
                 <tr>
-                  <td colSpan={7} className="py-12 text-center text-xs text-[#5A6D5A]">
+                  <td colSpan={8} className="py-12 text-center text-xs text-[#5A6D5A]">
                     <Loader2 className="w-6 h-6 animate-spin mx-auto text-[#1B5E20] mb-2" />
                     Carregando base de produtos...
                   </td>
                 </tr>
               ) : items.length === 0 ? (
                 <tr>
-                  <td colSpan={7} className="py-12 text-center text-xs text-[#5A6D5A]">
+                  <td colSpan={8} className="py-12 text-center text-xs text-[#5A6D5A]">
                     <div className="max-w-md mx-auto space-y-2">
                       <p className="font-semibold text-gray-800">Nenhum produto encontrado</p>
                       <p className="text-gray-500">
@@ -216,6 +219,16 @@ export function AbaBaseProdutos({ ativa }: AbaBaseProdutosProps) {
                         <div className="font-semibold text-gray-900">{prod.descricao}</div>
                         {prod.tipo_produto && (
                           <div className="text-[10px] text-gray-500">{prod.tipo_produto}</div>
+                        )}
+                      </td>
+
+                      <td className="py-2.5 px-3 text-center whitespace-nowrap">
+                        {prod.gr_trib ? (
+                          <span className="font-mono text-[11px] font-bold bg-blue-50 text-blue-800 px-2 py-0.5 rounded border border-blue-200">
+                            {prod.gr_trib}
+                          </span>
+                        ) : (
+                          <span className="text-gray-400">—</span>
                         )}
                       </td>
 

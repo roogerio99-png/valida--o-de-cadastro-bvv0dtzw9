@@ -77,20 +77,23 @@ describe('Mapeamento Canônico de Produtos Base (sim_produtos_base)', () => {
     // 2. NCM canônico
     expect(res.ncm).toBe('3808.92.99')
 
-    // 3. Embalagem derivada
+    // 3. Embalagem derivada (preferindo 1x20L sobre 480SC)
     expect(res.embalagem).toBe('1x20L')
 
-    // 4. Origem derivada de (IMP)
+    // 4. GrTrib mapeado a partir de B1_GRTRIB2
+    expect(res.gr_trib).toBe('001')
+
+    // 5. Origem derivada de (IMP)
     expect(res.origem).toBe('Importado')
     expect(res.moeda).toBe('USD')
 
-    // 5. Unidade
+    // 6. Unidade (líquido com embalagem em L -> 'L')
     expect(res.unidade).toBe('L')
 
-    // 6. Código
+    // 7. Código
     expect(res.codigo).toBe('007243')
 
-    // 7. Tipo de produto
+    // 8. Tipo de produto
     expect(res.tipo_produto).toBe('Produto Formulado Comercial')
   })
 
@@ -112,6 +115,9 @@ describe('Mapeamento Canônico de Produtos Base (sim_produtos_base)', () => {
     expect(res.tipo_produto).toBe('Fertilizante Mineral / Organomineral')
     expect(res.origem).toBe('Nacional')
     expect(res.moeda).toBe('BRL')
+    expect(res.gr_trib).toBe('002')
+    // Item 4 do enunciado: fertilizantes granulados/sólidos devem derivar unidade "KG" (não "L")
+    expect(res.unidade).toBe('KG')
   })
 
   it('3. Deve extrair embalagem de 200L e classificar adjuvante para 002203 (AGRICOIL PREMIUM PURO 200L)', () => {
@@ -133,13 +139,40 @@ describe('Mapeamento Canônico de Produtos Base (sim_produtos_base)', () => {
     expect(res.unidade).toBe('L')
   })
 
-  it('4. Deve extrair múltiplos padrões de embalagem', () => {
+  it('4. Deve extrair múltiplos padrões de embalagem preferindo quantidade×conteúdo e não formulação', () => {
+    // SYNPROLE 480 SC 1X20L -> deve capturar 1x20L e NÃO 480SC
     expect(extrairEmbalagemDescricao('SYNPROLE 480 SC 1X20L (IMP) SS')).toBe('1x20L')
     expect(extrairEmbalagemDescricao('ASLAN SL 4X5L (IMP)')).toBe('4x5L')
     expect(extrairEmbalagemDescricao('FERTILIZANTE NPK 20KG SACO')).toBe('20KG')
     expect(extrairEmbalagemDescricao('INSETICIDA CONCENTRADO 500ML')).toBe('500ML')
     expect(extrairEmbalagemDescricao('TAMBOR 200L')).toBe('200L')
     expect(extrairEmbalagemDescricao('PRODUTO A GRANEL SEM EMBALAGEM')).toBe('')
+    expect(extrairEmbalagemDescricao('DEFENSIVO 360 CS 12X1L')).toBe('12x1L')
+  })
+
+  it('8. Deve validar coerção de preco_base_sugerido quando presente ou 0 quando ausente', () => {
+    const rowComPreco = {
+      B1_COD: 'TEST-01',
+      B1_DESC: 'PRODUTO TESTE 20L',
+      B1_PRV1: '125,50',
+      B1_GRTRIB2: '003',
+    }
+    const resComPreco = mapearLinhaSimProdutoBase(rowComPreco)
+    expect(resComPreco.preco_base_sugerido).toBe(125.5)
+    expect(resComPreco.gr_trib).toBe('003')
+
+    const rowSemPreco = {
+      B1_COD: 'TEST-02',
+      B1_DESC: 'PRODUTO TESTE SEM PRECO 20L',
+      B1_GRTRIB2: '001',
+    }
+    const resSemPreco = mapearLinhaSimProdutoBase(rowSemPreco)
+    expect(resSemPreco.preco_base_sugerido).toBe(0)
+  })
+
+  it('9. Deve garantir integridade de ROUNDUP WG (MAPA 002094) = 3808.93.24 e ROUNDUP ORIGINAL MAIS = 3808.93.29', () => {
+    expect(formatarNcmCanonico('38089324')).toBe('3808.93.24')
+    expect(formatarNcmCanonico('38089329')).toBe('3808.93.29')
   })
 
   it('5. Deve formatar NCMs canônicos corretamente', () => {
