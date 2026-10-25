@@ -11,7 +11,6 @@ import { CadastroBula } from './pages/CadastroBula'
 import { PrincipiosAtivos } from './pages/PrincipiosAtivos'
 import { Regras } from './pages/Regras'
 import { Parametrizacao } from './pages/Parametrizacao'
-import { Simulador } from './pages/Simulador'
 import { Travas } from './pages/Travas'
 import { SincronizacaoProdutos } from './pages/SincronizacaoProdutos'
 import { Tributacao } from './pages/Tributacao'
@@ -52,7 +51,6 @@ export function App() {
               <Route path="/regras" element={<Regras />} />
               <Route path="/regras-ncm" element={<Regras />} />
               <Route path="/parametrizacao" element={<Parametrizacao />} />
-              <Route path="/simulador" element={<Simulador />} />
               <Route path="/travas" element={<Travas />} />
               <Route path="/sincronizacao" element={<SincronizacaoProdutos />} />
               <Route

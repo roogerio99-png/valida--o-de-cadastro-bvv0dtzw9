@@ -466,8 +466,6 @@ export interface RespostaLimpezaBases {
   apagados: {
     base_mestre?: number
     dicionario_principios_ativos?: number
-    sim_produtos_base?: number
-    sim_regras_icms?: number
     total: number
   }
   preservados: string[]
@@ -475,12 +473,7 @@ export interface RespostaLimpezaBases {
 }
 
 export async function limparBases(params: {
-  alvo:
-    | 'todas'
-    | 'base_mestre'
-    | 'dicionario_principios_ativos'
-    | 'sim_produtos_base'
-    | 'sim_regras_icms'
+  alvo: 'todas' | 'base_mestre' | 'dicionario_principios_ativos'
   confirmar: string
 }): Promise<RespostaLimpezaBases> {
   return pb.send<RespostaLimpezaBases>('/backend/v1/limpar-bases', {
@@ -496,7 +489,7 @@ export async function limparBases(params: {
  * via SDK, reportando progresso e contagem parcial precisa.
  */
 export async function excluirTodaBaseColecao(params: {
-  colecao: 'base_mestre' | 'sim_produtos_base' | 'sim_regras_icms'
+  colecao: 'base_mestre'
   loteSize?: number
   onProgress?: (apagados: number, total: number) => void
 }): Promise<{ totalApagados: number }> {
@@ -509,13 +502,7 @@ export async function excluirTodaBaseColecao(params: {
       confirmar: 'LIMPAR',
     })
     const count =
-      (colecao === 'base_mestre'
-        ? res.apagados.base_mestre
-        : colecao === 'sim_produtos_base'
-          ? res.apagados.sim_produtos_base
-          : res.apagados.sim_regras_icms) ??
-      res.apagados.total ??
-      0
+      (colecao === 'base_mestre' ? res.apagados.base_mestre : undefined) ?? res.apagados.total ?? 0
     if (onProgress) onProgress(count, count)
     return { totalApagados: count }
   } catch (endpointErr) {
@@ -988,218 +975,4 @@ export async function gravarBulaPdf(
       'Falha ao gravar os dados da bula no banco de dados. Tente novamente.'
     throw new Error(errorMsg)
   }
-}
-
-// -----------------------------------------------------------------------------
-// Simulador Comercial (Fase 1 - MVP)
-// -----------------------------------------------------------------------------
-
-export interface SimProdutoBaseItem {
-  id: string
-  codigo?: string
-  descricao: string
-  ncm?: string
-  unidade?: string
-  tipo_produto?: string
-  origem?: string
-  embalagem?: string
-  principio_ativo?: string
-  fabricante?: string
-  moeda?: string
-  preco_base_sugerido?: number
-  gr_trib?: string
-  grupo_codigo?: string
-  grupo_descricao?: string
-  descricao_grupo_tributario?: string
-  segmento?: string
-  comissao_padrao?: number
-  dados_extras?: Record<string, unknown>
-  created: string
-  updated: string
-}
-
-export interface SimRegraIcmsItem {
-  id: string
-  uf_origem: string
-  uf_destino: string
-  aliquota_icms: number
-  reducao_base?: number
-  aliquota_efetiva?: number
-  diferimento?: boolean
-  percentual_diferimento?: number
-  fundamentacao_legal?: string
-  tipo_operacao?: string
-  chave_origem_destino: string
-  id_regra?: string
-  tipo_uf_origem?: string
-  tipo_uf_destino?: string
-  grupo_tributario_codigo?: string
-  grupo_tributario_descricao?: string
-  prod_importado?: string
-  tipo_desonerado?: string
-  icms_desonerado?: number
-  regra_credito_entrada?: string
-  dados_extras?: Record<string, unknown>
-  created: string
-  updated: string
-}
-
-export async function listarProdutosBaseSimulador(params?: {
-  page?: number
-  perPage?: number
-  filter?: string
-  sort?: string
-}) {
-  const page = params?.page || 1
-  const perPage = params?.perPage || 50
-  const sort = params?.sort || 'codigo'
-  return pb.collection('sim_produtos_base').getList<SimProdutoBaseItem>(page, perPage, {
-    filter: params?.filter,
-    sort,
-  })
-}
-
-export type AtualizarSimProdutoBaseInput = {
-  descricao: string
-  ncm?: string
-  embalagem?: string
-  unidade?: string
-  tipo_produto?: string
-  origem?: string
-  moeda?: string
-  preco_base_sugerido?: number
-  gr_trib?: string
-  grupo_codigo?: string
-  grupo_descricao?: string
-  descricao_grupo_tributario?: string
-  segmento?: string
-  comissao_padrao?: number
-  fabricante?: string
-  principio_ativo?: string
-}
-
-export async function atualizarProdutoBaseSimulador(
-  id: string,
-  data: AtualizarSimProdutoBaseInput,
-) {
-  // Preserva intencionalmente dados_extras sem sobrescrever nem remover
-  const payload: Record<string, unknown> = {
-    descricao: data.descricao.trim(),
-    origem: data.origem || 'Nacional',
-    moeda: data.moeda || 'BRL',
-    preco_base_sugerido:
-      typeof data.preco_base_sugerido === 'number' && !isNaN(data.preco_base_sugerido)
-        ? data.preco_base_sugerido
-        : 0,
-  }
-
-  if (data.ncm !== undefined) payload.ncm = data.ncm.trim()
-  if (data.embalagem !== undefined) payload.embalagem = data.embalagem.trim()
-  if (data.unidade !== undefined) payload.unidade = data.unidade.trim()
-  if (data.tipo_produto !== undefined) payload.tipo_produto = data.tipo_produto.trim()
-  if (data.gr_trib !== undefined) payload.gr_trib = data.gr_trib.trim()
-  if (data.grupo_codigo !== undefined) payload.grupo_codigo = data.grupo_codigo.trim()
-  if (data.grupo_descricao !== undefined) payload.grupo_descricao = data.grupo_descricao.trim()
-  if (data.descricao_grupo_tributario !== undefined)
-    payload.descricao_grupo_tributario = data.descricao_grupo_tributario.trim()
-  if (data.segmento !== undefined) payload.segmento = data.segmento.trim()
-  if (data.comissao_padrao !== undefined) {
-    payload.comissao_padrao =
-      typeof data.comissao_padrao === 'number' && !isNaN(data.comissao_padrao)
-        ? data.comissao_padrao
-        : 0
-  }
-  if (data.fabricante !== undefined) payload.fabricante = data.fabricante.trim()
-  if (data.principio_ativo !== undefined) payload.principio_ativo = data.principio_ativo.trim()
-
-  return pb.collection('sim_produtos_base').update<SimProdutoBaseItem>(id, payload)
-}
-
-export async function excluirProdutoBaseSimulador(id: string) {
-  return pb.collection('sim_produtos_base').delete(id)
-}
-
-export async function listarRegrasIcmsSimulador(params?: {
-  page?: number
-  perPage?: number
-  filter?: string
-  sort?: string
-}) {
-  const page = params?.page || 1
-  const perPage = params?.perPage || 50
-  const sort = params?.sort || 'uf_origem,uf_destino'
-  return pb.collection('sim_regras_icms').getList<SimRegraIcmsItem>(page, perPage, {
-    filter: params?.filter,
-    sort,
-  })
-}
-
-export async function obterRegraIcmsSimulador(
-  ufOrigem: string,
-  ufDestino: string,
-  grTrib?: string,
-): Promise<{
-  regra: SimRegraIcmsItem | null
-  statusCorrespondencia: 'exata' | 'fallback_uf' | 'nao_encontrada'
-}> {
-  const chave = `${ufOrigem.toUpperCase()}_${ufDestino.toUpperCase()}`
-  const grTribLimpo = (grTrib || '').trim()
-
-  try {
-    // 1. Se o produto tem gr_trib, busca prioritariamente pela regra exata (par de UFs + grupo tributário)
-    if (grTribLimpo) {
-      const escGr = grTribLimpo.replace(/'/g, "\\'")
-      const resExata = await pb.collection('sim_regras_icms').getList<SimRegraIcmsItem>(1, 1, {
-        filter: `uf_origem = '${ufOrigem.toUpperCase()}' && uf_destino = '${ufDestino.toUpperCase()}' && grupo_tributario_codigo = '${escGr}'`,
-        sort: '-created',
-      })
-      if (resExata.items.length > 0) {
-        return { regra: resExata.items[0], statusCorrespondencia: 'exata' }
-      }
-    }
-
-    // 2. Fallback: regra do par de UFs sem filtro de grupo ou quando produto não tem gr_trib
-    const resUf = await pb.collection('sim_regras_icms').getList<SimRegraIcmsItem>(1, 1, {
-      filter: `uf_origem = '${ufOrigem.toUpperCase()}' && uf_destino = '${ufDestino.toUpperCase()}'`,
-      sort: '-created',
-    })
-    if (resUf.items.length > 0) {
-      return { regra: resUf.items[0], statusCorrespondencia: 'fallback_uf' }
-    }
-
-    return { regra: null, statusCorrespondencia: 'nao_encontrada' }
-  } catch (_) {
-    return { regra: null, statusCorrespondencia: 'nao_encontrada' }
-  }
-}
-
-export async function executarSimulacaoServidor(payload: {
-  produto_id?: string
-  produto_nome?: string
-  ncm?: string
-  gr_trib?: string
-  uf_origem: string
-  uf_destino: string
-  quantidade: number
-  preco_unitario: number
-  ptax_manual?: number
-  frete?: number
-  seguro?: number
-  outras_despesas?: number
-  margem_perc?: number
-}) {
-  return pb.send<{
-    sucesso: boolean
-    produto: any
-    operacao: any
-    cambio: any
-    valores_base: any
-    tributos: any
-    resultado_comercial: any
-    alertas: string[]
-    memoria_calculo: string[]
-  }>('/backend/v1/simulador/calcular', {
-    method: 'POST',
-    body: payload,
-  })
 }

@@ -38,7 +38,6 @@ import {
   sanitizarRegistroMapa,
   sanitizarMarcaComercial,
 } from '@/lib/motorCanonico'
-import { mapearLinhaSimRegraIcms, type RegraIcmsEstruturada } from '@/lib/simRegrasIcmsMapeamento'
 
 interface ZoneConfig {
   id: string
@@ -254,55 +253,6 @@ const DROP_ZONES: ZoneConfig[] = [
     targetCollection: 'regras_ncm_embalagem',
     expectedHeaders: ['NCM', 'DESCRICAO', 'EMBALAGENS PERMITIDAS'],
     sampleDescription: 'Popula as travas 1 e 2 de conformidade por classificação fiscal',
-  },
-
-  // --- SIMULADOR COMERCIAL (PRODUTOS BASE E REGRAS ICMS) ---
-  {
-    id: 'sim_produtos_base',
-    sheetIndex: 2,
-    sheetKeywords: [
-      'produtos base',
-      'produtos_base',
-      'produtosbase',
-      'produtos',
-      'itens base',
-      'simulador produtos',
-    ],
-    title: 'Simulador: Produtos Base',
-    subtitle: 'Base de itens e insumos base para o Simulador Comercial (≈1.178 itens).',
-    targetCollection: 'sim_produtos_base',
-    expectedHeaders: ['CODIGO', 'DESCRICAO', 'NCM', 'UNIDADE', 'ORIGEM', 'TIPO PRODUTO'],
-    sampleDescription: 'Popula os produtos selecionáveis no Simulador Comercial',
-  },
-  {
-    id: 'sim_regras_icms',
-    sheetIndex: 3,
-    sheetKeywords: [
-      'regra icms',
-      'regras icms',
-      'regra_icms',
-      'regras_icms',
-      'regras icms interestaduais',
-      'regras_icms_interestaduais',
-      'icms',
-      'matriz icms',
-      'tabela icms',
-      'regrasicms',
-      'regraicms',
-    ],
-    title: 'Simulador: Regras de ICMS',
-    subtitle:
-      'Matriz interestadual de alíquotas e benefícios de ICMS origem → destino (≈7.291 regras).',
-    targetCollection: 'sim_regras_icms',
-    expectedHeaders: [
-      'UF ORIGEM',
-      'UF CONTRAPARTIDA / DESTINO',
-      'OPERAÇÃO',
-      'GRTRIB',
-      'CARGA TRIB. ICMS',
-      'CARGA ICMS FINAL',
-    ],
-    sampleDescription: 'Popula a matriz interestadual de ICMS do Simulador Comercial',
   },
 ]
 
@@ -1765,414 +1715,6 @@ export function Importar() {
           },
         })
       }
-
-      // ------------------------------------------------------------------
-      // SIMULADOR: sim_produtos_base (Aba Produtos Base)
-      // ------------------------------------------------------------------
-      else if (targetCol === 'sim_produtos_base') {
-        // 1. Código do produto: B1_COD prioridade máxima
-        const codigo = getFieldValue(row, ['b1_cod', 'codigo', 'cod', 'id_produto', 'id', 'item'])
-
-        // 2. Descrição do produto: B1_DESC é a descrição real do produto; NUNCA BM_DESC (que é o grupo)
-        let desc = getFieldValue(row, ['b1_desc'])
-        if (!desc) {
-          const rawDesc = getFieldValue(row, [
-            'descricao_produto',
-            'nome_produto',
-            'descricao',
-            'produto',
-            'nome',
-            'item',
-          ])
-          const bmDesc = getFieldValue(row, ['bm_desc', 'desc_grupo', 'grupo_desc'])
-          // Se rawDesc for idêntico a BM_DESC, não utilizar como descrição do produto
-          if (rawDesc && (!bmDesc || normalize(rawDesc) !== normalize(bmDesc))) {
-            desc = rawDesc
-          }
-        }
-
-        // Grupo: BM_DESC / B1_GRUPO
-        const bmDesc = getFieldValue(row, ['bm_desc', 'desc_grupo', 'grupo_desc', 'grupo'])
-        const b1Grupo = getFieldValue(row, ['b1_grupo', 'cod_grupo'])
-
-        // Se desc ainda estiver vazia, como último fallback usa o que houver
-        if (!desc) {
-          desc = getFieldValue(row, ['descricao', 'produto', 'item'])
-        }
-
-        // 3. NCM: B1_POSIPI prioridade máxima
-        const rawNcm = getFieldValue(row, [
-          'b1_posipi',
-          'posipi',
-          'ncm',
-          'ncm_oficial',
-          'classificacao_fiscal',
-        ])
-        const ncmLimpo = cleanNcm(rawNcm)
-        let ncmFormatado = ''
-        if (ncmLimpo && ncmLimpo.length === 8) {
-          ncmFormatado = `${ncmLimpo.slice(0, 4)}.${ncmLimpo.slice(4, 6)}.${ncmLimpo.slice(6, 8)}`
-        } else if (ncmLimpo && ncmLimpo.length > 0 && ncmLimpo.length < 8) {
-          const padded = ncmLimpo.padStart(8, '0')
-          ncmFormatado = `${padded.slice(0, 4)}.${padded.slice(4, 6)}.${padded.slice(6, 8)}`
-        }
-
-        // 4. Embalagem: coluna explícita ou dedução refinada (preferindo padrão \d+X\d+ no fim)
-        let emb = getFieldValue(row, [
-          'embalagem',
-          'tipo_embalagem',
-          'acondicionamento',
-          'recipiente',
-        ])
-        if (!emb && desc) {
-          const sDesc = String(desc).trim()
-          const mMult = sDesc.match(
-            /\b(\d+)\s*[xX]\s*(\d+(?:[.,]\d+)?)\s*(L|LT|KG|G|ML|SC|DOSES)\b/i,
-          )
-          if (mMult) {
-            let un = mMult[3].toUpperCase()
-            if (un === 'LT') un = 'L'
-            emb = `${mMult[1]}X${mMult[2]}${un}`
-          } else {
-            const regexFim = /\b(\d+(?:[.,]\d+)?)\s*(L|LT|KG|G|ML|SC|DOSES)\b/gi
-            let match: RegExpExecArray | null
-            let lastMatch: RegExpExecArray | null = null
-            while ((match = regexFim.exec(sDesc)) !== null) {
-              lastMatch = match
-            }
-            if (lastMatch) {
-              let un = lastMatch[2].toUpperCase()
-              if (un === 'LT') un = 'L'
-              emb = `${lastMatch[1]}${un}`
-            }
-          }
-        }
-
-        // 5. Unidade: dedução por tipo de produto e embalagem
-        const rawUnid = getFieldValue(row, ['b1_um', 'unidade', 'und', 'uom', 'unid'])
-        const embUpper = (emb || '').toUpperCase()
-        const dUpper = `${desc || ''} ${bmDesc || ''} ${b1Grupo || ''}`.toUpperCase()
-        let unid = ''
-
-        if (
-          /\b\d+\s*[xX]\s*\d+(?:[.,]\d+)?\s*(L|LT|ML)\b/i.test(embUpper) ||
-          /\b\d+(?:[.,]\d+)?\s*(L|LT|ML)\b/i.test(embUpper) ||
-          embUpper.endsWith('L') ||
-          embUpper.endsWith('LT') ||
-          embUpper.endsWith('ML')
-        ) {
-          unid = 'L'
-        } else if (
-          /\b\d+\s*[xX]\s*\d+(?:[.,]\d+)?\s*(KG|G|TON|T)\b/i.test(embUpper) ||
-          /\b\d+(?:[.,]\d+)?\s*(KG|G|TON|T)\b/i.test(embUpper) ||
-          embUpper.endsWith('KG') ||
-          embUpper.endsWith('G')
-        ) {
-          unid = 'KG'
-        } else if (
-          dUpper.includes('GRANULADO') ||
-          dUpper.includes('GRANULADOS') ||
-          dUpper.includes('FARELO') ||
-          dUpper.includes('PO SOLUVEL') ||
-          dUpper.includes('PÓ SOLÚVEL') ||
-          dUpper.includes('SÓLIDO') ||
-          dUpper.includes('SOLIDO') ||
-          dUpper.includes('CALCARIO') ||
-          dUpper.includes('GESSO')
-        ) {
-          const uUp = (rawUnid || '').toUpperCase()
-          unid = ['SC', 'SACO', 'SACAS'].includes(uUp) ? 'SC' : 'KG'
-        } else if (rawUnid) {
-          const uUp = rawUnid.toUpperCase()
-          if (['L', 'LT', 'LITROS', 'ML'].includes(uUp)) unid = 'L'
-          else if (['KG', 'KILOS', 'QUILOS', 'TON', 'T', 'G'].includes(uUp)) unid = 'KG'
-          else if (['SC', 'SACO', 'SACAS'].includes(uUp)) unid = 'SC'
-          else if (['DOSES', 'DOSE'].includes(uUp)) unid = 'DOSES'
-          else if (['UN', 'FRASCO', 'BOMBONA', 'TAMBOR', 'LATA'].includes(uUp)) unid = 'UN'
-        }
-
-        if (!unid) {
-          if (
-            /\b(SC|SL|EC|EW|FS|OD|CS|SE)\b/.test(dUpper) ||
-            dUpper.includes('OLEO') ||
-            dUpper.includes('ÓLEO') ||
-            dUpper.includes('LIQUIDO') ||
-            dUpper.includes('LÍQUIDO')
-          ) {
-            unid = 'L'
-          } else if (/\b(WG|WP|GR|DP|SP)\b/.test(dUpper)) {
-            unid = 'KG'
-          } else {
-            unid = 'L'
-          }
-        }
-
-        // 6. Origem: coluna x5_tabela ou sufixo (IMP)/(SS) com proteção anti-contaminação
-        const x5Origem = getFieldValue(row, [
-          'x5_tabela',
-          'x5_desc',
-          'x5',
-          'origem',
-          'procedencia',
-          'pais_origem',
-          'tipo_origem',
-        ])
-        let origem = ''
-        if (x5Origem) {
-          const x5Up = x5Origem.toUpperCase()
-          // Anti-contaminação: se for descrição fiscal (ex: "ORIGEM 0,4,5,6,7 (NCM 3808)" ou "TRIBUTADO")
-          const isDescricaoFiscal =
-            (x5Up.includes('ORIGEM') && x5Up.includes('(NCM')) || x5Up.includes('TRIBUTAD')
-          if (!isDescricaoFiscal) {
-            if (x5Up.includes('IMP') || x5Up.includes('ESTRANGEIR')) {
-              origem = 'Importado'
-            } else if (x5Up.includes('NAC')) {
-              origem = 'Nacional'
-            }
-          }
-        }
-        if (!origem) {
-          const descUp = desc.toUpperCase()
-          if (
-            descUp.includes('(IMP)') ||
-            descUp.includes(' IMP ') ||
-            descUp.endsWith(' IMP') ||
-            descUp.includes('(SS)')
-          ) {
-            origem = 'Importado'
-          } else {
-            origem = 'Nacional'
-          }
-        }
-
-        // 7. Fabricante: extrair de padrão "PRODUTO - FABRICANTE (AGENCIADO)" ou coluna explícita
-        let fab = getFieldValue(row, ['fabricante', 'titular', 'empresa', 'fornecedor', 'marca'])
-        if (!fab && desc) {
-          const mFab = desc.match(
-            /[-–—]\s*([A-Za-z0-9&.\s]+?)\s*\((?:AGENCIADO|AGENC|DISTRIBUIDO)\)/i,
-          )
-          if (mFab) {
-            fab = mFab[1].trim()
-          }
-        }
-
-        // 8. Tipo de Produto: derivar de BM_DESC / B1_GRUPO
-        let tipoProd = getFieldValue(row, ['tipo_produto', 'tipo', 'categoria', 'classe'])
-        if (!tipoProd) {
-          const s = `${bmDesc} ${b1Grupo} ${desc}`.toUpperCase()
-          if (s.includes('FERTILIZANTE') || s.includes('NPK') || s.includes('ORGANOMINERAL')) {
-            tipoProd = 'Fertilizante Mineral / Organomineral'
-          } else if (
-            s.includes('ADJUVANTE') ||
-            s.includes('ESPALHANTE') ||
-            s.includes('OLEO MINERAL') ||
-            s.includes('ÓLEO MINERAL')
-          ) {
-            tipoProd = 'Adjuvante / Espalhante Adesivo'
-          } else if (
-            s.includes('BIOLOGICO') ||
-            s.includes('BIOLÓGICO') ||
-            s.includes('INOCULANTE')
-          ) {
-            tipoProd = 'Inoculante / Biológico'
-          } else if (
-            s.includes('CORRETIVO') ||
-            s.includes('CONDICIONADOR') ||
-            s.includes('CALCARIO') ||
-            s.includes('GESSO')
-          ) {
-            tipoProd = 'Corretivo / Condicionador de Solo'
-          } else if (s.includes('SEMENTE')) {
-            tipoProd = 'Semente Certificada'
-          } else if (s.includes('TECNICO') || s.includes('TÉCNICO')) {
-            tipoProd = 'Produto Técnico Industrial'
-          } else if (s.includes('PRE-MISTURA') || s.includes('PRÉ-MISTURA')) {
-            tipoProd = 'Pré-Mistura Industrial'
-          } else {
-            tipoProd = 'Produto Formulado Comercial'
-          }
-        }
-
-        // 9. Grupo Tributário: B1_GRTRIB2 prioridade máxima
-        const grTrib = getFieldValue(row, [
-          'b1_grtrib2',
-          'grtrib2',
-          'gr_trib',
-          'grtrib',
-          'grupo_tributario',
-          'grupo_tributario_codigo',
-          'cod_grtrib',
-        ])
-
-        // 9.1 Campos novos da planilha "Produtos Base" (A–M):
-        // Coluna C: grupo_codigo (B1_GRUPO)
-        const grupoCodigo =
-          getFieldValue(row, ['b1_grupo', 'b1_grupo_original', 'grupo_codigo', 'cod_grupo']) ||
-          b1Grupo ||
-          ''
-
-        // Coluna D: grupo_descricao (BM_DESC)
-        const grupoDescricao =
-          getFieldValue(row, [
-            'bm_desc',
-            'bm_desc_original',
-            'grupo_descricao',
-            'desc_grupo',
-            'grupo_desc',
-          ]) ||
-          bmDesc ||
-          ''
-
-        // Coluna G: descricao_grupo_tributario ("DESCRIÇÃO GRUPO TRIBUTARIO")
-        let descGrupoTrib =
-          getFieldValue(row, [
-            'descrição grupo tributario',
-            'descricao grupo tributario',
-            'descrição do grupo tributário',
-            'descricao_grupo_tributario',
-            'desc_grupo_tributario',
-            'desc_grtrib',
-          ]) || ''
-        if (!descGrupoTrib && x5Origem) {
-          const x5Up = x5Origem.toUpperCase()
-          if ((x5Up.includes('ORIGEM') && x5Up.includes('(NCM')) || x5Up.includes('TRIBUTAD')) {
-            descGrupoTrib = x5Origem
-          }
-        }
-
-        // Coluna H: segmento ("SEGMENTO")
-        const segmento = getFieldValue(row, ['segmento', 'seg']) || ''
-
-        // Coluna I: comissao_padrao ("COMISSAO_PADRAO")
-        const rawComissao = getFieldValue(row, [
-          'comissao_padrao',
-          'comissao',
-          'comissao_padrao_perc',
-          'taxa_comissao',
-        ])
-        const comissaoPadrao = rawComissao ? cleanNumber(rawComissao) : 0
-
-        // 10. Moeda e Preço
-        const moeda =
-          getFieldValue(row, ['moeda', 'currency']) || (origem === 'Importado' ? 'USD' : 'BRL')
-        const precoBase = cleanNumber(
-          getFieldValue(row, [
-            'preco_base_sugerido',
-            'preco_base',
-            'b1_prv1',
-            'prv1',
-            'preco',
-            'preco_venda',
-            'valor_unitario',
-            'valor',
-          ]),
-        )
-
-        const pa = getFieldValue(row, ['principio_ativo', 'ativo', 'ingrediente_ativo', 'molecula'])
-
-        const allText = Object.values(row).join(' ').trim()
-        if (
-          allText.toLowerCase().includes('como usar') ||
-          allText.toLowerCase().includes('instruções')
-        ) {
-          rejeitados.push({
-            linhaOriginal: originalLineNum,
-            linhaLote: idx + 1,
-            motivo: 'Linha informativa ou instruções ignorada.',
-            categoria: 'Linha Informativa',
-            campo: 'Linha',
-            valor: allText.slice(0, 60),
-            dados: row,
-          })
-          return
-        }
-
-        if (!desc || /^\d+$/.test(desc.trim())) {
-          rejeitados.push({
-            linhaOriginal: originalLineNum,
-            linhaLote: idx + 1,
-            motivo: 'Descrição do produto é obrigatória e não pode ser número puro.',
-            categoria: 'Descrição Ausente ou Numérica',
-            campo: 'Descricao',
-            valor: desc || 'vazio',
-            dados: row,
-          })
-          return
-        }
-
-        validos.push({
-          originalLine: originalLineNum,
-          data: {
-            codigo: codigo || `PROD-${originalLineNum}`,
-            descricao: desc,
-            ncm: ncmFormatado,
-            unidade: unid,
-            tipo_produto: tipoProd,
-            origem: origem,
-            embalagem: emb || '',
-            principio_ativo: pa || '',
-            fabricante: fab || '',
-            moeda: moeda.toUpperCase(),
-            preco_base_sugerido: precoBase,
-            gr_trib: grTrib || '',
-            grupo_codigo: grupoCodigo,
-            grupo_descricao: grupoDescricao,
-            descricao_grupo_tributario: descGrupoTrib,
-            segmento: segmento,
-            comissao_padrao: comissaoPadrao,
-            dados_extras: {
-              ...row,
-              ...(bmDesc ? { BM_DESC_ORIGINAL: bmDesc } : {}),
-              ...(b1Grupo ? { B1_GRUPO_ORIGINAL: b1Grupo } : {}),
-            },
-          },
-        })
-      }
-
-      // ------------------------------------------------------------------
-      // SIMULADOR: sim_regras_icms (Aba Regra ICMS)
-      // ------------------------------------------------------------------
-      else if (targetCol === 'sim_regras_icms') {
-        // Ignorar linhas de cabeçalho ou notas informativas
-        const allText = Object.values(row).join(' ').trim()
-        const lowerAll = allText.toLowerCase()
-        if (
-          lowerAll.includes('como usar') ||
-          lowerAll.includes('regras oficiais') ||
-          lowerAll.includes('instruções') ||
-          lowerAll.includes('instrucoes')
-        ) {
-          rejeitados.push({
-            linhaOriginal: originalLineNum,
-            linhaLote: idx + 1,
-            motivo: 'Linha informativa ou cabeçalho ignorado.',
-            categoria: 'Linha Informativa',
-            campo: 'Linha',
-            valor: allText.slice(0, 60),
-            dados: row,
-          })
-          return
-        }
-
-        const resMapeamento = mapearLinhaSimRegraIcms(row)
-        if (!resMapeamento.sucesso) {
-          rejeitados.push({
-            linhaOriginal: originalLineNum,
-            linhaLote: idx + 1,
-            motivo: resMapeamento.motivo,
-            categoria: 'UF Inválida',
-            campo: resMapeamento.campo,
-            valor: resMapeamento.valor,
-            dados: row,
-          })
-          return
-        }
-
-        validos.push({
-          originalLine: originalLineNum,
-          data: resMapeamento.regra as unknown as Record<string, unknown>,
-        })
-      }
     })
 
     return { validos, rejeitados }
@@ -2205,25 +1747,7 @@ export function Importar() {
       validos.forEach((v) => {
         const itemData = v.data as Record<string, unknown>
         let chave: string | null = null
-        if (targetCol === 'sim_produtos_base') {
-          // Identidade composta: Código + Embalagem (variantes de embalagem convivem como produtos distintos)
-          const cod = String(itemData.codigo || '')
-            .trim()
-            .toUpperCase()
-          const emb = String(itemData.embalagem || '')
-            .trim()
-            .toUpperCase()
-          const desc = String(itemData.descricao || '')
-            .trim()
-            .toUpperCase()
-          if (cod) {
-            chave = emb ? `${cod} | ${emb}` : cod
-          } else if (desc) {
-            chave = emb ? `${desc} | ${emb}` : desc
-          }
-        } else if (targetCol === 'sim_regras_icms') {
-          chave = (itemData.chave_origem_destino as string) || null
-        } else if (targetCol === 'base_mestre') {
+        if (targetCol === 'base_mestre') {
           chave = (itemData.codigo as string) || (itemData.nome_comercial as string) || null
         } else if (targetCol === 'bula_produtos') {
           chave = (itemData.registro_mapa as string) || (itemData.nome_comercial as string) || null
@@ -2709,12 +2233,8 @@ export function Importar() {
                               <span className="block text-[10px] text-amber-600 mt-0.5">
                                 {totalCodigosDuplicados}{' '}
                                 {totalCodigosDuplicados === 1
-                                  ? activeZone.targetCollection === 'sim_produtos_base'
-                                    ? 'chave repetida'
-                                    : 'código repetido'
-                                  : activeZone.targetCollection === 'sim_produtos_base'
-                                    ? 'chaves repetidas'
-                                    : 'códigos repetidos'}{' '}
+                                  ? 'código repetido'
+                                  : 'códigos repetidos'}{' '}
                                 • prevalece última
                               </span>
                             </div>
@@ -2794,34 +2314,18 @@ export function Importar() {
                                 Transparência de Duplicatas na Planilha (Intra-Arquivo):
                               </p>
                               <p className="text-amber-800 text-[11px] mt-0.5 leading-relaxed">
-                                {activeZone.targetCollection === 'sim_produtos_base' ? (
-                                  <>
-                                    Identificação por chave composta{' '}
-                                    <strong>Código + Embalagem</strong>. Variantes de embalagem do
-                                    mesmo código convivem como produtos distintos na base. Linhas
-                                    com a <strong>mesma combinação de código e embalagem</strong>{' '}
-                                    são atualizadas (upsert idempotente pela última ocorrência),
-                                    garantindo <strong>0 perdas</strong> de dados.
-                                  </>
-                                ) : (
-                                  <>
-                                    Código duplicado na planilha <strong>NÃO é perda</strong>. O
-                                    mesmo código apareceu em mais de uma linha na planilha enviada.
-                                    O sistema realizou a gravação mantendo{' '}
-                                    <strong>uma única vez</strong> na base com os dados da{' '}
-                                    <strong>última ocorrência</strong> (upsert idempotente). Houve{' '}
-                                    <strong>0 perdas</strong> de registros.
-                                  </>
-                                )}
+                                Código duplicado na planilha <strong>NÃO é perda</strong>. O mesmo
+                                código apareceu em mais de uma linha na planilha enviada. O sistema
+                                realizou a gravação mantendo <strong>uma única vez</strong> na base
+                                com os dados da <strong>última ocorrência</strong> (upsert
+                                idempotente). Houve <strong>0 perdas</strong> de registros.
                               </p>
                             </div>
                           </div>
 
                           <div className="pt-1.5 border-t border-amber-200/60 flex flex-wrap items-center gap-1.5">
                             <span className="text-[11px] font-semibold text-amber-900">
-                              {activeZone.targetCollection === 'sim_produtos_base'
-                                ? `Itens com repetição exata [Código + Embalagem] (${totalCodigosDuplicados}):`
-                                : `Códigos com repetição identificados (${totalCodigosDuplicados}):`}
+                              {`Códigos com repetição identificados (${totalCodigosDuplicados}):`}
                             </span>
                             {duplicadasEntradas.map(([itemKey, count]) => (
                               <Badge

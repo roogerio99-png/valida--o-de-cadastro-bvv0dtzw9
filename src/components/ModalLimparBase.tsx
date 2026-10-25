@@ -18,12 +18,7 @@ import { limparBases } from '@/services/agroService'
 interface ModalLimparBaseProps {
   open: boolean
   onOpenChange: (open: boolean) => void
-  alvo:
-    | 'todas'
-    | 'base_mestre'
-    | 'dicionario_principios_ativos'
-    | 'sim_produtos_base'
-    | 'sim_regras_icms'
+  alvo: 'todas' | 'base_mestre' | 'dicionario_principios_ativos'
   tituloAlvo: string
   totalRegistros?: number
   onSucesso: () => void
@@ -73,22 +68,14 @@ export function ModalLimparBase({
       const totalApagado =
         alvo === 'base_mestre'
           ? (res.apagados.base_mestre ?? res.apagados.total)
-          : alvo === 'sim_produtos_base'
-            ? (res.apagados.sim_produtos_base ?? res.apagados.total)
-            : alvo === 'sim_regras_icms'
-              ? (res.apagados.sim_regras_icms ?? res.apagados.total)
-              : res.apagados.total
+          : res.apagados.total
 
       const detalheMsg =
         alvo === 'todas'
           ? `${res.apagados.base_mestre || 0} produtos e ${res.apagados.dicionario_principios_ativos || 0} princípios ativos apagados.`
           : alvo === 'base_mestre'
             ? `${totalApagado} registros apagados da Base Mestre.`
-            : alvo === 'sim_produtos_base'
-              ? `${totalApagado} produtos apagados da Base de Produtos.`
-              : alvo === 'sim_regras_icms'
-                ? `${totalApagado} regras fiscais apagadas.`
-                : `${totalApagado} registros apagados do Dicionário.`
+            : `${totalApagado} registros apagados do Dicionário.`
 
       toast({
         title: 'Base excluída',

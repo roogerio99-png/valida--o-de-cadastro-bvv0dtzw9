@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-10-25T11:21:20.128Z",
+  "generatedAt": "2026-10-25T16:53:18.130Z",
   "collections": [
     {
       "name": "users",
@@ -55,11 +55,11 @@
       "name": "regras_ncm_embalagem",
       "type": "base",
       "apiRules": {
-        "list": "@request.auth.id != ''",
-        "view": "@request.auth.id != ''",
-        "create": "@request.auth.id != '' && @request.auth.role = 'admin'",
-        "update": "@request.auth.id != '' && @request.auth.role = 'admin'",
-        "delete": "@request.auth.id != '' && @request.auth.role = 'admin'"
+        "list": "(@request.auth.id != '' && @request.auth.collectionName = 'users')",
+        "view": "(@request.auth.id != '' && @request.auth.collectionName = 'users')",
+        "create": "(@request.auth.id != '' && @request.auth.collectionName = 'users') && @request.auth.role = 'admin'",
+        "update": "(@request.auth.id != '' && @request.auth.collectionName = 'users') && @request.auth.role = 'admin'",
+        "delete": "(@request.auth.id != '' && @request.auth.collectionName = 'users') && @request.auth.role = 'admin'"
       },
       "fields": [
         {
@@ -107,11 +107,11 @@
       "name": "dicionario_principios_ativos",
       "type": "base",
       "apiRules": {
-        "list": "@request.auth.id != ''",
-        "view": "@request.auth.id != ''",
-        "create": "@request.auth.id != '' && @request.auth.role = 'admin'",
-        "update": "@request.auth.id != '' && @request.auth.role = 'admin'",
-        "delete": "@request.auth.id != '' && @request.auth.role = 'admin'"
+        "list": "(@request.auth.id != '' && @request.auth.collectionName = 'users')",
+        "view": "(@request.auth.id != '' && @request.auth.collectionName = 'users')",
+        "create": "(@request.auth.id != '' && @request.auth.collectionName = 'users') && @request.auth.role = 'admin'",
+        "update": "(@request.auth.id != '' && @request.auth.collectionName = 'users') && @request.auth.role = 'admin'",
+        "delete": "(@request.auth.id != '' && @request.auth.collectionName = 'users') && @request.auth.role = 'admin'"
       },
       "fields": [
         {
@@ -259,11 +259,11 @@
       "name": "base_mestre",
       "type": "base",
       "apiRules": {
-        "list": "@request.auth.id != ''",
-        "view": "@request.auth.id != ''",
-        "create": "@request.auth.id != '' && @request.auth.role = 'admin'",
-        "update": "@request.auth.id != '' && @request.auth.role = 'admin'",
-        "delete": "@request.auth.id != '' && @request.auth.role = 'admin'"
+        "list": "(@request.auth.id != '' && @request.auth.collectionName = 'users')",
+        "view": "(@request.auth.id != '' && @request.auth.collectionName = 'users')",
+        "create": "(@request.auth.id != '' && @request.auth.collectionName = 'users') && @request.auth.role = 'admin'",
+        "update": "(@request.auth.id != '' && @request.auth.collectionName = 'users') && @request.auth.role = 'admin'",
+        "delete": "(@request.auth.id != '' && @request.auth.collectionName = 'users') && @request.auth.role = 'admin'"
       },
       "fields": [
         {
@@ -574,11 +574,11 @@
       "name": "parametrizacao_fiscal",
       "type": "base",
       "apiRules": {
-        "list": "@request.auth.id != ''",
-        "view": "@request.auth.id != ''",
-        "create": "@request.auth.id != '' && @request.auth.role = 'admin'",
-        "update": "@request.auth.id != '' && @request.auth.role = 'admin'",
-        "delete": "@request.auth.id != '' && @request.auth.role = 'admin'"
+        "list": "(@request.auth.id != '' && @request.auth.collectionName = 'users')",
+        "view": "(@request.auth.id != '' && @request.auth.collectionName = 'users')",
+        "create": "(@request.auth.id != '' && @request.auth.collectionName = 'users') && @request.auth.role = 'admin'",
+        "update": "(@request.auth.id != '' && @request.auth.collectionName = 'users') && @request.auth.role = 'admin'",
+        "delete": "(@request.auth.id != '' && @request.auth.collectionName = 'users') && @request.auth.role = 'admin'"
       },
       "fields": [
         {
@@ -651,11 +651,11 @@
       "name": "log_validacoes",
       "type": "base",
       "apiRules": {
-        "list": "@request.auth.id != ''",
-        "view": "@request.auth.id != ''",
-        "create": "@request.auth.id != ''",
-        "update": "@request.auth.id != '' && @request.auth.role = 'admin'",
-        "delete": "@request.auth.id != '' && @request.auth.role = 'admin'"
+        "list": "(@request.auth.id != '' && @request.auth.collectionName = 'users')",
+        "view": "(@request.auth.id != '' && @request.auth.collectionName = 'users')",
+        "create": "(@request.auth.id != '' && @request.auth.collectionName = 'users')",
+        "update": "(@request.auth.id != '' && @request.auth.collectionName = 'users') && @request.auth.role = 'admin'",
+        "delete": "(@request.auth.id != '' && @request.auth.collectionName = 'users') && @request.auth.role = 'admin'"
       },
       "fields": [
         {
@@ -734,11 +734,11 @@
       "name": "sincronizacao_historico",
       "type": "base",
       "apiRules": {
-        "list": "@request.auth.id != ''",
-        "view": "@request.auth.id != ''",
-        "create": "@request.auth.id != '' && @request.auth.role = 'admin'",
-        "update": "@request.auth.id != '' && @request.auth.role = 'admin'",
-        "delete": "@request.auth.id != '' && @request.auth.role = 'admin'"
+        "list": "(@request.auth.id != '' && @request.auth.collectionName = 'users')",
+        "view": "(@request.auth.id != '' && @request.auth.collectionName = 'users')",
+        "create": "(@request.auth.id != '' && @request.auth.collectionName = 'users') && @request.auth.role = 'admin'",
+        "update": "(@request.auth.id != '' && @request.auth.collectionName = 'users') && @request.auth.role = 'admin'",
+        "delete": "(@request.auth.id != '' && @request.auth.collectionName = 'users') && @request.auth.role = 'admin'"
       },
       "fields": [
         {
@@ -830,11 +830,11 @@
       "name": "convites_usuarios",
       "type": "base",
       "apiRules": {
-        "list": "@request.auth.id != '' && @request.auth.role = 'admin'",
-        "view": "@request.auth.id != '' && @request.auth.role = 'admin'",
-        "create": "@request.auth.id != '' && @request.auth.role = 'admin'",
-        "update": "@request.auth.id != '' && @request.auth.role = 'admin'",
-        "delete": "@request.auth.id != '' && @request.auth.role = 'admin'"
+        "list": "(@request.auth.id != '' && @request.auth.collectionName = 'users') && @request.auth.role = 'admin'",
+        "view": "(@request.auth.id != '' && @request.auth.collectionName = 'users') && @request.auth.role = 'admin'",
+        "create": "(@request.auth.id != '' && @request.auth.collectionName = 'users') && @request.auth.role = 'admin'",
+        "update": "(@request.auth.id != '' && @request.auth.collectionName = 'users') && @request.auth.role = 'admin'",
+        "delete": "(@request.auth.id != '' && @request.auth.collectionName = 'users') && @request.auth.role = 'admin'"
       },
       "fields": [
         {
@@ -906,11 +906,11 @@
       "name": "bula_produtos",
       "type": "base",
       "apiRules": {
-        "list": "@request.auth.id != ''",
-        "view": "@request.auth.id != ''",
-        "create": "@request.auth.id != '' && @request.auth.role = 'admin'",
-        "update": "@request.auth.id != '' && @request.auth.role = 'admin'",
-        "delete": "@request.auth.id != '' && @request.auth.role = 'admin'"
+        "list": "(@request.auth.id != '' && @request.auth.collectionName = 'users')",
+        "view": "(@request.auth.id != '' && @request.auth.collectionName = 'users')",
+        "create": "(@request.auth.id != '' && @request.auth.collectionName = 'users') && @request.auth.role = 'admin'",
+        "update": "(@request.auth.id != '' && @request.auth.collectionName = 'users') && @request.auth.role = 'admin'",
+        "delete": "(@request.auth.id != '' && @request.auth.collectionName = 'users') && @request.auth.role = 'admin'"
       },
       "fields": [
         {
@@ -1096,11 +1096,11 @@
       "name": "bula_composicao",
       "type": "base",
       "apiRules": {
-        "list": "@request.auth.id != ''",
-        "view": "@request.auth.id != ''",
-        "create": "@request.auth.id != '' && @request.auth.role = 'admin'",
-        "update": "@request.auth.id != '' && @request.auth.role = 'admin'",
-        "delete": "@request.auth.id != '' && @request.auth.role = 'admin'"
+        "list": "(@request.auth.id != '' && @request.auth.collectionName = 'users')",
+        "view": "(@request.auth.id != '' && @request.auth.collectionName = 'users')",
+        "create": "(@request.auth.id != '' && @request.auth.collectionName = 'users') && @request.auth.role = 'admin'",
+        "update": "(@request.auth.id != '' && @request.auth.collectionName = 'users') && @request.auth.role = 'admin'",
+        "delete": "(@request.auth.id != '' && @request.auth.collectionName = 'users') && @request.auth.role = 'admin'"
       },
       "fields": [
         {
@@ -1207,11 +1207,11 @@
       "name": "bula_empresas",
       "type": "base",
       "apiRules": {
-        "list": "@request.auth.id != ''",
-        "view": "@request.auth.id != ''",
-        "create": "@request.auth.id != '' && @request.auth.role = 'admin'",
-        "update": "@request.auth.id != '' && @request.auth.role = 'admin'",
-        "delete": "@request.auth.id != '' && @request.auth.role = 'admin'"
+        "list": "(@request.auth.id != '' && @request.auth.collectionName = 'users')",
+        "view": "(@request.auth.id != '' && @request.auth.collectionName = 'users')",
+        "create": "(@request.auth.id != '' && @request.auth.collectionName = 'users') && @request.auth.role = 'admin'",
+        "update": "(@request.auth.id != '' && @request.auth.collectionName = 'users') && @request.auth.role = 'admin'",
+        "delete": "(@request.auth.id != '' && @request.auth.collectionName = 'users') && @request.auth.role = 'admin'"
       },
       "fields": [
         {
@@ -1331,11 +1331,11 @@
       "name": "bula_embalagens",
       "type": "base",
       "apiRules": {
-        "list": "@request.auth.id != ''",
-        "view": "@request.auth.id != ''",
-        "create": "@request.auth.id != '' && @request.auth.role = 'admin'",
-        "update": "@request.auth.id != '' && @request.auth.role = 'admin'",
-        "delete": "@request.auth.id != '' && @request.auth.role = 'admin'"
+        "list": "(@request.auth.id != '' && @request.auth.collectionName = 'users')",
+        "view": "(@request.auth.id != '' && @request.auth.collectionName = 'users')",
+        "create": "(@request.auth.id != '' && @request.auth.collectionName = 'users') && @request.auth.role = 'admin'",
+        "update": "(@request.auth.id != '' && @request.auth.collectionName = 'users') && @request.auth.role = 'admin'",
+        "delete": "(@request.auth.id != '' && @request.auth.collectionName = 'users') && @request.auth.role = 'admin'"
       },
       "fields": [
         {
@@ -1436,11 +1436,11 @@
       "name": "bula_culturas",
       "type": "base",
       "apiRules": {
-        "list": "@request.auth.id != ''",
-        "view": "@request.auth.id != ''",
-        "create": "@request.auth.id != '' && @request.auth.role = 'admin'",
-        "update": "@request.auth.id != '' && @request.auth.role = 'admin'",
-        "delete": "@request.auth.id != '' && @request.auth.role = 'admin'"
+        "list": "(@request.auth.id != '' && @request.auth.collectionName = 'users')",
+        "view": "(@request.auth.id != '' && @request.auth.collectionName = 'users')",
+        "create": "(@request.auth.id != '' && @request.auth.collectionName = 'users') && @request.auth.role = 'admin'",
+        "update": "(@request.auth.id != '' && @request.auth.collectionName = 'users') && @request.auth.role = 'admin'",
+        "delete": "(@request.auth.id != '' && @request.auth.collectionName = 'users') && @request.auth.role = 'admin'"
       },
       "fields": [
         {
@@ -1540,11 +1540,11 @@
       "name": "bula_alvos",
       "type": "base",
       "apiRules": {
-        "list": "@request.auth.id != ''",
-        "view": "@request.auth.id != ''",
-        "create": "@request.auth.id != '' && @request.auth.role = 'admin'",
-        "update": "@request.auth.id != '' && @request.auth.role = 'admin'",
-        "delete": "@request.auth.id != '' && @request.auth.role = 'admin'"
+        "list": "(@request.auth.id != '' && @request.auth.collectionName = 'users')",
+        "view": "(@request.auth.id != '' && @request.auth.collectionName = 'users')",
+        "create": "(@request.auth.id != '' && @request.auth.collectionName = 'users') && @request.auth.role = 'admin'",
+        "update": "(@request.auth.id != '' && @request.auth.collectionName = 'users') && @request.auth.role = 'admin'",
+        "delete": "(@request.auth.id != '' && @request.auth.collectionName = 'users') && @request.auth.role = 'admin'"
       },
       "fields": [
         {
@@ -1663,11 +1663,11 @@
       "name": "bula_aplicacao",
       "type": "base",
       "apiRules": {
-        "list": "@request.auth.id != ''",
-        "view": "@request.auth.id != ''",
-        "create": "@request.auth.id != '' && @request.auth.role = 'admin'",
-        "update": "@request.auth.id != '' && @request.auth.role = 'admin'",
-        "delete": "@request.auth.id != '' && @request.auth.role = 'admin'"
+        "list": "(@request.auth.id != '' && @request.auth.collectionName = 'users')",
+        "view": "(@request.auth.id != '' && @request.auth.collectionName = 'users')",
+        "create": "(@request.auth.id != '' && @request.auth.collectionName = 'users') && @request.auth.role = 'admin'",
+        "update": "(@request.auth.id != '' && @request.auth.collectionName = 'users') && @request.auth.role = 'admin'",
+        "delete": "(@request.auth.id != '' && @request.auth.collectionName = 'users') && @request.auth.role = 'admin'"
       },
       "fields": [
         {
@@ -1779,11 +1779,11 @@
       "name": "sim_produtos_base",
       "type": "base",
       "apiRules": {
-        "list": "@request.auth.id != ''",
-        "view": "@request.auth.id != ''",
-        "create": "@request.auth.id != '' && @request.auth.role = 'admin'",
-        "update": "@request.auth.id != '' && @request.auth.role = 'admin'",
-        "delete": "@request.auth.id != '' && @request.auth.role = 'admin'"
+        "list": "(@request.auth.id != '' && @request.auth.collectionName = 'users')",
+        "view": "(@request.auth.id != '' && @request.auth.collectionName = 'users')",
+        "create": "(@request.auth.id != '' && @request.auth.collectionName = 'users') && @request.auth.role = 'admin'",
+        "update": "(@request.auth.id != '' && @request.auth.collectionName = 'users') && @request.auth.role = 'admin'",
+        "delete": "(@request.auth.id != '' && @request.auth.collectionName = 'users') && @request.auth.role = 'admin'"
       },
       "fields": [
         {
@@ -1919,11 +1919,11 @@
       "name": "sim_regras_icms",
       "type": "base",
       "apiRules": {
-        "list": "@request.auth.id != ''",
-        "view": "@request.auth.id != ''",
-        "create": "@request.auth.id != '' && @request.auth.role = 'admin'",
-        "update": "@request.auth.id != '' && @request.auth.role = 'admin'",
-        "delete": "@request.auth.id != '' && @request.auth.role = 'admin'"
+        "list": "(@request.auth.id != '' && @request.auth.collectionName = 'users')",
+        "view": "(@request.auth.id != '' && @request.auth.collectionName = 'users')",
+        "create": "(@request.auth.id != '' && @request.auth.collectionName = 'users') && @request.auth.role = 'admin'",
+        "update": "(@request.auth.id != '' && @request.auth.collectionName = 'users') && @request.auth.role = 'admin'",
+        "delete": "(@request.auth.id != '' && @request.auth.collectionName = 'users') && @request.auth.role = 'admin'"
       },
       "fields": [
         {
@@ -2065,6 +2065,827 @@
         "CREATE INDEX idx_sim_icms_chave ON sim_regras_icms (chave_origem_destino)",
         "CREATE INDEX idx_sim_icms_origem ON sim_regras_icms (uf_origem)",
         "CREATE INDEX idx_sim_icms_destino ON sim_regras_icms (uf_destino)"
+      ]
+    },
+    {
+      "name": "simulador_comercial_users",
+      "type": "auth",
+      "apiRules": {
+        "list": "@request.auth.id != '' && @request.auth.collectionName = 'simulador_comercial_users'",
+        "view": "@request.auth.id != '' && @request.auth.collectionName = 'simulador_comercial_users'",
+        "create": "",
+        "update": "@request.auth.id != '' && @request.auth.collectionName = 'simulador_comercial_users' && id = @request.auth.id",
+        "delete": "id = @request.auth.id"
+      },
+      "fields": [
+        {
+          "name": "name",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "avatar",
+          "type": "file",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "created",
+          "type": "autodate",
+          "required": false,
+          "system": false,
+          "autodateTriggers": ["onCreate"]
+        },
+        {
+          "name": "updated",
+          "type": "autodate",
+          "required": false,
+          "system": false,
+          "autodateTriggers": ["onCreate", "onUpdate"]
+        },
+        {
+          "name": "role",
+          "type": "select",
+          "required": false,
+          "system": false,
+          "selectValues": ["admin", "analista"]
+        }
+      ],
+      "indexes": [
+        "CREATE UNIQUE INDEX `idx_tokenKey__pb_simulador_comercial_users_auth_` ON `simulador_comercial_users` (`tokenKey`)",
+        "CREATE UNIQUE INDEX `idx_email__pb_simulador_comercial_users_auth_` ON `simulador_comercial_users` (`email`) WHERE `email` != ''"
+      ]
+    },
+    {
+      "name": "convites_simulador",
+      "type": "base",
+      "apiRules": {
+        "list": null,
+        "view": null,
+        "create": null,
+        "update": null,
+        "delete": "@request.auth.id != '' && @request.auth.collectionName = 'simulador_comercial_users' && @request.auth.role = 'admin'"
+      },
+      "fields": [
+        {
+          "name": "email",
+          "type": "text",
+          "required": true,
+          "system": false
+        },
+        {
+          "name": "nome",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "role",
+          "type": "select",
+          "required": true,
+          "system": false,
+          "selectValues": ["admin", "analista"]
+        },
+        {
+          "name": "status",
+          "type": "select",
+          "required": true,
+          "system": false,
+          "selectValues": ["pendente", "aceito", "cancelado"]
+        },
+        {
+          "name": "token_convite",
+          "type": "text",
+          "required": true,
+          "system": false
+        },
+        {
+          "name": "link_definicao_senha",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "convidado_por",
+          "type": "text",
+          "required": false,
+          "system": false
+        }
+      ],
+      "indexes": []
+    },
+    {
+      "name": "simulador_produtos",
+      "type": "base",
+      "apiRules": {
+        "list": "@request.auth.id != '' && @request.auth.collectionName = 'simulador_comercial_users'",
+        "view": "@request.auth.id != '' && @request.auth.collectionName = 'simulador_comercial_users'",
+        "create": "@request.auth.id != '' && @request.auth.collectionName = 'simulador_comercial_users'",
+        "update": "@request.auth.id != '' && @request.auth.collectionName = 'simulador_comercial_users'",
+        "delete": "@request.auth.id != '' && @request.auth.collectionName = 'simulador_comercial_users'"
+      },
+      "fields": [
+        {
+          "name": "codigo",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "descricao",
+          "type": "text",
+          "required": true,
+          "system": false
+        },
+        {
+          "name": "ncm",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "unidade",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "tipo_produto",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "origem",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "embalagem",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "principio_ativo",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "fabricante",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "moeda",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "preco_base_sugerido",
+          "type": "number",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "gr_trib",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "grupo_codigo",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "grupo_descricao",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "descricao_grupo_tributario",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "segmento",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "comissao_padrao",
+          "type": "number",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "dados_extras",
+          "type": "json",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "created",
+          "type": "autodate",
+          "required": false,
+          "system": false,
+          "autodateTriggers": ["onCreate"]
+        },
+        {
+          "name": "updated",
+          "type": "autodate",
+          "required": false,
+          "system": false,
+          "autodateTriggers": ["onCreate", "onUpdate"]
+        }
+      ],
+      "indexes": [
+        "CREATE INDEX idx_sim_loc_prod_codigo ON simulador_produtos (codigo)",
+        "CREATE INDEX idx_sim_loc_prod_ncm ON simulador_produtos (ncm)",
+        "CREATE INDEX idx_sim_loc_prod_desc ON simulador_produtos (descricao)"
+      ]
+    },
+    {
+      "name": "simulador_regras_icms",
+      "type": "base",
+      "apiRules": {
+        "list": "@request.auth.id != '' && @request.auth.collectionName = 'simulador_comercial_users'",
+        "view": "@request.auth.id != '' && @request.auth.collectionName = 'simulador_comercial_users'",
+        "create": "@request.auth.id != '' && @request.auth.collectionName = 'simulador_comercial_users'",
+        "update": "@request.auth.id != '' && @request.auth.collectionName = 'simulador_comercial_users'",
+        "delete": "@request.auth.id != '' && @request.auth.collectionName = 'simulador_comercial_users'"
+      },
+      "fields": [
+        {
+          "name": "uf_origem",
+          "type": "text",
+          "required": true,
+          "system": false
+        },
+        {
+          "name": "uf_destino",
+          "type": "text",
+          "required": true,
+          "system": false
+        },
+        {
+          "name": "aliquota_icms",
+          "type": "number",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "reducao_base",
+          "type": "number",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "aliquota_efetiva",
+          "type": "number",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "diferimento",
+          "type": "bool",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "percentual_diferimento",
+          "type": "number",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "fundamentacao_legal",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "tipo_operacao",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "chave_origem_destino",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "id_regra",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "tipo_uf_origem",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "tipo_uf_destino",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "grupo_tributario_codigo",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "grupo_tributario_descricao",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "prod_importado",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "tipo_desonerado",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "icms_desonerado",
+          "type": "number",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "regra_credito_entrada",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "dados_extras",
+          "type": "json",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "created",
+          "type": "autodate",
+          "required": false,
+          "system": false,
+          "autodateTriggers": ["onCreate"]
+        },
+        {
+          "name": "updated",
+          "type": "autodate",
+          "required": false,
+          "system": false,
+          "autodateTriggers": ["onCreate", "onUpdate"]
+        }
+      ],
+      "indexes": [
+        "CREATE INDEX idx_sim_loc_icms_orig ON simulador_regras_icms (uf_origem)",
+        "CREATE INDEX idx_sim_loc_icms_dest ON simulador_regras_icms (uf_destino)",
+        "CREATE INDEX idx_sim_loc_icms_chave ON simulador_regras_icms (chave_origem_destino)"
+      ]
+    },
+    {
+      "name": "simulador_base_mestre",
+      "type": "base",
+      "apiRules": {
+        "list": "@request.auth.id != '' && @request.auth.collectionName = 'simulador_comercial_users'",
+        "view": "@request.auth.id != '' && @request.auth.collectionName = 'simulador_comercial_users'",
+        "create": "@request.auth.id != '' && @request.auth.collectionName = 'simulador_comercial_users'",
+        "update": "@request.auth.id != '' && @request.auth.collectionName = 'simulador_comercial_users'",
+        "delete": "@request.auth.id != '' && @request.auth.collectionName = 'simulador_comercial_users'"
+      },
+      "fields": [
+        {
+          "name": "nome_produto",
+          "type": "text",
+          "required": true,
+          "system": false
+        },
+        {
+          "name": "marca_padronizada",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "nome_completo",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "ncm",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "ncm_padrao",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "ncm_especifica",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "embalagem",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "principio_ativo",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "fabricante",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "titular_fabricante",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "registro_mapa",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "status_validacao",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "tipo_produto",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "unidade",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "macro_grupo",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "sub_grupo",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "status_pis_cofins",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "aliquota_ate_mar2026",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "aliquota_pos_abr2026_real",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "aliquota_pos_abr2026_presumido",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "cst_saida",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "cst_entrada",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "ibs_cbs_2027",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "regra_tipi",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "dados_classificacao",
+          "type": "json",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "created",
+          "type": "autodate",
+          "required": false,
+          "system": false,
+          "autodateTriggers": ["onCreate"]
+        },
+        {
+          "name": "updated",
+          "type": "autodate",
+          "required": false,
+          "system": false,
+          "autodateTriggers": ["onCreate", "onUpdate"]
+        }
+      ],
+      "indexes": [
+        "CREATE INDEX idx_sim_loc_mestre_nome ON simulador_base_mestre (nome_produto)",
+        "CREATE INDEX idx_sim_loc_mestre_ncm ON simulador_base_mestre (ncm)",
+        "CREATE INDEX idx_sim_loc_mestre_status ON simulador_base_mestre (status_validacao)"
+      ]
+    },
+    {
+      "name": "simulador_parametrizacao_fiscal",
+      "type": "base",
+      "apiRules": {
+        "list": "@request.auth.id != '' && @request.auth.collectionName = 'simulador_comercial_users'",
+        "view": "@request.auth.id != '' && @request.auth.collectionName = 'simulador_comercial_users'",
+        "create": "@request.auth.id != '' && @request.auth.collectionName = 'simulador_comercial_users'",
+        "update": "@request.auth.id != '' && @request.auth.collectionName = 'simulador_comercial_users'",
+        "delete": "@request.auth.id != '' && @request.auth.collectionName = 'simulador_comercial_users'"
+      },
+      "fields": [
+        {
+          "name": "ncm",
+          "type": "text",
+          "required": true,
+          "system": false
+        },
+        {
+          "name": "aliquota_pis",
+          "type": "number",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "aliquota_cofins",
+          "type": "number",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "regime",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "aliquota_ibs",
+          "type": "number",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "aliquota_cbs",
+          "type": "number",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "classificacao",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "tributacao",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "created",
+          "type": "autodate",
+          "required": false,
+          "system": false,
+          "autodateTriggers": ["onCreate"]
+        },
+        {
+          "name": "updated",
+          "type": "autodate",
+          "required": false,
+          "system": false,
+          "autodateTriggers": ["onCreate", "onUpdate"]
+        }
+      ],
+      "indexes": [
+        "CREATE UNIQUE INDEX idx_sim_loc_param_ncm ON simulador_parametrizacao_fiscal (ncm)"
+      ]
+    },
+    {
+      "name": "simulador_regras_embalagem",
+      "type": "base",
+      "apiRules": {
+        "list": "@request.auth.id != '' && @request.auth.collectionName = 'simulador_comercial_users'",
+        "view": "@request.auth.id != '' && @request.auth.collectionName = 'simulador_comercial_users'",
+        "create": "@request.auth.id != '' && @request.auth.collectionName = 'simulador_comercial_users'",
+        "update": "@request.auth.id != '' && @request.auth.collectionName = 'simulador_comercial_users'",
+        "delete": "@request.auth.id != '' && @request.auth.collectionName = 'simulador_comercial_users'"
+      },
+      "fields": [
+        {
+          "name": "ncm",
+          "type": "text",
+          "required": true,
+          "system": false
+        },
+        {
+          "name": "descricao",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "embalagens_permitidas",
+          "type": "json",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "regra_especial",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "created",
+          "type": "autodate",
+          "required": false,
+          "system": false,
+          "autodateTriggers": ["onCreate"]
+        },
+        {
+          "name": "updated",
+          "type": "autodate",
+          "required": false,
+          "system": false,
+          "autodateTriggers": ["onCreate", "onUpdate"]
+        }
+      ],
+      "indexes": ["CREATE INDEX idx_sim_loc_emb_ncm ON simulador_regras_embalagem (ncm)"]
+    },
+    {
+      "name": "simulador_principios_ativos",
+      "type": "base",
+      "apiRules": {
+        "list": "@request.auth.id != '' && @request.auth.collectionName = 'simulador_comercial_users'",
+        "view": "@request.auth.id != '' && @request.auth.collectionName = 'simulador_comercial_users'",
+        "create": "@request.auth.id != '' && @request.auth.collectionName = 'simulador_comercial_users'",
+        "update": "@request.auth.id != '' && @request.auth.collectionName = 'simulador_comercial_users'",
+        "delete": "@request.auth.id != '' && @request.auth.collectionName = 'simulador_comercial_users'"
+      },
+      "fields": [
+        {
+          "name": "principio_ativo",
+          "type": "text",
+          "required": true,
+          "system": false
+        },
+        {
+          "name": "principio_ativo_chave",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "classe",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "grupo_quimico",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "concentracao_min",
+          "type": "number",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "concentracao_max",
+          "type": "number",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "unidade",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "status",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "ncm_padrao_referencia",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "nota_subpos_2",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "regra_tipi_embalagem",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "enquadramento_pis_cofins",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "cst_recomendado",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "created",
+          "type": "autodate",
+          "required": false,
+          "system": false,
+          "autodateTriggers": ["onCreate"]
+        },
+        {
+          "name": "updated",
+          "type": "autodate",
+          "required": false,
+          "system": false,
+          "autodateTriggers": ["onCreate", "onUpdate"]
+        }
+      ],
+      "indexes": [
+        "CREATE INDEX idx_sim_loc_pa_nome ON simulador_principios_ativos (principio_ativo)",
+        "CREATE INDEX idx_sim_loc_pa_chave ON simulador_principios_ativos (principio_ativo_chave)"
       ]
     }
   ]
