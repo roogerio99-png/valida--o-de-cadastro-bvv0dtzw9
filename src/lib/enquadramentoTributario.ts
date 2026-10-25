@@ -105,9 +105,20 @@ function identificarCategoriaTributaria(input: DadosEntradaProdutoEnquadramento)
     tipo.includes('tecnico') ||
     tipo.includes('defensivo')
   ) {
+    let rotulo = 'Defensivo Agropecuário (Posição 38.08 da TIPI)'
+    if (ncm.startsWith('380862')) {
+      rotulo =
+        'Inseticida Piretróide (Bifentrina) - Subposição 3808.62 (Embalagem até 7,5 kg) - Convênio 100/97'
+    } else if (ncm.startsWith('380869')) {
+      rotulo =
+        'Inseticida Piretróide (Bifentrina) - Subposição 3808.69 (Embalagem acima de 7,5 kg) - Convênio 100/97'
+    } else if (ncm.startsWith('380861')) {
+      rotulo =
+        'Inseticida Piretróide (Bifentrina) - Subposição 3808.61 (Embalagem até 300 g) - Convênio 100/97'
+    }
     return {
       categoria: 'DEFENSIVO_AGRO',
-      rotulo: 'Defensivo Agropecuário (Posição 38.08 da TIPI)',
+      rotulo,
     }
   }
 
@@ -537,8 +548,11 @@ export function determinarEnquadramentoTributario(
           textoArtigo:
             'Cláusula primeira: Fica reduzida em 60% (sessenta por cento) a base de cálculo do ICMS nas saídas interestaduais dos seguintes produtos: I - inseticidas, fungicidas, formicidas, herbicidas, parasiticidas, germicidas, acaricidas, nematicidas, raticidas, desfolhantes, dessecantes, espalhantes, adesivos, estimuladores e inibidores de crescimento (reguladores), vacinas, soros e medicamentos, produzidos para uso na agricultura e na pecuária, inclusive inoculantes, vedada a sua aplicação quando dada ao produto destinação diversa.',
         },
-        resumoClaro:
-          'Defensivos agropecuários (NCM 3808) usufruem de redução de 60% da base de cálculo nas saídas interestaduais (carga tributária efetiva de 4,8% na alíquota interestadual de 12% ou 2,8% na de 7%), conforme Cláusula primeira, I do Convênio ICMS 100/97. Nas operações internas, a Cláusula terceira autoriza os Estados e o DF a conceder redução ou isenção. O valor dispensado deve ser deduzido do preço e discriminado na NF (Cláusula quinta, II). Vigente em âmbito nacional até 31/12/2027 (Convênio ICMS 79/25).',
+        resumoClaro: ncm.startsWith('380862')
+          ? 'Inseticidas contendo Bifentrina em embalagens ≤ 7,5 kg (NCM 3808.62.90): Redução de 60% da base de cálculo nas saídas interestaduais (carga de 4,8% ou 2,8%), conforme Cláusula primeira, I do Convênio ICMS 100/97 (vigente até 31/12/2027 via Convênio ICMS 79/25).'
+          : ncm.startsWith('380869')
+            ? 'Inseticidas contendo Bifentrina em embalagens > 7,5 kg (NCM 3808.69.90): Redução de 60% da base de cálculo nas saídas interestaduais (carga de 4,8% ou 2,8%), conforme Cláusula primeira, I do Convênio ICMS 100/97 (vigente até 31/12/2027 via Convênio ICMS 79/25).'
+            : 'Defensivos agropecuários (NCM 3808) usufruem de redução de 60% da base de cálculo nas saídas interestaduais (carga tributária efetiva de 4,8% na alíquota interestadual de 12% ou 2,8% na de 7%), conforme Cláusula primeira, I do Convênio ICMS 100/97. Nas operações internas, a Cláusula terceira autoriza os Estados e o DF a conceder redução ou isenção. O valor dispensado deve ser deduzido do preço e discriminado na NF (Cláusula quinta, II). Vigente em âmbito nacional até 31/12/2027 (Convênio ICMS 79/25).',
         observacaoOperacional:
           'Obrigatoriedade de demonstrar a dedução do imposto dispensado no corpo e tags da NF-e (Ajuste SINIEF 10/12 c/c Cláusula quinta, II). Assegurado crédito presumido pelo Estado de destino se não conceder redução equivalente (Cláusula quarta).',
       }

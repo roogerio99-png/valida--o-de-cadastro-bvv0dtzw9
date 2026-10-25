@@ -1062,10 +1062,42 @@ Consulte a base pública oficial do AGROFIT e a BULA oficial registrada no MAPA 
       }
 
       if (cadastroEmbalagemBaseMestre) {
+        // Se o produto pertence à Nota de Subposições 2 do Cap. 38 TIPI (ex.: BIFENTRINA / COFENRIN),
+        // ou possui faixas de NCM preenchidas, a NCM correta deve ser determinada pela quantidade da embalagem:
+        // - Até 0,3 kg (300 g): 3808.61.00 (ncm_faixa1_ate_300g)
+        // - Acima de 300 g até 7,5 kg: 3808.62.90 (ncm_faixa2_300g_a_7_5kg)
+        // - Acima de 7,5 kg: 3808.69.90 (ncm_faixa3_7_5kg_a_10kg / ncm_faixa4_acima_10kg)
+        const paRegistro = cadastroEmbalagemBaseMestre.getString('principio_ativo')
+        const nomeRegistro = cadastroEmbalagemBaseMestre.getString('nome_completo')
+        const notaSubpos2Bm = cadastroEmbalagemBaseMestre.getString('nota_subpos_2')
+        const isNota2Prod =
+          notaSubpos2Bm === 'SIM' ||
+          motor.verificarNotaSubpos2(paRegistro, nomeRegistro) ||
+          motor.verificarNotaSubpos2(principioAtivoFinal, nomeComercial)
+
+        const f1 = cadastroEmbalagemBaseMestre.getString('ncm_faixa1_ate_300g')
+        const f2 = cadastroEmbalagemBaseMestre.getString('ncm_faixa2_300g_a_7_5kg')
+        const f3 = cadastroEmbalagemBaseMestre.getString('ncm_faixa3_7_5kg_a_10kg')
+        const f4 = cadastroEmbalagemBaseMestre.getString('ncm_faixa4_acima_10kg')
+
+        let ncmPorFaixa = ''
+        if (isNota2Prod) {
+          const qtdKgs = qtdEmbalagemFinal || 20
+          if (qtdKgs <= 0.3) {
+            ncmPorFaixa = f1 || '3808.61.00'
+          } else if (qtdKgs <= 7.5) {
+            ncmPorFaixa = f2 || '3808.62.90'
+          } else {
+            ncmPorFaixa = f4 || f3 || '3808.69.90'
+          }
+        }
+
         const ncmEsp = cadastroEmbalagemBaseMestre.getString('ncm_especifica')
         const ncmPad = cadastroEmbalagemBaseMestre.getString('ncm_padrao')
         const ncmLeg = cadastroEmbalagemBaseMestre.getString('ncm')
-        ncmResolvidaBaseMestre = motor.formatarNcmMascara(ncmEsp || ncmPad || ncmLeg || '')
+        ncmResolvidaBaseMestre = motor.formatarNcmMascara(
+          ncmPorFaixa || ncmEsp || ncmPad || ncmLeg || '',
+        )
       }
     } catch (errResBm) {
       console.log('Erro ao resolver NCM na Base Mestre:', errResBm.message)
@@ -1091,10 +1123,23 @@ Consulte a base pública oficial do AGROFIT e a BULA oficial registrada no MAPA 
 
     const motorCanonico = motor.executarMotorCanonico(dadosMotorInput)
     motorCanonico.ncm_padrao = ncmResolvidaBaseMestre
-    motorCanonico.ncm_faixa1_ate_300g = ncmResolvidaBaseMestre
-    motorCanonico.ncm_faixa2_300g_a_7_5kg = ncmResolvidaBaseMestre
-    motorCanonico.ncm_faixa3_7_5kg_a_10kg = ncmResolvidaBaseMestre
-    motorCanonico.ncm_faixa4_acima_10kg = ncmResolvidaBaseMestre
+    motorCanonico.ncm_especifica = ncmResolvidaBaseMestre
+    motorCanonico.ncm = ncmResolvidaBaseMestre.replace(/\D/g, '')
+    if (cadastroEmbalagemBaseMestre?.getString('ncm_faixa1_ate_300g')) {
+      motorCanonico.ncm_faixa1_ate_300g =
+        cadastroEmbalagemBaseMestre.getString('ncm_faixa1_ate_300g')
+      motorCanonico.ncm_faixa2_300g_a_7_5kg =
+        cadastroEmbalagemBaseMestre.getString('ncm_faixa2_300g_a_7_5kg')
+      motorCanonico.ncm_faixa3_7_5kg_a_10kg =
+        cadastroEmbalagemBaseMestre.getString('ncm_faixa3_7_5kg_a_10kg')
+      motorCanonico.ncm_faixa4_acima_10kg =
+        cadastroEmbalagemBaseMestre.getString('ncm_faixa4_acima_10kg')
+    } else {
+      motorCanonico.ncm_faixa1_ate_300g = ncmResolvidaBaseMestre
+      motorCanonico.ncm_faixa2_300g_a_7_5kg = ncmResolvidaBaseMestre
+      motorCanonico.ncm_faixa3_7_5kg_a_10kg = ncmResolvidaBaseMestre
+      motorCanonico.ncm_faixa4_acima_10kg = ncmResolvidaBaseMestre
+    }
     motorCanonico.quantidade_embalagem_principal = qtdEmbalagemFinal
     motorCanonico.unidade_medida_principal = unidadeFinal
     motorCanonico.forma_acondicionamento = acondicionamentoFinal

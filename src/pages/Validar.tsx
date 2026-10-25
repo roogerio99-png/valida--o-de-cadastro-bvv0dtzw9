@@ -414,8 +414,22 @@ export function Validar() {
   }
 
   // Exemplos rápidos de produtos oficiais
-  const handleCarregarExemplo = (tipo: 'roundup_wg' | 'roundup_original' | 'standak') => {
-    if (tipo === 'roundup_wg') {
+  const handleCarregarExemplo = (
+    tipo: 'roundup_wg' | 'roundup_original' | 'standak' | 'cofenrin_5l' | 'cofenrin_20l',
+  ) => {
+    if (tipo === 'cofenrin_5l') {
+      setNomeComercial('COFENRIN')
+      setNcm('38086290')
+      setEmbalagem('4X5L')
+      setCodigoMapa('06922')
+      atualizarResolucaoNcmMestre('06922', '4X5L')
+    } else if (tipo === 'cofenrin_20l') {
+      setNomeComercial('COFENRIN')
+      setNcm('38086990')
+      setEmbalagem('1X20L')
+      setCodigoMapa('06922')
+      atualizarResolucaoNcmMestre('06922', '1X20L')
+    } else if (tipo === 'roundup_wg') {
       setNomeComercial('ROUNDUP WG')
       setNcm('38089324')
       setEmbalagem('20KG')
@@ -631,12 +645,22 @@ export function Validar() {
           <Button
             variant="outline"
             size="sm"
-            onClick={() => handleCarregarExemplo('roundup_original')}
-            className="text-xs h-8 text-[#1B5E20] border-emerald-300 hover:bg-emerald-50"
-            title="Exemplo: ROUNDUP ORIGINAL (MAPA 01119, 20 L)"
+            onClick={() => handleCarregarExemplo('cofenrin_5l' as any)}
+            className="text-xs h-8 text-[#1B5E20] border-emerald-300 hover:bg-emerald-50 font-medium"
+            title="Exemplo: COFENRIN 5 L (MAPA 06922, ≤ 7,5 kg → NCM 38086290)"
+          >
+            <Sparkles className="w-3.5 h-3.5 mr-1 text-amber-600" />
+            COFENRIN ≤ 7,5kg (5L)
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => handleCarregarExemplo('cofenrin_20l' as any)}
+            className="text-xs h-8 text-[#1B5E20] border-emerald-300 hover:bg-emerald-50 font-medium"
+            title="Exemplo: COFENRIN 20 L (MAPA 06922, > 7,5 kg → NCM 38086990)"
           >
             <Sparkles className="w-3.5 h-3.5 mr-1 text-emerald-700" />
-            Roundup Original
+            COFENRIN &gt; 7,5kg (20L)
           </Button>
           <Button
             variant="outline"

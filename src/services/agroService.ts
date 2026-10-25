@@ -473,12 +473,32 @@ export async function resolverNcmBaseMestre(
       }) || res.items[0]
 
     if (match) {
-      const ncm = (match.ncm_especifica || match.ncm_padrao || match.ncm || '').trim()
+      // Se o produto está sujeito a faixas por embalagem (ex.: Nota de Subposições 2 / Bifentrina / COFENRIN):
+      // <= 7,5 kg -> 3808.62.90
+      // > 7,5 kg -> 3808.69.90
+      let ncm = (match.ncm_especifica || match.ncm_padrao || match.ncm || '').trim()
+      const isNota2 =
+        match.nota_subpos_2 === 'SIM' ||
+        (match.principio_ativo && /bifentrina/i.test(match.principio_ativo)) ||
+        (match.nome_completo && /cofenrin/i.test(match.nome_completo)) ||
+        (match.marca_padronizada && /cofenrin/i.test(match.marca_padronizada))
+
+      if (isNota2) {
+        const pesoEfetivo = qtdNum > 0 ? qtdNum : match.quantidade_embalagem_principal || 20
+        if (pesoEfetivo <= 0.3) {
+          ncm = match.ncm_faixa1_ate_300g || '3808.61.00'
+        } else if (pesoEfetivo <= 7.5) {
+          ncm = match.ncm_faixa2_300g_a_7_5kg || '3808.62.90'
+        } else {
+          ncm = match.ncm_faixa4_acima_10kg || match.ncm_faixa3_7_5kg_a_10kg || '3808.69.90'
+        }
+      }
+
       return {
         ncmEspecifica: ncm,
-        quantidade: match.quantidade_embalagem_principal || qtdNum || 20,
-        unidade: match.unidade_medida_principal || unStr || 'L',
-        acondicionamento: match.forma_acondicionamento || acondStr || 'Bombona',
+        quantidade: qtdNum || match.quantidade_embalagem_principal || 20,
+        unidade: unStr || match.unidade_medida_principal || 'L',
+        acondicionamento: acondStr || match.forma_acondicionamento || 'Bombona',
       }
     }
 

@@ -156,14 +156,32 @@ export function executarAuditoriaTravas(
 
   let ncmResolvida = ''
   if (cadastroEncontrado) {
-    const ncmBruta =
-      cadastroEncontrado.ncm_especifica ||
-      cadastroEncontrado.ncm_padrao ||
-      cadastroEncontrado.ncm ||
-      ''
-    const digits = ncmBruta.replace(/\D/g, '')
-    if (digits.length === 8) {
-      ncmResolvida = formatarNcmMascara(digits)
+    // Se o produto está na Nota de Subposições 2 (BIFENTRINA / COFENRIN), aplica escalonamento de NCM por peso
+    const isNota2 =
+      (cadastroEncontrado as any).nota_subpos_2 === 'SIM' ||
+      (cadastroEncontrado as any).principio_ativo?.toUpperCase().includes('BIFENTRINA') ||
+      cadastroEncontrado.nome_completo?.toUpperCase().includes('COFENRIN') ||
+      cadastroEncontrado.marca_padronizada?.toUpperCase().includes('COFENRIN')
+
+    if (isNota2) {
+      const qtdKgs = qtdEmbalagemFinal
+      if (qtdKgs <= 0.3) {
+        ncmResolvida = '3808.61.00'
+      } else if (qtdKgs <= 7.5) {
+        ncmResolvida = '3808.62.90'
+      } else {
+        ncmResolvida = '3808.69.90'
+      }
+    } else {
+      const ncmBruta =
+        cadastroEncontrado.ncm_especifica ||
+        cadastroEncontrado.ncm_padrao ||
+        cadastroEncontrado.ncm ||
+        ''
+      const digits = ncmBruta.replace(/\D/g, '')
+      if (digits.length === 8) {
+        ncmResolvida = formatarNcmMascara(digits)
+      }
     }
   }
 
@@ -262,6 +280,28 @@ const BASE_MESTRE_FIXTURE: MockBaseMestreRegistro[] = [
     ncm_especifica: '3808.93.24',
     ncm_padrao: '3808.93.24',
   },
+  {
+    id: 'bm_cofenrin_5l',
+    nome_completo: 'COFENRIN',
+    marca_padronizada: 'COFENRIN',
+    registro_mapa: '06922',
+    quantidade_embalagem_principal: 5,
+    unidade_medida_principal: 'L',
+    forma_acondicionamento: 'Galão',
+    ncm_especifica: '3808.62.90',
+    ncm_padrao: '3808.62.90',
+  },
+  {
+    id: 'bm_cofenrin_20l',
+    nome_completo: 'COFENRIN',
+    marca_padronizada: 'COFENRIN',
+    registro_mapa: '06922',
+    quantidade_embalagem_principal: 20,
+    unidade_medida_principal: 'L',
+    forma_acondicionamento: 'Bombona',
+    ncm_especifica: '3808.69.90',
+    ncm_padrao: '3808.69.90',
+  },
 ]
 
 const REGRAS_NCM_FIXTURE: MockRegraNcmEmbalagem[] = [
@@ -283,6 +323,16 @@ const REGRAS_NCM_FIXTURE: MockRegraNcmEmbalagem[] = [
     ncm: '38089329',
     descricao: 'Outros herbicidas, inibidores de germinação e reguladores de crescimento',
     embalagens_permitidas: ['Bombona', 'Tambor', 'Container / IBC', 'Frasco', 'Saco'],
+  },
+  {
+    ncm: '38086290',
+    descricao: 'Inseticidas contendo Bifentrina em embalagens > 300 g até 7,5 kg',
+    embalagens_permitidas: ['Frasco', 'Galão', 'Bombona', 'Balde', 'Saco', 'Caixa'],
+  },
+  {
+    ncm: '38086990',
+    descricao: 'Outros inseticidas contendo Bifentrina em embalagens > 7,5 kg',
+    embalagens_permitidas: ['Bombona', 'Tambor', 'Container / IBC', 'Big Bag', 'Saco', 'Balde'],
   },
 ]
 
@@ -435,6 +485,50 @@ describe('Travas de Auditoria de NCM (validar_produto.js)', () => {
       expect(parsed.quantidade).toBe(20)
       expect(parsed.unidade).toBe('KG')
       expect(parsed.acondicionamento).toBe('Saco')
+    })
+  })
+
+  describe('COFENRIN (MAPA 06922, Bifentrina) - Dupla NCM por faixa de quantidade', () => {
+    it('deve resolver NCM 3808.62.90 quando quantidade for ≤ 7,5 kg (ex.: 5 L / Galão ou 1 L / Frasco)', () => {
+      const res5L = executarAuditoriaTravas(
+        {
+          nome_comercial: 'COFENRIN',
+          registro_mapa: '06922',
+          embalagem: '4X5L (5 L)',
+          quantidade: 5,
+          unidade: 'L',
+          forma_acondicionamento: 'Galão',
+        },
+        BASE_MESTRE_FIXTURE,
+        REGRAS_NCM_FIXTURE,
+      )
+
+      expect(res5L.ncm_resolvida).toBe('3808.62.90')
+      expect(res5L.ncm_resolvida_origem).toBe('BASE_MESTRE')
+      expect(res5L.veredito_geral).toBe('APROVADO')
+      expect(res5L.travas.find((t) => t.id_trava === 1)?.aprovado).toBe(true)
+      expect(res5L.travas.find((t) => t.id_trava === 2)?.aprovado).toBe(true)
+    })
+
+    it('deve resolver NCM 3808.69.90 quando quantidade for > 7,5 kg (ex.: 20 L / Bombona ou 200 L / Tambor)', () => {
+      const res20L = executarAuditoriaTravas(
+        {
+          nome_comercial: 'COFENRIN',
+          registro_mapa: '06922',
+          embalagem: '1X20L (20 L)',
+          quantidade: 20,
+          unidade: 'L',
+          forma_acondicionamento: 'Bombona',
+        },
+        BASE_MESTRE_FIXTURE,
+        REGRAS_NCM_FIXTURE,
+      )
+
+      expect(res20L.ncm_resolvida).toBe('3808.69.90')
+      expect(res20L.ncm_resolvida_origem).toBe('BASE_MESTRE')
+      expect(res20L.veredito_geral).toBe('APROVADO')
+      expect(res20L.travas.find((t) => t.id_trava === 1)?.aprovado).toBe(true)
+      expect(res20L.travas.find((t) => t.id_trava === 2)?.aprovado).toBe(true)
     })
   })
 })
