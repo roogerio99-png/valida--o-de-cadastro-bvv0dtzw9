@@ -22,7 +22,10 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Badge } from '@/components/ui/badge'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { useToast } from '@/hooks/use-toast'
+import { AbaBaseProdutos } from '@/pages/simulador/AbaBaseProdutos'
+import { AbaRegrasFiscais } from '@/pages/simulador/AbaRegrasFiscais'
 import {
   listarProdutosBaseSimulador,
   obterRegraIcmsSimulador,
@@ -130,6 +133,9 @@ export function Simulador() {
   const [outrasDespesas, setOutrasDespesas] = useState<number>(150)
   const [margemPerc, setMargemPerc] = useState<number>(15) // % Mark-up comercial
   const [considerarReoneracao2026, setConsiderarReoneracao2026] = useState<boolean>(true)
+
+  // Aba ativa atual ('simulacao' | 'produtos' | 'regras')
+  const [abaAtiva, setAbaAtiva] = useState<string>('simulacao')
 
   // Resultado do Cálculo
   const [calculando, setCalculando] = useState<boolean>(false)
@@ -327,593 +333,647 @@ export function Simulador() {
         </div>
       </div>
 
-      {/* Grid Principal: Entrada Fácil (Esquerda) vs Resultado Simulador (Direita) */}
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
-        {/* =================================================================== */}
-        {/* PAINEL ESQUERDO: ENTRADA FÁCIL (Formulário da Aba Entrada Fácil) */}
-        {/* =================================================================== */}
-        <div className="lg:col-span-5 space-y-6">
-          <Card className="border-[#DCE5DC] shadow-sm bg-white">
-            <CardHeader className="bg-[#F8FAF6] border-b border-[#DCE5DC] pb-3">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <Package className="w-5 h-5 text-[#1B5E20]" />
-                  <CardTitle className="text-base font-bold text-[#1C2B1C]">
-                    Entrada Fácil: Produto & Operação
-                  </CardTitle>
-                </div>
-                <Badge
-                  variant="outline"
-                  className="text-xs font-mono bg-white text-[#1B5E20] border-emerald-300"
-                >
-                  Aba Entrada Fácil
-                </Badge>
-              </div>
-              <CardDescription className="text-xs text-[#5A6D5A]">
-                Selecione o insumo da base e configure as variáveis comerciais.
-              </CardDescription>
-            </CardHeader>
+      {/* Navegação por Abas: Simulação, Base de Produtos e Regras Fiscais */}
+      <Tabs value={abaAtiva} onValueChange={setAbaAtiva} className="w-full space-y-6">
+        <TabsList className="bg-[#F5F7F1] border border-[#DCE5DC] p-1 h-auto grid grid-cols-3 max-w-xl rounded-xl">
+          <TabsTrigger
+            value="simulacao"
+            className="flex items-center gap-2 py-2 text-xs font-semibold data-[state=active]:bg-[#1B5E20] data-[state=active]:text-white data-[state=active]:shadow-sm rounded-lg transition-all"
+          >
+            <Calculator className="w-4 h-4" />
+            <span>Simulação</span>
+          </TabsTrigger>
 
-            <CardContent className="pt-4 space-y-4 text-xs">
-              {/* Seleção do Produto */}
-              <div className="space-y-1.5">
-                <Label className="text-xs font-semibold text-[#1C2B1C]">
-                  Produto Base ({produtos.length > 0 ? `${produtos.length} importados` : 'Exemplos'}
-                  )
-                </Label>
-                <div className="relative">
-                  <Search className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
-                  <Input
-                    placeholder="Filtrar por nome, NCM ou código..."
-                    value={termoBuscaProduto}
-                    onChange={(e) => setTermoBuscaProduto(e.target.value)}
-                    className="pl-8 text-xs h-8 border-[#DCE5DC] focus-visible:ring-[#1B5E20]"
-                  />
-                </div>
+          <TabsTrigger
+            value="produtos"
+            className="flex items-center gap-2 py-2 text-xs font-semibold data-[state=active]:bg-[#1B5E20] data-[state=active]:text-white data-[state=active]:shadow-sm rounded-lg transition-all"
+          >
+            <Package className="w-4 h-4" />
+            <span>Base de Produtos</span>
+          </TabsTrigger>
 
-                <div className="max-h-48 overflow-y-auto border border-[#DCE5DC] rounded-lg divide-y divide-gray-100 bg-[#FCFDFB]">
-                  {produtosDisponiveis.map((p, idx) => {
-                    const isSelected = produtoSelecionado?.descricao === p.descricao
-                    return (
-                      <button
-                        key={p.id || idx}
-                        type="button"
-                        onClick={() => selecionarProduto(p)}
-                        className={`w-full text-left p-2 transition-colors flex items-start justify-between gap-2 text-xs ${
-                          isSelected
-                            ? 'bg-emerald-50 border-l-4 border-l-[#1B5E20] text-[#0D2811]'
-                            : 'hover:bg-gray-50 text-gray-700'
-                        }`}
-                      >
-                        <div className="min-w-0">
-                          <p className="font-semibold truncate leading-tight">{p.descricao}</p>
-                          <div className="flex items-center gap-2 text-[10px] text-gray-500 mt-0.5">
-                            <span className="font-mono bg-gray-100 px-1 rounded">
-                              NCM {p.ncm || 'S/NCM'}
-                            </span>
-                            <span>•</span>
-                            <span>Origem: {p.origem || 'Nac'}</span>
-                            {p.moeda && (
-                              <span className="font-bold text-emerald-800">({p.moeda})</span>
-                            )}
-                          </div>
-                        </div>
-                        {isSelected && (
-                          <CheckCircle2 className="w-4 h-4 text-[#1B5E20] shrink-0 mt-0.5" />
-                        )}
-                      </button>
-                    )
-                  })}
-                </div>
-              </div>
-
-              {/* Informações Rápidas do Produto Selecionado */}
-              {produtoSelecionado && (
-                <div className="p-2.5 rounded-lg bg-emerald-50/70 border border-emerald-200/60 text-emerald-950 space-y-1">
-                  <div className="flex items-center justify-between">
-                    <span className="font-bold text-xs truncate">
-                      {produtoSelecionado.descricao}
-                    </span>
-                    <Badge className="text-[10px] h-4 bg-emerald-700 text-white font-mono">
-                      {produtoSelecionado.ncm || '3808.93.29'}
-                    </Badge>
-                  </div>
-                  <div className="flex items-center justify-between text-[11px] text-emerald-800">
-                    <span>Embalagem: {produtoSelecionado.embalagem || 'Padrão'}</span>
-                    <span>Fabricante: {produtoSelecionado.fabricante || 'Geral'}</span>
-                  </div>
-                </div>
-              )}
-
-              {/* Rota da Operação: Origem -> Destino */}
-              <div className="grid grid-cols-2 gap-3 pt-1">
-                <div className="space-y-1">
-                  <Label className="text-xs font-semibold text-[#1C2B1C] flex items-center gap-1">
-                    <Compass className="w-3.5 h-3.5 text-[#1B5E20]" />
-                    UF Origem
-                  </Label>
-                  <select
-                    value={ufOrigem}
-                    onChange={(e) => setUfOrigem(e.target.value)}
-                    className="w-full h-8 text-xs rounded-md border border-[#DCE5DC] bg-white px-2 focus:ring-1 focus:ring-[#1B5E20]"
-                  >
-                    {UFS_BRASIL.map((uf) => (
-                      <option key={uf} value={uf}>
-                        {uf}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-
-                <div className="space-y-1">
-                  <Label className="text-xs font-semibold text-[#1C2B1C] flex items-center gap-1">
-                    <Compass className="w-3.5 h-3.5 text-[#1B5E20]" />
-                    UF Destino
-                  </Label>
-                  <select
-                    value={ufDestino}
-                    onChange={(e) => setUfDestino(e.target.value)}
-                    className="w-full h-8 text-xs rounded-md border border-[#DCE5DC] bg-white px-2 focus:ring-1 focus:ring-[#1B5E20]"
-                  >
-                    {UFS_BRASIL.map((uf) => (
-                      <option key={uf} value={uf}>
-                        {uf}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              </div>
-
-              {/* Quantidade e Preço Unitário */}
-              <div className="grid grid-cols-2 gap-3">
-                <div className="space-y-1">
-                  <Label className="text-xs font-semibold text-[#1C2B1C]">
-                    Quantidade ({produtoSelecionado?.unidade || 'Un'})
-                  </Label>
-                  <Input
-                    type="number"
-                    min="1"
-                    value={quantidade}
-                    onChange={(e) => setQuantidade(Math.max(1, Number(e.target.value)))}
-                    className="text-xs h-8 border-[#DCE5DC]"
-                  />
-                </div>
-
-                <div className="space-y-1">
-                  <Label className="text-xs font-semibold text-[#1C2B1C] flex items-center justify-between">
-                    <span>Preço Unitário</span>
-                    <span className="font-bold text-emerald-700">{moeda}</span>
-                  </Label>
-                  <Input
-                    type="number"
-                    step="0.01"
-                    min="0"
-                    value={precoUnitario}
-                    onChange={(e) => setPrecoUnitario(Number(e.target.value))}
-                    className="text-xs h-8 border-[#DCE5DC]"
-                  />
-                </div>
-              </div>
-
-              {/* Bloco de Câmbio / PTAX Manual (Destaque quando for importado) */}
-              <div
-                className={`p-3 rounded-xl border transition-all ${
-                  isProdutoImportado
-                    ? 'bg-amber-50/80 border-amber-300 shadow-sm'
-                    : 'bg-gray-50/60 border-gray-200'
-                }`}
-              >
-                <div className="flex items-center justify-between mb-1.5">
-                  <div className="flex items-center gap-1.5">
-                    <DollarSign
-                      className={`w-4 h-4 ${isProdutoImportado ? 'text-amber-700' : 'text-gray-500'}`}
-                    />
-                    <Label
-                      className={`text-xs font-bold ${isProdutoImportado ? 'text-amber-900' : 'text-gray-700'}`}
-                    >
-                      Cotação PTAX Manual (Câmbio USD)
-                    </Label>
-                  </div>
-                  {isProdutoImportado ? (
-                    <Badge className="bg-amber-600 text-white text-[10px]">
-                      Obrigatório p/ Importado
-                    </Badge>
-                  ) : (
-                    <Badge variant="outline" className="text-[10px] text-gray-500">
-                      Opcional
-                    </Badge>
-                  )}
-                </div>
-
-                <div className="flex items-center gap-2">
-                  <span className="text-xs font-semibold text-gray-500">US$ 1,00 = R$</span>
-                  <Input
-                    type="number"
-                    step="0.0001"
-                    min="0.0001"
-                    value={ptaxManual}
-                    onChange={(e) => setPtaxManual(Number(e.target.value))}
-                    className="h-8 text-xs font-mono font-bold bg-white border-amber-300 focus-visible:ring-amber-500"
-                    placeholder="Ex: 5.7500"
-                  />
-                </div>
-                <p className="text-[11px] text-gray-500 mt-1">
-                  Digitação manual direta do usuário (sem integração automática de câmbio).
-                </p>
-              </div>
-
-              {/* Custos Acessórios */}
-              <div className="grid grid-cols-3 gap-2 pt-1">
-                <div className="space-y-1">
-                  <Label className="text-[11px] font-medium text-gray-600">Frete (R$)</Label>
-                  <Input
-                    type="number"
-                    min="0"
-                    value={frete}
-                    onChange={(e) => setFrete(Number(e.target.value))}
-                    className="text-xs h-7 border-[#DCE5DC]"
-                  />
-                </div>
-                <div className="space-y-1">
-                  <Label className="text-[11px] font-medium text-gray-600">Seguro (R$)</Label>
-                  <Input
-                    type="number"
-                    min="0"
-                    value={seguro}
-                    onChange={(e) => setSeguro(Number(e.target.value))}
-                    className="text-xs h-7 border-[#DCE5DC]"
-                  />
-                </div>
-                <div className="space-y-1">
-                  <Label className="text-[11px] font-medium text-gray-600">Outras Desp. (R$)</Label>
-                  <Input
-                    type="number"
-                    min="0"
-                    value={outrasDespesas}
-                    onChange={(e) => setOutrasDespesas(Number(e.target.value))}
-                    className="text-xs h-7 border-[#DCE5DC]"
-                  />
-                </div>
-              </div>
-
-              {/* Margem Comercial e Parâmetros Tributários */}
-              <div className="pt-2 border-t border-gray-100 flex items-center justify-between gap-4">
-                <div className="flex-1 space-y-1">
-                  <Label className="text-xs font-semibold text-[#1C2B1C] flex items-center gap-1">
-                    <TrendingUp className="w-3.5 h-3.5 text-[#1B5E20]" />
-                    Margem Desejada (%)
-                  </Label>
-                  <Input
-                    type="number"
-                    min="0"
-                    max="100"
-                    step="0.5"
-                    value={margemPerc}
-                    onChange={(e) => setMargemPerc(Number(e.target.value))}
-                    className="text-xs h-8 border-[#DCE5DC]"
-                  />
-                </div>
-
-                <div className="flex-1 space-y-1">
-                  <Label className="text-xs font-semibold text-[#1C2B1C] flex items-center gap-1">
-                    <Percent className="w-3.5 h-3.5 text-blue-600" />
-                    PIS/COFINS Agro
-                  </Label>
-                  <button
-                    type="button"
-                    onClick={() => setConsiderarReoneracao2026(!considerarReoneracao2026)}
-                    className={`w-full h-8 px-2 rounded-md text-[11px] font-semibold border transition-all text-left flex items-center justify-between ${
-                      considerarReoneracao2026
-                        ? 'bg-blue-50 border-blue-300 text-blue-900'
-                        : 'bg-emerald-50 border-emerald-300 text-emerald-900'
-                    }`}
-                  >
-                    <span>
-                      {considerarReoneracao2026
-                        ? 'LC 224/25 (0,925%)'
-                        : 'Alíquota Zero (Lei 10.925)'}
-                    </span>
-                    <span className="text-[10px] underline">Alternar</span>
-                  </button>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-        </div>
+          <TabsTrigger
+            value="regras"
+            className="flex items-center gap-2 py-2 text-xs font-semibold data-[state=active]:bg-[#1B5E20] data-[state=active]:text-white data-[state=active]:shadow-sm rounded-lg transition-all"
+          >
+            <Layers className="w-4 h-4" />
+            <span>Regras Fiscais</span>
+          </TabsTrigger>
+        </TabsList>
 
         {/* =================================================================== */}
-        {/* PAINEL DIREITO: RESULTADO DA SIMULAÇÃO (Aba Simulador da Planilha) */}
+        {/* ABA 1: SIMULAÇÃO (Conteúdo Original) */}
         {/* =================================================================== */}
-        <div className="lg:col-span-7 space-y-6">
-          {resultado ? (
-            <div className="space-y-6">
-              {/* Alerta de Ausência de Regra de ICMS quando aplicável */}
-              {!resultado.temRegraIcms && (
-                <div className="p-4 rounded-xl bg-amber-50 border border-amber-300 text-amber-900 flex items-start gap-3 shadow-sm animate-in slide-in-from-top-1">
-                  <AlertTriangle className="w-5 h-5 text-amber-600 shrink-0 mt-0.5" />
-                  <div className="text-xs space-y-1">
-                    <p className="font-bold">
-                      Atenção: Sem regra de ICMS cadastrada para {resultado.ufOrigem} →{' '}
-                      {resultado.ufDestino}
-                    </p>
-                    <p className="text-amber-800">
-                      O cálculo utilizou a alíquota padrão estimada (
-                      {resultado.icms.aliquotaNominal}%). Para máxima precisão fiscal, importe a aba{' '}
-                      <strong>"Regra ICMS"</strong> da planilha na tela de importação.
-                    </p>
-                  </div>
-                </div>
-              )}
-
-              {/* Cards de Resumo Executivo Superior */}
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                <Card className="border-[#DCE5DC] bg-white shadow-sm">
-                  <CardContent className="p-4">
-                    <span className="text-[11px] font-medium text-[#5A6D5A] uppercase tracking-wider">
-                      Base Comercial
-                    </span>
-                    <p className="text-xl font-bold text-[#1C2B1C] mt-1">
-                      {resultado.valorTotalOperacao.toLocaleString('pt-BR', {
-                        style: 'currency',
-                        currency: 'BRL',
-                      })}
-                    </p>
-                    <span className="text-[10px] text-gray-500">Mercadoria + Frete/Seguro</span>
-                  </CardContent>
-                </Card>
-
-                <Card className="border-[#DCE5DC] bg-white shadow-sm">
-                  <CardContent className="p-4">
-                    <div className="flex items-center justify-between">
-                      <span className="text-[11px] font-medium text-[#5A6D5A] uppercase tracking-wider">
-                        Tributos Totais
-                      </span>
-                      <Badge className="bg-red-50 text-red-700 border-red-200 text-[10px]">
-                        {resultado.cargaTributariaEfetivaPerc.toFixed(2)}%
-                      </Badge>
-                    </div>
-                    <p className="text-xl font-bold text-red-700 mt-1">
-                      {resultado.totalTributos.toLocaleString('pt-BR', {
-                        style: 'currency',
-                        currency: 'BRL',
-                      })}
-                    </p>
-                    <span className="text-[10px] text-gray-500">ICMS + PIS/COFINS + IBS/CBS</span>
-                  </CardContent>
-                </Card>
-
-                <Card className="border-[#DCE5DC] bg-gradient-to-br from-[#0D2811] to-[#1B5E20] text-white shadow-md">
-                  <CardContent className="p-4">
-                    <div className="flex items-center justify-between">
-                      <span className="text-[11px] font-medium text-emerald-200 uppercase tracking-wider">
-                        Preço Sugerido
-                      </span>
-                      <Badge className="bg-emerald-400/20 text-emerald-200 text-[10px] border-emerald-400/30">
-                        +{resultado.margemLucroPerc}% Margem
-                      </Badge>
-                    </div>
-                    <p className="text-xl font-bold text-white mt-1">
-                      {resultado.precoVendaSugerido.toLocaleString('pt-BR', {
-                        style: 'currency',
-                        currency: 'BRL',
-                      })}
-                    </p>
-                    <span className="text-[10px] text-emerald-300">
-                      Custo total:{' '}
-                      {resultado.custoTotalComTributos.toLocaleString('pt-BR', {
-                        style: 'currency',
-                        currency: 'BRL',
-                      })}
-                    </span>
-                  </CardContent>
-                </Card>
-              </div>
-
-              {/* Tabela de Composição de Custos e Tributos Linha a Linha (Espelho da aba Simulador) */}
-              <Card className="border-[#DCE5DC] shadow-sm bg-white overflow-hidden">
-                <CardHeader className="bg-[#F8FAF6] border-b border-[#DCE5DC] py-3 px-5">
+        <TabsContent value="simulacao" className="mt-0 space-y-6">
+          <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+            {/* =================================================================== */}
+            {/* PAINEL ESQUERDO: ENTRADA FÁCIL (Formulário da Aba Entrada Fácil) */}
+            {/* =================================================================== */}
+            <div className="lg:col-span-5 space-y-6">
+              <Card className="border-[#DCE5DC] shadow-sm bg-white">
+                <CardHeader className="bg-[#F8FAF6] border-b border-[#DCE5DC] pb-3">
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-2">
-                      <FileSpreadsheet className="w-4 h-4 text-[#1B5E20]" />
-                      <CardTitle className="text-sm font-bold text-[#1C2B1C]">
-                        Composição do Preço & Carga Tributária Linha a Linha
+                      <Package className="w-5 h-5 text-[#1B5E20]" />
+                      <CardTitle className="text-base font-bold text-[#1C2B1C]">
+                        Entrada Fácil: Produto & Operação
                       </CardTitle>
                     </div>
                     <Badge
                       variant="outline"
-                      className="text-[11px] font-mono text-[#1B5E20] bg-white"
+                      className="text-xs font-mono bg-white text-[#1B5E20] border-emerald-300"
                     >
-                      {resultado.ufOrigem} → {resultado.ufDestino} ({resultado.operacao})
+                      Aba Entrada Fácil
                     </Badge>
                   </div>
+                  <CardDescription className="text-xs text-[#5A6D5A]">
+                    Selecione o insumo da base e configure as variáveis comerciais.
+                  </CardDescription>
                 </CardHeader>
 
-                <div className="divide-y divide-gray-100 text-xs">
-                  {/* Linha 1: Produto e Câmbio */}
-                  <div className="p-3.5 flex items-center justify-between hover:bg-gray-50/50">
-                    <div>
-                      <p className="font-semibold text-gray-900">
-                        1. Mercadoria ({resultado.quantidade} {resultado.unidade})
-                      </p>
-                      <p className="text-[11px] text-gray-500">
-                        {resultado.moedaOriginal === 'USD'
-                          ? `US$ ${resultado.valorUnitarioOriginal.toFixed(2)} × PTAX R$ ${resultado.ptaxAplicada.toFixed(4)} = R$ ${resultado.valorUnitarioReais.toFixed(2)} / ${resultado.unidade}`
-                          : `Preço Unitário: R$ ${resultado.valorUnitarioReais.toFixed(2)} / ${resultado.unidade}`}
-                      </p>
+                <CardContent className="pt-4 space-y-4 text-xs">
+                  {/* Seleção do Produto */}
+                  <div className="space-y-1.5">
+                    <Label className="text-xs font-semibold text-[#1C2B1C]">
+                      Produto Base (
+                      {produtos.length > 0 ? `${produtos.length} importados` : 'Exemplos'})
+                    </Label>
+                    <div className="relative">
+                      <Search className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+                      <Input
+                        placeholder="Filtrar por nome, NCM ou código..."
+                        value={termoBuscaProduto}
+                        onChange={(e) => setTermoBuscaProduto(e.target.value)}
+                        className="pl-8 text-xs h-8 border-[#DCE5DC] focus-visible:ring-[#1B5E20]"
+                      />
                     </div>
-                    <span className="font-mono font-bold text-gray-900 text-sm">
-                      {resultado.valorMercadoriaReais.toLocaleString('pt-BR', {
-                        style: 'currency',
-                        currency: 'BRL',
-                      })}
-                    </span>
-                  </div>
 
-                  {/* Linha 2: Despesas Acessórias */}
-                  <div className="p-3.5 flex items-center justify-between hover:bg-gray-50/50 bg-[#FCFDFB]">
-                    <div>
-                      <p className="font-semibold text-gray-900">
-                        2. Despesas Logísticas & Acessórias
-                      </p>
-                      <p className="text-[11px] text-gray-500">
-                        Frete: R$ {resultado.frete.toFixed(2)} | Seguro: R${' '}
-                        {resultado.seguro.toFixed(2)} | Outros: R${' '}
-                        {resultado.outrasDespesas.toFixed(2)}
-                      </p>
+                    <div className="max-h-48 overflow-y-auto border border-[#DCE5DC] rounded-lg divide-y divide-gray-100 bg-[#FCFDFB]">
+                      {produtosDisponiveis.map((p, idx) => {
+                        const isSelected = produtoSelecionado?.descricao === p.descricao
+                        return (
+                          <button
+                            key={p.id || idx}
+                            type="button"
+                            onClick={() => selecionarProduto(p)}
+                            className={`w-full text-left p-2 transition-colors flex items-start justify-between gap-2 text-xs ${
+                              isSelected
+                                ? 'bg-emerald-50 border-l-4 border-l-[#1B5E20] text-[#0D2811]'
+                                : 'hover:bg-gray-50 text-gray-700'
+                            }`}
+                          >
+                            <div className="min-w-0">
+                              <p className="font-semibold truncate leading-tight">{p.descricao}</p>
+                              <div className="flex items-center gap-2 text-[10px] text-gray-500 mt-0.5">
+                                <span className="font-mono bg-gray-100 px-1 rounded">
+                                  NCM {p.ncm || 'S/NCM'}
+                                </span>
+                                <span>•</span>
+                                <span>Origem: {p.origem || 'Nac'}</span>
+                                {p.moeda && (
+                                  <span className="font-bold text-emerald-800">({p.moeda})</span>
+                                )}
+                              </div>
+                            </div>
+                            {isSelected && (
+                              <CheckCircle2 className="w-4 h-4 text-[#1B5E20] shrink-0 mt-0.5" />
+                            )}
+                          </button>
+                        )
+                      })}
                     </div>
-                    <span className="font-mono font-semibold text-gray-700">
-                      +
-                      {resultado.totalDespesasAcessorias.toLocaleString('pt-BR', {
-                        style: 'currency',
-                        currency: 'BRL',
-                      })}
-                    </span>
                   </div>
 
-                  {/* Linha 3: Subtotal Comercial */}
-                  <div className="p-3.5 flex items-center justify-between bg-emerald-50/30 font-semibold">
-                    <span className="text-emerald-950 font-bold">Subtotal Base Comercial</span>
-                    <span className="font-mono text-emerald-950 font-bold">
-                      {resultado.valorTotalOperacao.toLocaleString('pt-BR', {
-                        style: 'currency',
-                        currency: 'BRL',
-                      })}
-                    </span>
-                  </div>
-
-                  {/* Linha 4: ICMS */}
-                  <div className="p-3.5 flex items-start justify-between hover:bg-gray-50/50">
-                    <div className="space-y-0.5">
-                      <div className="flex items-center gap-2">
-                        <span className="font-bold text-gray-900">{resultado.icms.nome}</span>
-                        <Badge className="text-[10px] bg-sky-100 text-sky-800 border-sky-200">
-                          Alíq. Nominal: {resultado.icms.aliquotaNominal}%
-                        </Badge>
-                        {resultado.icms.reducaoBasePerc ? (
-                          <Badge className="text-[10px] bg-amber-100 text-amber-800 border-amber-200">
-                            Redução Base: {resultado.icms.reducaoBasePerc}%
-                          </Badge>
-                        ) : null}
-                      </div>
-                      <p className="text-[11px] text-gray-500">{resultado.icms.fundamentacao}</p>
-                      <p className="text-[11px] text-emerald-800">
-                        Alíquota Efetiva:{' '}
-                        <strong>{resultado.icms.aliquotaEfetiva.toFixed(2)}%</strong> sobre a base
-                      </p>
-                    </div>
-                    <span className="font-mono font-bold text-gray-900 text-sm">
-                      {resultado.icms.valorImposto.toLocaleString('pt-BR', {
-                        style: 'currency',
-                        currency: 'BRL',
-                      })}
-                    </span>
-                  </div>
-
-                  {/* Linha 5: PIS / COFINS */}
-                  <div className="p-3.5 flex items-start justify-between hover:bg-gray-50/50 bg-[#FCFDFB]">
-                    <div className="space-y-0.5">
-                      <div className="flex items-center gap-2">
-                        <span className="font-bold text-gray-900">PIS & COFINS (Agro)</span>
-                        <Badge className="text-[10px] bg-blue-100 text-blue-800 border-blue-200">
-                          PIS {resultado.pis.aliquotaNominal.toFixed(3)}% + COFINS{' '}
-                          {resultado.cofins.aliquotaNominal.toFixed(3)}%
-                        </Badge>
-                      </div>
-                      <p className="text-[11px] text-gray-500">{resultado.pis.fundamentacao}</p>
-                      <p className="text-[11px] text-gray-600">
-                        PIS: R$ {resultado.pis.valorImposto.toFixed(2)} | COFINS: R${' '}
-                        {resultado.cofins.valorImposto.toFixed(2)}
-                      </p>
-                    </div>
-                    <span className="font-mono font-bold text-gray-900 text-sm">
-                      {(resultado.pis.valorImposto + resultado.cofins.valorImposto).toLocaleString(
-                        'pt-BR',
-                        { style: 'currency', currency: 'BRL' },
-                      )}
-                    </span>
-                  </div>
-
-                  {/* Linha 6: IBS & CBS (Transição Reforma) */}
-                  <div className="p-3.5 flex items-start justify-between hover:bg-gray-50/50">
-                    <div className="space-y-0.5">
-                      <div className="flex items-center gap-2">
-                        <span className="font-bold text-purple-900">
-                          IBS & CBS (Reforma Tributária)
+                  {/* Informações Rápidas do Produto Selecionado */}
+                  {produtoSelecionado && (
+                    <div className="p-2.5 rounded-lg bg-emerald-50/70 border border-emerald-200/60 text-emerald-950 space-y-1">
+                      <div className="flex items-center justify-between">
+                        <span className="font-bold text-xs truncate">
+                          {produtoSelecionado.descricao}
                         </span>
-                        <Badge className="text-[10px] bg-purple-100 text-purple-800 border-purple-200">
-                          Redução 60% Insumos Agro
+                        <Badge className="text-[10px] h-4 bg-emerald-700 text-white font-mono">
+                          {produtoSelecionado.ncm || '3808.93.29'}
                         </Badge>
                       </div>
-                      <p className="text-[11px] text-gray-500">{resultado.ibs.fundamentacao}</p>
-                      <p className="text-[11px] text-gray-600">
-                        IBS Efetivo: {resultado.ibs.aliquotaEfetiva.toFixed(3)}% (R${' '}
-                        {resultado.ibs.valorImposto.toFixed(2)}) + CBS Efetivo:{' '}
-                        {resultado.cbs.aliquotaEfetiva.toFixed(3)}% (R${' '}
-                        {resultado.cbs.valorImposto.toFixed(2)})
-                      </p>
+                      <div className="flex items-center justify-between text-[11px] text-emerald-800">
+                        <span>Embalagem: {produtoSelecionado.embalagem || 'Padrão'}</span>
+                        <span>Fabricante: {produtoSelecionado.fabricante || 'Geral'}</span>
+                      </div>
                     </div>
-                    <span className="font-mono font-semibold text-purple-950">
-                      {(resultado.ibs.valorImposto + resultado.cbs.valorImposto).toLocaleString(
-                        'pt-BR',
-                        { style: 'currency', currency: 'BRL' },
+                  )}
+
+                  {/* Rota da Operação: Origem -> Destino */}
+                  <div className="grid grid-cols-2 gap-3 pt-1">
+                    <div className="space-y-1">
+                      <Label className="text-xs font-semibold text-[#1C2B1C] flex items-center gap-1">
+                        <Compass className="w-3.5 h-3.5 text-[#1B5E20]" />
+                        UF Origem
+                      </Label>
+                      <select
+                        value={ufOrigem}
+                        onChange={(e) => setUfOrigem(e.target.value)}
+                        className="w-full h-8 text-xs rounded-md border border-[#DCE5DC] bg-white px-2 focus:ring-1 focus:ring-[#1B5E20]"
+                      >
+                        {UFS_BRASIL.map((uf) => (
+                          <option key={uf} value={uf}>
+                            {uf}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+
+                    <div className="space-y-1">
+                      <Label className="text-xs font-semibold text-[#1C2B1C] flex items-center gap-1">
+                        <Compass className="w-3.5 h-3.5 text-[#1B5E20]" />
+                        UF Destino
+                      </Label>
+                      <select
+                        value={ufDestino}
+                        onChange={(e) => setUfDestino(e.target.value)}
+                        className="w-full h-8 text-xs rounded-md border border-[#DCE5DC] bg-white px-2 focus:ring-1 focus:ring-[#1B5E20]"
+                      >
+                        {UFS_BRASIL.map((uf) => (
+                          <option key={uf} value={uf}>
+                            {uf}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  </div>
+
+                  {/* Quantidade e Preço Unitário */}
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="space-y-1">
+                      <Label className="text-xs font-semibold text-[#1C2B1C]">
+                        Quantidade ({produtoSelecionado?.unidade || 'Un'})
+                      </Label>
+                      <Input
+                        type="number"
+                        min="1"
+                        value={quantidade}
+                        onChange={(e) => setQuantidade(Math.max(1, Number(e.target.value)))}
+                        className="text-xs h-8 border-[#DCE5DC]"
+                      />
+                    </div>
+
+                    <div className="space-y-1">
+                      <Label className="text-xs font-semibold text-[#1C2B1C] flex items-center justify-between">
+                        <span>Preço Unitário</span>
+                        <span className="font-bold text-emerald-700">{moeda}</span>
+                      </Label>
+                      <Input
+                        type="number"
+                        step="0.01"
+                        min="0"
+                        value={precoUnitario}
+                        onChange={(e) => setPrecoUnitario(Number(e.target.value))}
+                        className="text-xs h-8 border-[#DCE5DC]"
+                      />
+                    </div>
+                  </div>
+
+                  {/* Bloco de Câmbio / PTAX Manual (Destaque quando for importado) */}
+                  <div
+                    className={`p-3 rounded-xl border transition-all ${
+                      isProdutoImportado
+                        ? 'bg-amber-50/80 border-amber-300 shadow-sm'
+                        : 'bg-gray-50/60 border-gray-200'
+                    }`}
+                  >
+                    <div className="flex items-center justify-between mb-1.5">
+                      <div className="flex items-center gap-1.5">
+                        <DollarSign
+                          className={`w-4 h-4 ${isProdutoImportado ? 'text-amber-700' : 'text-gray-500'}`}
+                        />
+                        <Label
+                          className={`text-xs font-bold ${isProdutoImportado ? 'text-amber-900' : 'text-gray-700'}`}
+                        >
+                          Cotação PTAX Manual (Câmbio USD)
+                        </Label>
+                      </div>
+                      {isProdutoImportado ? (
+                        <Badge className="bg-amber-600 text-white text-[10px]">
+                          Obrigatório p/ Importado
+                        </Badge>
+                      ) : (
+                        <Badge variant="outline" className="text-[10px] text-gray-500">
+                          Opcional
+                        </Badge>
                       )}
-                    </span>
+                    </div>
+
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs font-semibold text-gray-500">US$ 1,00 = R$</span>
+                      <Input
+                        type="number"
+                        step="0.0001"
+                        min="0.0001"
+                        value={ptaxManual}
+                        onChange={(e) => setPtaxManual(Number(e.target.value))}
+                        className="h-8 text-xs font-mono font-bold bg-white border-amber-300 focus-visible:ring-amber-500"
+                        placeholder="Ex: 5.7500"
+                      />
+                    </div>
+                    <p className="text-[11px] text-gray-500 mt-1">
+                      Digitação manual direta do usuário (sem integração automática de câmbio).
+                    </p>
                   </div>
 
-                  {/* Linha 7: Totalizador de Custo Final e Preço de Venda */}
-                  <div className="p-4 bg-[#F8FAF6] space-y-2">
-                    <div className="flex items-center justify-between text-xs font-semibold text-gray-700">
-                      <span>Custo Total com Tributos (R$)</span>
-                      <span className="font-mono font-bold text-gray-900">
-                        {resultado.custoTotalComTributos.toLocaleString('pt-BR', {
-                          style: 'currency',
-                          currency: 'BRL',
-                        })}
-                      </span>
+                  {/* Custos Acessórios */}
+                  <div className="grid grid-cols-3 gap-2 pt-1">
+                    <div className="space-y-1">
+                      <Label className="text-[11px] font-medium text-gray-600">Frete (R$)</Label>
+                      <Input
+                        type="number"
+                        min="0"
+                        value={frete}
+                        onChange={(e) => setFrete(Number(e.target.value))}
+                        className="text-xs h-7 border-[#DCE5DC]"
+                      />
                     </div>
-
-                    <div className="flex items-center justify-between text-xs font-semibold text-emerald-800">
-                      <span>Margem Comercial Aplicada (+{resultado.margemLucroPerc}%)</span>
-                      <span className="font-mono font-bold">
-                        +
-                        {resultado.margemLucroValor.toLocaleString('pt-BR', {
-                          style: 'currency',
-                          currency: 'BRL',
-                        })}
-                      </span>
+                    <div className="space-y-1">
+                      <Label className="text-[11px] font-medium text-gray-600">Seguro (R$)</Label>
+                      <Input
+                        type="number"
+                        min="0"
+                        value={seguro}
+                        onChange={(e) => setSeguro(Number(e.target.value))}
+                        className="text-xs h-7 border-[#DCE5DC]"
+                      />
                     </div>
-
-                    <div className="pt-2 border-t border-[#DCE5DC] flex items-center justify-between">
-                      <span className="text-sm font-bold text-[#0D2811]">
-                        Preço de Venda Sugerido Total
-                      </span>
-                      <span className="text-lg font-mono font-extrabold text-[#1B5E20]">
-                        {resultado.precoVendaSugerido.toLocaleString('pt-BR', {
-                          style: 'currency',
-                          currency: 'BRL',
-                        })}
-                      </span>
+                    <div className="space-y-1">
+                      <Label className="text-[11px] font-medium text-gray-600">
+                        Outras Desp. (R$)
+                      </Label>
+                      <Input
+                        type="number"
+                        min="0"
+                        value={outrasDespesas}
+                        onChange={(e) => setOutrasDespesas(Number(e.target.value))}
+                        className="text-xs h-7 border-[#DCE5DC]"
+                      />
                     </div>
                   </div>
-                </div>
+
+                  {/* Margem Comercial e Parâmetros Tributários */}
+                  <div className="pt-2 border-t border-gray-100 flex items-center justify-between gap-4">
+                    <div className="flex-1 space-y-1">
+                      <Label className="text-xs font-semibold text-[#1C2B1C] flex items-center gap-1">
+                        <TrendingUp className="w-3.5 h-3.5 text-[#1B5E20]" />
+                        Margem Desejada (%)
+                      </Label>
+                      <Input
+                        type="number"
+                        min="0"
+                        max="100"
+                        step="0.5"
+                        value={margemPerc}
+                        onChange={(e) => setMargemPerc(Number(e.target.value))}
+                        className="text-xs h-8 border-[#DCE5DC]"
+                      />
+                    </div>
+
+                    <div className="flex-1 space-y-1">
+                      <Label className="text-xs font-semibold text-[#1C2B1C] flex items-center gap-1">
+                        <Percent className="w-3.5 h-3.5 text-blue-600" />
+                        PIS/COFINS Agro
+                      </Label>
+                      <button
+                        type="button"
+                        onClick={() => setConsiderarReoneracao2026(!considerarReoneracao2026)}
+                        className={`w-full h-8 px-2 rounded-md text-[11px] font-semibold border transition-all text-left flex items-center justify-between ${
+                          considerarReoneracao2026
+                            ? 'bg-blue-50 border-blue-300 text-blue-900'
+                            : 'bg-emerald-50 border-emerald-300 text-emerald-900'
+                        }`}
+                      >
+                        <span>
+                          {considerarReoneracao2026
+                            ? 'LC 224/25 (0,925%)'
+                            : 'Alíquota Zero (Lei 10.925)'}
+                        </span>
+                        <span className="text-[10px] underline">Alternar</span>
+                      </button>
+                    </div>
+                  </div>
+                </CardContent>
               </Card>
             </div>
-          ) : (
-            <Card className="border-[#DCE5DC] bg-white text-center p-12">
-              <div className="flex flex-col items-center justify-center space-y-3">
-                <div className="p-4 rounded-full bg-emerald-50 text-[#1B5E20]">
-                  <Calculator className="w-8 h-8" />
+
+            {/* =================================================================== */}
+            {/* PAINEL DIREITO: RESULTADO DA SIMULAÇÃO (Aba Simulador da Planilha) */}
+            {/* =================================================================== */}
+            <div className="lg:col-span-7 space-y-6">
+              {resultado ? (
+                <div className="space-y-6">
+                  {/* Alerta de Ausência de Regra de ICMS quando aplicável */}
+                  {!resultado.temRegraIcms && (
+                    <div className="p-4 rounded-xl bg-amber-50 border border-amber-300 text-amber-900 flex items-start gap-3 shadow-sm animate-in slide-in-from-top-1">
+                      <AlertTriangle className="w-5 h-5 text-amber-600 shrink-0 mt-0.5" />
+                      <div className="text-xs space-y-1">
+                        <p className="font-bold">
+                          Atenção: Sem regra de ICMS cadastrada para {resultado.ufOrigem} →{' '}
+                          {resultado.ufDestino}
+                        </p>
+                        <p className="text-amber-800">
+                          O cálculo utilizou a alíquota padrão estimada (
+                          {resultado.icms.aliquotaNominal}%). Para máxima precisão fiscal, importe a
+                          aba <strong>"Regra ICMS"</strong> da planilha na tela de importação.
+                        </p>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Cards de Resumo Executivo Superior */}
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                    <Card className="border-[#DCE5DC] bg-white shadow-sm">
+                      <CardContent className="p-4">
+                        <span className="text-[11px] font-medium text-[#5A6D5A] uppercase tracking-wider">
+                          Base Comercial
+                        </span>
+                        <p className="text-xl font-bold text-[#1C2B1C] mt-1">
+                          {resultado.valorTotalOperacao.toLocaleString('pt-BR', {
+                            style: 'currency',
+                            currency: 'BRL',
+                          })}
+                        </p>
+                        <span className="text-[10px] text-gray-500">Mercadoria + Frete/Seguro</span>
+                      </CardContent>
+                    </Card>
+
+                    <Card className="border-[#DCE5DC] bg-white shadow-sm">
+                      <CardContent className="p-4">
+                        <div className="flex items-center justify-between">
+                          <span className="text-[11px] font-medium text-[#5A6D5A] uppercase tracking-wider">
+                            Tributos Totais
+                          </span>
+                          <Badge className="bg-red-50 text-red-700 border-red-200 text-[10px]">
+                            {resultado.cargaTributariaEfetivaPerc.toFixed(2)}%
+                          </Badge>
+                        </div>
+                        <p className="text-xl font-bold text-red-700 mt-1">
+                          {resultado.totalTributos.toLocaleString('pt-BR', {
+                            style: 'currency',
+                            currency: 'BRL',
+                          })}
+                        </p>
+                        <span className="text-[10px] text-gray-500">
+                          ICMS + PIS/COFINS + IBS/CBS
+                        </span>
+                      </CardContent>
+                    </Card>
+
+                    <Card className="border-[#DCE5DC] bg-gradient-to-br from-[#0D2811] to-[#1B5E20] text-white shadow-md">
+                      <CardContent className="p-4">
+                        <div className="flex items-center justify-between">
+                          <span className="text-[11px] font-medium text-emerald-200 uppercase tracking-wider">
+                            Preço Sugerido
+                          </span>
+                          <Badge className="bg-emerald-400/20 text-emerald-200 text-[10px] border-emerald-400/30">
+                            +{resultado.margemLucroPerc}% Margem
+                          </Badge>
+                        </div>
+                        <p className="text-xl font-bold text-white mt-1">
+                          {resultado.precoVendaSugerido.toLocaleString('pt-BR', {
+                            style: 'currency',
+                            currency: 'BRL',
+                          })}
+                        </p>
+                        <span className="text-[10px] text-emerald-300">
+                          Custo total:{' '}
+                          {resultado.custoTotalComTributos.toLocaleString('pt-BR', {
+                            style: 'currency',
+                            currency: 'BRL',
+                          })}
+                        </span>
+                      </CardContent>
+                    </Card>
+                  </div>
+
+                  {/* Tabela de Composição de Custos e Tributos Linha a Linha (Espelho da aba Simulador) */}
+                  <Card className="border-[#DCE5DC] shadow-sm bg-white overflow-hidden">
+                    <CardHeader className="bg-[#F8FAF6] border-b border-[#DCE5DC] py-3 px-5">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                          <FileSpreadsheet className="w-4 h-4 text-[#1B5E20]" />
+                          <CardTitle className="text-sm font-bold text-[#1C2B1C]">
+                            Composição do Preço & Carga Tributária Linha a Linha
+                          </CardTitle>
+                        </div>
+                        <Badge
+                          variant="outline"
+                          className="text-[11px] font-mono text-[#1B5E20] bg-white"
+                        >
+                          {resultado.ufOrigem} → {resultado.ufDestino} ({resultado.operacao})
+                        </Badge>
+                      </div>
+                    </CardHeader>
+
+                    <div className="divide-y divide-gray-100 text-xs">
+                      {/* Linha 1: Produto e Câmbio */}
+                      <div className="p-3.5 flex items-center justify-between hover:bg-gray-50/50">
+                        <div>
+                          <p className="font-semibold text-gray-900">
+                            1. Mercadoria ({resultado.quantidade} {resultado.unidade})
+                          </p>
+                          <p className="text-[11px] text-gray-500">
+                            {resultado.moedaOriginal === 'USD'
+                              ? `US$ ${resultado.valorUnitarioOriginal.toFixed(2)} × PTAX R$ ${resultado.ptaxAplicada.toFixed(4)} = R$ ${resultado.valorUnitarioReais.toFixed(2)} / ${resultado.unidade}`
+                              : `Preço Unitário: R$ ${resultado.valorUnitarioReais.toFixed(2)} / ${resultado.unidade}`}
+                          </p>
+                        </div>
+                        <span className="font-mono font-bold text-gray-900 text-sm">
+                          {resultado.valorMercadoriaReais.toLocaleString('pt-BR', {
+                            style: 'currency',
+                            currency: 'BRL',
+                          })}
+                        </span>
+                      </div>
+
+                      {/* Linha 2: Despesas Acessórias */}
+                      <div className="p-3.5 flex items-center justify-between hover:bg-gray-50/50 bg-[#FCFDFB]">
+                        <div>
+                          <p className="font-semibold text-gray-900">
+                            2. Despesas Logísticas & Acessórias
+                          </p>
+                          <p className="text-[11px] text-gray-500">
+                            Frete: R$ {resultado.frete.toFixed(2)} | Seguro: R${' '}
+                            {resultado.seguro.toFixed(2)} | Outros: R${' '}
+                            {resultado.outrasDespesas.toFixed(2)}
+                          </p>
+                        </div>
+                        <span className="font-mono font-semibold text-gray-700">
+                          +
+                          {resultado.totalDespesasAcessorias.toLocaleString('pt-BR', {
+                            style: 'currency',
+                            currency: 'BRL',
+                          })}
+                        </span>
+                      </div>
+
+                      {/* Linha 3: Subtotal Comercial */}
+                      <div className="p-3.5 flex items-center justify-between bg-emerald-50/30 font-semibold">
+                        <span className="text-emerald-950 font-bold">Subtotal Base Comercial</span>
+                        <span className="font-mono text-emerald-950 font-bold">
+                          {resultado.valorTotalOperacao.toLocaleString('pt-BR', {
+                            style: 'currency',
+                            currency: 'BRL',
+                          })}
+                        </span>
+                      </div>
+
+                      {/* Linha 4: ICMS */}
+                      <div className="p-3.5 flex items-start justify-between hover:bg-gray-50/50">
+                        <div className="space-y-0.5">
+                          <div className="flex items-center gap-2">
+                            <span className="font-bold text-gray-900">{resultado.icms.nome}</span>
+                            <Badge className="text-[10px] bg-sky-100 text-sky-800 border-sky-200">
+                              Alíq. Nominal: {resultado.icms.aliquotaNominal}%
+                            </Badge>
+                            {resultado.icms.reducaoBasePerc ? (
+                              <Badge className="text-[10px] bg-amber-100 text-amber-800 border-amber-200">
+                                Redução Base: {resultado.icms.reducaoBasePerc}%
+                              </Badge>
+                            ) : null}
+                          </div>
+                          <p className="text-[11px] text-gray-500">
+                            {resultado.icms.fundamentacao}
+                          </p>
+                          <p className="text-[11px] text-emerald-800">
+                            Alíquota Efetiva:{' '}
+                            <strong>{resultado.icms.aliquotaEfetiva.toFixed(2)}%</strong> sobre a
+                            base
+                          </p>
+                        </div>
+                        <span className="font-mono font-bold text-gray-900 text-sm">
+                          {resultado.icms.valorImposto.toLocaleString('pt-BR', {
+                            style: 'currency',
+                            currency: 'BRL',
+                          })}
+                        </span>
+                      </div>
+
+                      {/* Linha 5: PIS / COFINS */}
+                      <div className="p-3.5 flex items-start justify-between hover:bg-gray-50/50 bg-[#FCFDFB]">
+                        <div className="space-y-0.5">
+                          <div className="flex items-center gap-2">
+                            <span className="font-bold text-gray-900">PIS & COFINS (Agro)</span>
+                            <Badge className="text-[10px] bg-blue-100 text-blue-800 border-blue-200">
+                              PIS {resultado.pis.aliquotaNominal.toFixed(3)}% + COFINS{' '}
+                              {resultado.cofins.aliquotaNominal.toFixed(3)}%
+                            </Badge>
+                          </div>
+                          <p className="text-[11px] text-gray-500">{resultado.pis.fundamentacao}</p>
+                          <p className="text-[11px] text-gray-600">
+                            PIS: R$ {resultado.pis.valorImposto.toFixed(2)} | COFINS: R${' '}
+                            {resultado.cofins.valorImposto.toFixed(2)}
+                          </p>
+                        </div>
+                        <span className="font-mono font-bold text-gray-900 text-sm">
+                          {(
+                            resultado.pis.valorImposto + resultado.cofins.valorImposto
+                          ).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+                        </span>
+                      </div>
+
+                      {/* Linha 6: IBS & CBS (Transição Reforma) */}
+                      <div className="p-3.5 flex items-start justify-between hover:bg-gray-50/50">
+                        <div className="space-y-0.5">
+                          <div className="flex items-center gap-2">
+                            <span className="font-bold text-purple-900">
+                              IBS & CBS (Reforma Tributária)
+                            </span>
+                            <Badge className="text-[10px] bg-purple-100 text-purple-800 border-purple-200">
+                              Redução 60% Insumos Agro
+                            </Badge>
+                          </div>
+                          <p className="text-[11px] text-gray-500">{resultado.ibs.fundamentacao}</p>
+                          <p className="text-[11px] text-gray-600">
+                            IBS Efetivo: {resultado.ibs.aliquotaEfetiva.toFixed(3)}% (R${' '}
+                            {resultado.ibs.valorImposto.toFixed(2)}) + CBS Efetivo:{' '}
+                            {resultado.cbs.aliquotaEfetiva.toFixed(3)}% (R${' '}
+                            {resultado.cbs.valorImposto.toFixed(2)})
+                          </p>
+                        </div>
+                        <span className="font-mono font-semibold text-purple-950">
+                          {(resultado.ibs.valorImposto + resultado.cbs.valorImposto).toLocaleString(
+                            'pt-BR',
+                            { style: 'currency', currency: 'BRL' },
+                          )}
+                        </span>
+                      </div>
+
+                      {/* Linha 7: Totalizador de Custo Final e Preço de Venda */}
+                      <div className="p-4 bg-[#F8FAF6] space-y-2">
+                        <div className="flex items-center justify-between text-xs font-semibold text-gray-700">
+                          <span>Custo Total com Tributos (R$)</span>
+                          <span className="font-mono font-bold text-gray-900">
+                            {resultado.custoTotalComTributos.toLocaleString('pt-BR', {
+                              style: 'currency',
+                              currency: 'BRL',
+                            })}
+                          </span>
+                        </div>
+
+                        <div className="flex items-center justify-between text-xs font-semibold text-emerald-800">
+                          <span>Margem Comercial Aplicada (+{resultado.margemLucroPerc}%)</span>
+                          <span className="font-mono font-bold">
+                            +
+                            {resultado.margemLucroValor.toLocaleString('pt-BR', {
+                              style: 'currency',
+                              currency: 'BRL',
+                            })}
+                          </span>
+                        </div>
+
+                        <div className="pt-2 border-t border-[#DCE5DC] flex items-center justify-between">
+                          <span className="text-sm font-bold text-[#0D2811]">
+                            Preço de Venda Sugerido Total
+                          </span>
+                          <span className="text-lg font-mono font-extrabold text-[#1B5E20]">
+                            {resultado.precoVendaSugerido.toLocaleString('pt-BR', {
+                              style: 'currency',
+                              currency: 'BRL',
+                            })}
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+                  </Card>
                 </div>
-                <h3 className="text-base font-bold text-[#1C2B1C]">Pronto para simular</h3>
-                <p className="text-xs text-[#5A6D5A] max-w-sm">
-                  Escolha os parâmetros na barra esquerda e clique em <strong>"Recalcular"</strong>{' '}
-                  para processar os custos e a cadeia tributária da operação.
-                </p>
-              </div>
-            </Card>
-          )}
-        </div>
-      </div>
+              ) : (
+                <Card className="border-[#DCE5DC] bg-white text-center p-12">
+                  <div className="flex flex-col items-center justify-center space-y-3">
+                    <div className="p-4 rounded-full bg-emerald-50 text-[#1B5E20]">
+                      <Calculator className="w-8 h-8" />
+                    </div>
+                    <h3 className="text-base font-bold text-[#1C2B1C]">Pronto para simular</h3>
+                    <p className="text-xs text-[#5A6D5A] max-w-sm">
+                      Escolha os parâmetros na barra esquerda e clique em{' '}
+                      <strong>"Recalcular"</strong> para processar os custos e a cadeia tributária
+                      da operação.
+                    </p>
+                  </div>
+                </Card>
+              )}
+            </div>
+          </div>
+        </TabsContent>
+
+        {/* =================================================================== */}
+        {/* ABA 2: BASE DE PRODUTOS */}
+        {/* =================================================================== */}
+        <TabsContent value="produtos" className="mt-0">
+          <AbaBaseProdutos ativa={abaAtiva === 'produtos'} />
+        </TabsContent>
+
+        {/* =================================================================== */}
+        {/* ABA 3: REGRAS FISCAIS */}
+        {/* =================================================================== */}
+        <TabsContent value="regras" className="mt-0">
+          <AbaRegrasFiscais ativa={abaAtiva === 'regras'} />
+        </TabsContent>
+      </Tabs>
     </div>
   )
 }

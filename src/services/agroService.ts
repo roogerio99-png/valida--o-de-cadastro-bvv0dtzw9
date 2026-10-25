@@ -921,6 +921,15 @@ export interface SimRegraIcmsItem {
   fundamentacao_legal?: string
   tipo_operacao?: string
   chave_origem_destino: string
+  id_regra?: string
+  tipo_uf_origem?: string
+  tipo_uf_destino?: string
+  grupo_tributario_codigo?: string
+  grupo_tributario_descricao?: string
+  prod_importado?: string
+  tipo_desonerado?: string
+  icms_desonerado?: number
+  regra_credito_entrada?: string
   dados_extras?: Record<string, unknown>
   created: string
   updated: string
@@ -934,8 +943,23 @@ export async function listarProdutosBaseSimulador(params?: {
 }) {
   const page = params?.page || 1
   const perPage = params?.perPage || 50
-  const sort = params?.sort || 'descricao'
+  const sort = params?.sort || 'codigo'
   return pb.collection('sim_produtos_base').getList<SimProdutoBaseItem>(page, perPage, {
+    filter: params?.filter,
+    sort,
+  })
+}
+
+export async function listarRegrasIcmsSimulador(params?: {
+  page?: number
+  perPage?: number
+  filter?: string
+  sort?: string
+}) {
+  const page = params?.page || 1
+  const perPage = params?.perPage || 50
+  const sort = params?.sort || 'uf_origem,uf_destino'
+  return pb.collection('sim_regras_icms').getList<SimRegraIcmsItem>(page, perPage, {
     filter: params?.filter,
     sort,
   })
