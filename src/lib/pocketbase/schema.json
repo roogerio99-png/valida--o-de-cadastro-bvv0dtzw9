@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-10-25T02:14:12.699Z",
+  "generatedAt": "2026-10-25T02:26:17.997Z",
   "collections": [
     {
       "name": "users",
@@ -1912,7 +1912,7 @@
       "indexes": [
         "CREATE INDEX idx_sim_produtos_desc ON sim_produtos_base (descricao)",
         "CREATE INDEX idx_sim_produtos_ncm ON sim_produtos_base (ncm)",
-        "CREATE INDEX idx_sim_produtos_codigo ON sim_produtos_base (codigo)"
+        "CREATE INDEX `idx_sim_produtos_cod_emb` ON `sim_produtos_base` (codigo, embalagem)"
       ]
     },
     {

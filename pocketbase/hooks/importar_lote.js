@@ -2722,8 +2722,21 @@ routerAdd('POST', '/backend/v1/importar-lote', (e) => {
             }
           }
 
-          // Rastreamento de duplicidade intra-arquivo/lote por chave de negócio
-          const chaveUnicaProd = codigo || descricao
+          // Regra de Identidade de Produto (B1_COD + Embalagem):
+          // Variantes de embalagem do mesmo código convivem como registros distintos.
+          // Chave composta normalizada: trim e maiúsculas.
+          const codNorm = codigo.trim().toUpperCase()
+          const embNorm = embalagem.trim().toUpperCase()
+          const descNorm = descricao.trim().toUpperCase()
+
+          // Chave de negócio composta para deduplicação e diagnóstico intra-lote
+          let chaveUnicaProd = ''
+          if (codNorm) {
+            chaveUnicaProd = embNorm ? `${codNorm} | ${embNorm}` : codNorm
+          } else if (descNorm) {
+            chaveUnicaProd = embNorm ? `${descNorm} | ${embNorm}` : descNorm
+          }
+
           if (chaveUnicaProd) {
             if (codigosVistosNoLote[chaveUnicaProd]) {
               codigosVistosNoLote[chaveUnicaProd]++
@@ -2733,36 +2746,40 @@ routerAdd('POST', '/backend/v1/importar-lote', (e) => {
             }
           }
 
-          // Upsert por código (se houver) ou por descrição exata
+          // Upsert por chave composta (codigo + embalagem)
           let record = null
           let isUpdate = false
 
           if (codigo) {
             const escCod = codigo.replace(/'/g, "\\'")
+            let filtroComposto = ''
+            if (embalagem) {
+              const escEmb = embalagem.replace(/'/g, "\\'")
+              filtroComposto = `codigo = '${escCod}' && embalagem = '${escEmb}'`
+            } else {
+              filtroComposto = `codigo = '${escCod}' && (embalagem = '' || embalagem = null)`
+            }
+
             const achados =
-              txApp.findRecordsByFilter(
-                'sim_produtos_base',
-                `codigo = '${escCod}'`,
-                '-created',
-                1,
-                0,
-              ) || []
+              txApp.findRecordsByFilter('sim_produtos_base', filtroComposto, '-created', 1, 0) || []
             if (achados.length > 0) {
               record = achados[0]
               isUpdate = true
             }
           }
 
-          if (!record) {
+          // Fallback por descrição + embalagem caso produto não tenha código
+          if (!record && !codigo && descricao) {
             const escDesc = descricao.replace(/'/g, "\\'")
+            let filtroDesc = ''
+            if (embalagem) {
+              const escEmb = embalagem.replace(/'/g, "\\'")
+              filtroDesc = `descricao = '${escDesc}' && embalagem = '${escEmb}'`
+            } else {
+              filtroDesc = `descricao = '${escDesc}' && (embalagem = '' || embalagem = null)`
+            }
             const achados =
-              txApp.findRecordsByFilter(
-                'sim_produtos_base',
-                `descricao = '${escDesc}'`,
-                '-created',
-                1,
-                0,
-              ) || []
+              txApp.findRecordsByFilter('sim_produtos_base', filtroDesc, '-created', 1, 0) || []
             if (achados.length > 0) {
               record = achados[0]
               isUpdate = true

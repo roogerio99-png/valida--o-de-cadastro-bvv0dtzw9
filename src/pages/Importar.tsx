@@ -2206,7 +2206,21 @@ export function Importar() {
         const itemData = v.data as Record<string, unknown>
         let chave: string | null = null
         if (targetCol === 'sim_produtos_base') {
-          chave = (itemData.codigo as string) || (itemData.descricao as string) || null
+          // Identidade composta: Código + Embalagem (variantes de embalagem convivem como produtos distintos)
+          const cod = String(itemData.codigo || '')
+            .trim()
+            .toUpperCase()
+          const emb = String(itemData.embalagem || '')
+            .trim()
+            .toUpperCase()
+          const desc = String(itemData.descricao || '')
+            .trim()
+            .toUpperCase()
+          if (cod) {
+            chave = emb ? `${cod} | ${emb}` : cod
+          } else if (desc) {
+            chave = emb ? `${desc} | ${emb}` : desc
+          }
         } else if (targetCol === 'sim_regras_icms') {
           chave = (itemData.chave_origem_destino as string) || null
         } else if (targetCol === 'base_mestre') {
@@ -2695,8 +2709,12 @@ export function Importar() {
                               <span className="block text-[10px] text-amber-600 mt-0.5">
                                 {totalCodigosDuplicados}{' '}
                                 {totalCodigosDuplicados === 1
-                                  ? 'código repetido'
-                                  : 'códigos repetidos'}{' '}
+                                  ? activeZone.targetCollection === 'sim_produtos_base'
+                                    ? 'chave repetida'
+                                    : 'código repetido'
+                                  : activeZone.targetCollection === 'sim_produtos_base'
+                                    ? 'chaves repetidas'
+                                    : 'códigos repetidos'}{' '}
                                 • prevalece última
                               </span>
                             </div>
@@ -2776,26 +2794,42 @@ export function Importar() {
                                 Transparência de Duplicatas na Planilha (Intra-Arquivo):
                               </p>
                               <p className="text-amber-800 text-[11px] mt-0.5 leading-relaxed">
-                                Código duplicado na planilha <strong>NÃO é perda</strong>. O mesmo
-                                código apareceu em mais de uma linha na planilha enviada. O sistema
-                                realizou a gravação mantendo <strong>uma única vez</strong> na base
-                                com os dados da <strong>última ocorrência</strong> (upsert
-                                idempotente). Houve <strong>0 perdas</strong> de registros.
+                                {activeZone.targetCollection === 'sim_produtos_base' ? (
+                                  <>
+                                    Identificação por chave composta{' '}
+                                    <strong>Código + Embalagem</strong>. Variantes de embalagem do
+                                    mesmo código convivem como produtos distintos na base. Linhas
+                                    com a <strong>mesma combinação de código e embalagem</strong>{' '}
+                                    são atualizadas (upsert idempotente pela última ocorrência),
+                                    garantindo <strong>0 perdas</strong> de dados.
+                                  </>
+                                ) : (
+                                  <>
+                                    Código duplicado na planilha <strong>NÃO é perda</strong>. O
+                                    mesmo código apareceu em mais de uma linha na planilha enviada.
+                                    O sistema realizou a gravação mantendo{' '}
+                                    <strong>uma única vez</strong> na base com os dados da{' '}
+                                    <strong>última ocorrência</strong> (upsert idempotente). Houve{' '}
+                                    <strong>0 perdas</strong> de registros.
+                                  </>
+                                )}
                               </p>
                             </div>
                           </div>
 
                           <div className="pt-1.5 border-t border-amber-200/60 flex flex-wrap items-center gap-1.5">
                             <span className="text-[11px] font-semibold text-amber-900">
-                              Códigos com repetição identificados ({totalCodigosDuplicados}):
+                              {activeZone.targetCollection === 'sim_produtos_base'
+                                ? `Itens com repetição exata [Código + Embalagem] (${totalCodigosDuplicados}):`
+                                : `Códigos com repetição identificados (${totalCodigosDuplicados}):`}
                             </span>
-                            {duplicadasEntradas.map(([codigo, count]) => (
+                            {duplicadasEntradas.map(([itemKey, count]) => (
                               <Badge
-                                key={codigo}
+                                key={itemKey}
                                 variant="outline"
                                 className="bg-white text-amber-900 border-amber-300 font-mono text-[10px] px-2 py-0.5"
                               >
-                                {codigo}{' '}
+                                {itemKey}{' '}
                                 <span className="text-amber-600 ml-1 font-sans">({count}x)</span>
                               </Badge>
                             ))}
