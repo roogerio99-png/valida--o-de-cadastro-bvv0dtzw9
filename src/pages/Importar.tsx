@@ -16,6 +16,7 @@ import {
   HelpCircle,
   XCircle,
   FileCheck2,
+  Info,
 } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import { ModalImportarBulaPdf } from '@/components/ModalImportarBulaPdf'
@@ -2199,6 +2200,32 @@ export function Importar() {
         throw new Error('Nenhum registro correspondente foi identificado para importação.')
       }
 
+      // Pré-cálculo de chaves de identificação únicas no lote para detectar duplicidades intra-planilha
+      const contagemChavesPlanilha: Record<string, number> = {}
+      validos.forEach((v) => {
+        const itemData = v.data as Record<string, unknown>
+        let chave: string | null = null
+        if (targetCol === 'sim_produtos_base') {
+          chave = (itemData.codigo as string) || (itemData.descricao as string) || null
+        } else if (targetCol === 'sim_regras_icms') {
+          chave = (itemData.chave_origem_destino as string) || null
+        } else if (targetCol === 'base_mestre') {
+          chave = (itemData.codigo as string) || (itemData.nome_comercial as string) || null
+        } else if (targetCol === 'bula_produtos') {
+          chave = (itemData.registro_mapa as string) || (itemData.nome_comercial as string) || null
+        }
+        if (chave) {
+          contagemChavesPlanilha[chave] = (contagemChavesPlanilha[chave] || 0) + 1
+        }
+      })
+
+      const duplicadasPlanilhaMap: Record<string, number> = {}
+      Object.entries(contagemChavesPlanilha).forEach(([k, count]) => {
+        if (count > 1) {
+          duplicadasPlanilhaMap[k] = count
+        }
+      })
+
       // Se houver válidos, grava no banco de dados com tratamento de rate-limit
       let resultadoLote: ResultadoImportacaoLote = {
         inseridos: 0,
@@ -2214,6 +2241,14 @@ export function Importar() {
         })
       }
 
+      // Consolidar contagem de duplicadas intra-planilha (mescla frontend pré-calculado com retorno do lote)
+      const todasDuplicadas: Record<string, number> = { ...duplicadasPlanilhaMap }
+      if (resultadoLote.duplicadasNoLote) {
+        for (const [k, v] of Object.entries(resultadoLote.duplicadasNoLote)) {
+          todasDuplicadas[k] = Math.max(todasDuplicadas[k] || 0, v)
+        }
+      }
+
       // Consolidar erros prévios de validação com erros retornados pelo PocketBase
       const todosErros = [...rejeitados, ...resultadoLote.erros]
       const categoriasConsolidadas = { ...resultadoLote.resumoCategorias }
@@ -2225,6 +2260,8 @@ export function Importar() {
         inseridos: resultadoLote.inseridos,
         atualizados: resultadoLote.atualizados ?? 0,
         ignorados: resultadoLote.ignorados,
+        espelhadosBaseMestre: resultadoLote.espelhadosBaseMestre,
+        duplicadasNoLote: todasDuplicadas,
         erros: todosErros,
         resumoCategorias: categoriasConsolidadas,
       }
@@ -2604,74 +2641,170 @@ export function Importar() {
                 </div>
 
                 {/* Cards de Métricas */}
-                <div
-                  className={`grid grid-cols-1 ${
-                    activeZone.targetCollection === 'bula_produtos' ||
-                    (importSummary.espelhadosBaseMestre !== undefined &&
-                      importSummary.espelhadosBaseMestre > 0)
-                      ? 'sm:grid-cols-4'
-                      : 'sm:grid-cols-3'
-                  } gap-3 text-xs`}
-                >
-                  <div className="p-3 rounded-xl bg-emerald-50 text-emerald-900 border border-emerald-200">
-                    <span className="block text-[11px] text-emerald-700 font-medium">
-                      Novos Inseridos
-                    </span>
-                    <strong className="text-xl font-bold text-emerald-800">
-                      {importSummary.inseridos}
-                    </strong>
-                    <span className="block text-[10px] text-emerald-600 mt-0.5">
-                      {activeZone.targetCollection === 'bula_produtos'
-                        ? 'Novos SKUs gravados (1:1 por linha)'
-                        : 'Gravados na base'}
-                    </span>
-                  </div>
-                  <div className="p-3 rounded-xl bg-blue-50 text-blue-900 border border-blue-200">
-                    <span className="block text-[11px] text-blue-700 font-medium">
-                      Atualizados / Enriquecidos
-                    </span>
-                    <strong className="text-xl font-bold text-blue-800">
-                      {importSummary.atualizados ?? 0}
-                    </strong>
-                    <span className="block text-[10px] text-blue-600 mt-0.5">
-                      {activeZone.targetCollection === 'bula_produtos'
-                        ? 'Mesmo SKU/Código reimportado'
-                        : 'Dados complementados'}
-                    </span>
-                  </div>
-                  {(activeZone.targetCollection === 'bula_produtos' ||
-                    (importSummary.espelhadosBaseMestre !== undefined &&
-                      importSummary.espelhadosBaseMestre > 0)) && (
-                    <div className="p-3 rounded-xl bg-amber-50 text-amber-950 border border-amber-300 shadow-xs">
-                      <span className="block text-[11px] text-amber-800 font-medium">
-                        Espelhados na Base Mestre
-                      </span>
-                      <strong className="text-xl font-bold text-amber-900">
-                        {importSummary.espelhadosBaseMestre ?? 0}
-                      </strong>
-                      <span className="block text-[10px] text-amber-700 mt-0.5">
-                        Espelho tributário atualizado
-                      </span>
+                {(() => {
+                  const duplicadasEntradas = Object.entries(importSummary.duplicadasNoLote || {})
+                  const totalLinhasDuplicadas = duplicadasEntradas.reduce(
+                    (acc, [, count]) => acc + (count - 1),
+                    0,
+                  )
+                  const totalCodigosDuplicados = duplicadasEntradas.length
+                  const totalAtualizadosGerais = importSummary.atualizados ?? 0
+                  // Registros atualizados que já existiam antes desta importação
+                  const atualizadosPreExistentes = Math.max(
+                    0,
+                    totalAtualizadosGerais - totalLinhasDuplicadas,
+                  )
+
+                  return (
+                    <div className="space-y-3">
+                      <div
+                        className={`grid grid-cols-1 ${
+                          totalCodigosDuplicados > 0
+                            ? 'sm:grid-cols-4'
+                            : activeZone.targetCollection === 'bula_produtos' ||
+                                (importSummary.espelhadosBaseMestre !== undefined &&
+                                  importSummary.espelhadosBaseMestre > 0)
+                              ? 'sm:grid-cols-4'
+                              : 'sm:grid-cols-3'
+                        } gap-3 text-xs`}
+                      >
+                        <div className="p-3 rounded-xl bg-emerald-50 text-emerald-900 border border-emerald-200">
+                          <span className="block text-[11px] text-emerald-700 font-medium">
+                            Novos Inseridos
+                          </span>
+                          <strong className="text-xl font-bold text-emerald-800">
+                            {importSummary.inseridos}
+                          </strong>
+                          <span className="block text-[10px] text-emerald-600 mt-0.5">
+                            {activeZone.targetCollection === 'bula_produtos'
+                              ? 'Novos SKUs gravados (1:1 por linha)'
+                              : 'Gravados na base'}
+                          </span>
+                        </div>
+
+                        {totalCodigosDuplicados > 0 ? (
+                          <>
+                            {/* Card de Duplicadas Intra-Planilha */}
+                            <div className="p-3 rounded-xl bg-amber-50 text-amber-900 border border-amber-200">
+                              <span className="block text-[11px] text-amber-700 font-medium">
+                                Duplicadas na Planilha
+                              </span>
+                              <strong className="text-xl font-bold text-amber-800">
+                                {totalLinhasDuplicadas}
+                              </strong>
+                              <span className="block text-[10px] text-amber-600 mt-0.5">
+                                {totalCodigosDuplicados}{' '}
+                                {totalCodigosDuplicados === 1
+                                  ? 'código repetido'
+                                  : 'códigos repetidos'}{' '}
+                                • prevalece última
+                              </span>
+                            </div>
+
+                            {/* Card de Atualizados Pré-Existentes */}
+                            <div className="p-3 rounded-xl bg-blue-50 text-blue-900 border border-blue-200">
+                              <span className="block text-[11px] text-blue-700 font-medium">
+                                Atualizados Pré-Existentes
+                              </span>
+                              <strong className="text-xl font-bold text-blue-800">
+                                {atualizadosPreExistentes}
+                              </strong>
+                              <span className="block text-[10px] text-blue-600 mt-0.5">
+                                Já existiam antes da importação
+                              </span>
+                            </div>
+                          </>
+                        ) : (
+                          <div className="p-3 rounded-xl bg-blue-50 text-blue-900 border border-blue-200">
+                            <span className="block text-[11px] text-blue-700 font-medium">
+                              Atualizados / Enriquecidos
+                            </span>
+                            <strong className="text-xl font-bold text-blue-800">
+                              {totalAtualizadosGerais}
+                            </strong>
+                            <span className="block text-[10px] text-blue-600 mt-0.5">
+                              {activeZone.targetCollection === 'bula_produtos'
+                                ? 'Mesmo SKU/Código reimportado'
+                                : 'Dados complementados'}
+                            </span>
+                          </div>
+                        )}
+
+                        {(activeZone.targetCollection === 'bula_produtos' ||
+                          (importSummary.espelhadosBaseMestre !== undefined &&
+                            importSummary.espelhadosBaseMestre > 0)) &&
+                          totalCodigosDuplicados === 0 && (
+                            <div className="p-3 rounded-xl bg-amber-50 text-amber-950 border border-amber-300 shadow-xs">
+                              <span className="block text-[11px] text-amber-800 font-medium">
+                                Espelhados na Base Mestre
+                              </span>
+                              <strong className="text-xl font-bold text-amber-900">
+                                {importSummary.espelhadosBaseMestre ?? 0}
+                              </strong>
+                              <span className="block text-[10px] text-amber-700 mt-0.5">
+                                Espelho tributário atualizado
+                              </span>
+                            </div>
+                          )}
+
+                        <div className="p-3 rounded-xl bg-slate-50 text-slate-900 border border-slate-200">
+                          <span className="block text-[11px] text-slate-700 font-medium">
+                            {importSummary.erros.length > 0
+                              ? 'Erros Técnicos de Infraestrutura'
+                              : 'Linhas Recusadas / Ignoradas'}
+                          </span>
+                          <strong
+                            className={`text-xl font-bold ${importSummary.erros.length > 0 ? 'text-red-800' : 'text-slate-800'}`}
+                          >
+                            {importSummary.erros.length}
+                          </strong>
+                          <span className="block text-[10px] text-slate-600 mt-0.5">
+                            {importSummary.erros.length === 0
+                              ? '0 perdas • 100% gravado'
+                              : 'Falhas de conexão ou DB'}
+                          </span>
+                        </div>
+                      </div>
+
+                      {/* Nota Explicativa e Listagem de Códigos Duplicados na Planilha */}
+                      {totalCodigosDuplicados > 0 && (
+                        <div className="p-3.5 rounded-xl bg-amber-50/70 border border-amber-200 text-xs text-amber-950 space-y-2">
+                          <div className="flex items-start gap-2">
+                            <Info className="w-4 h-4 text-amber-700 mt-0.5 flex-shrink-0" />
+                            <div>
+                              <p className="font-semibold text-amber-900">
+                                Transparência de Duplicatas na Planilha (Intra-Arquivo):
+                              </p>
+                              <p className="text-amber-800 text-[11px] mt-0.5 leading-relaxed">
+                                Código duplicado na planilha <strong>NÃO é perda</strong>. O mesmo
+                                código apareceu em mais de uma linha na planilha enviada. O sistema
+                                realizou a gravação mantendo <strong>uma única vez</strong> na base
+                                com os dados da <strong>última ocorrência</strong> (upsert
+                                idempotente). Houve <strong>0 perdas</strong> de registros.
+                              </p>
+                            </div>
+                          </div>
+
+                          <div className="pt-1.5 border-t border-amber-200/60 flex flex-wrap items-center gap-1.5">
+                            <span className="text-[11px] font-semibold text-amber-900">
+                              Códigos com repetição identificados ({totalCodigosDuplicados}):
+                            </span>
+                            {duplicadasEntradas.map(([codigo, count]) => (
+                              <Badge
+                                key={codigo}
+                                variant="outline"
+                                className="bg-white text-amber-900 border-amber-300 font-mono text-[10px] px-2 py-0.5"
+                              >
+                                {codigo}{' '}
+                                <span className="text-amber-600 ml-1 font-sans">({count}x)</span>
+                              </Badge>
+                            ))}
+                          </div>
+                        </div>
+                      )}
                     </div>
-                  )}
-                  <div className="p-3 rounded-xl bg-slate-50 text-slate-900 border border-slate-200">
-                    <span className="block text-[11px] text-slate-700 font-medium">
-                      {importSummary.erros.length > 0
-                        ? 'Erros Técnicos de Infraestrutura'
-                        : 'Linhas Recusadas / Ignoradas'}
-                    </span>
-                    <strong
-                      className={`text-xl font-bold ${importSummary.erros.length > 0 ? 'text-red-800' : 'text-slate-800'}`}
-                    >
-                      {importSummary.erros.length}
-                    </strong>
-                    <span className="block text-[10px] text-slate-600 mt-0.5">
-                      {importSummary.erros.length === 0
-                        ? '0 perdas • 100% gravado'
-                        : 'Falhas de conexão ou DB'}
-                    </span>
-                  </div>
-                </div>
+                  )
+                })()}
 
                 {/* Resumo por Categoria de Erro (Chips clicáveis) */}
                 {Object.keys(importSummary.resumoCategorias).length > 0 && (

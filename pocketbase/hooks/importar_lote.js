@@ -420,6 +420,8 @@ routerAdd('POST', '/backend/v1/importar-lote', (e) => {
     let atualizados = 0
     let ignorados = 0
     let espelhadosBaseMestre = 0
+    const codigosVistosNoLote = {}
+    const duplicadasNoLote = {}
     const erros = []
     const resumoCategorias = {}
 
@@ -2720,6 +2722,17 @@ routerAdd('POST', '/backend/v1/importar-lote', (e) => {
             }
           }
 
+          // Rastreamento de duplicidade intra-arquivo/lote por chave de negócio
+          const chaveUnicaProd = codigo || descricao
+          if (chaveUnicaProd) {
+            if (codigosVistosNoLote[chaveUnicaProd]) {
+              codigosVistosNoLote[chaveUnicaProd]++
+              duplicadasNoLote[chaveUnicaProd] = codigosVistosNoLote[chaveUnicaProd]
+            } else {
+              codigosVistosNoLote[chaveUnicaProd] = 1
+            }
+          }
+
           // Upsert por código (se houver) ou por descrição exata
           let record = null
           let isUpdate = false
@@ -3131,6 +3144,16 @@ routerAdd('POST', '/backend/v1/importar-lote', (e) => {
             }
           }
 
+          // Rastreamento de duplicidade intra-arquivo/lote por chave de negócio
+          if (chaveOrigemDestino) {
+            if (codigosVistosNoLote[chaveOrigemDestino]) {
+              codigosVistosNoLote[chaveOrigemDestino]++
+              duplicadasNoLote[chaveOrigemDestino] = codigosVistosNoLote[chaveOrigemDestino]
+            } else {
+              codigosVistosNoLote[chaveOrigemDestino] = 1
+            }
+          }
+
           // 8. Upsert por chave_origem_destino
           const escChave = chaveOrigemDestino.replace(/'/g, "\\'")
           const achados =
@@ -3208,10 +3231,17 @@ routerAdd('POST', '/backend/v1/importar-lote', (e) => {
 
     // Log detalhado de diagnóstico para observabilidade da importação em lote
     const totalDescartados = erros.length
-    console.log(
-      `[IMPORTAR_LOTE] Coleção="${collectionName}" | Total Recebidas=${records.length} | ` +
-        `Inseridas=${inseridos} | Atualizadas=${atualizados} | Descartadas=${totalDescartados}`,
-    )
+    const chavesDuplicadas = Object.keys(duplicadasNoLote)
+    let logMsg = `[IMPORTAR_LOTE] Coleção="${collectionName}" | Total Recebidas=${records.length} | Inseridas=${inseridos} | Atualizadas=${atualizados} | Descartadas=${totalDescartados}`
+    if (chavesDuplicadas.length > 0) {
+      const listaFormatada = chavesDuplicadas
+        .map((k) => `${k} (${duplicadasNoLote[k]}x)`)
+        .slice(0, 15)
+        .join(', ')
+      logMsg += ` | Duplicadas na planilha/lote: ${listaFormatada}`
+    }
+    console.log(logMsg)
+
     if (totalDescartados > 0) {
       console.log(
         `[IMPORTAR_LOTE] Motivos de descarte (${collectionName}): ` +
@@ -3234,6 +3264,7 @@ routerAdd('POST', '/backend/v1/importar-lote', (e) => {
       atualizados: atualizados,
       ignorados: ignorados,
       espelhadosBaseMestre: espelhadosBaseMestre,
+      duplicadasNoLote: duplicadasNoLote,
       erros: erros,
       resumoCategorias: resumoCategorias,
     })

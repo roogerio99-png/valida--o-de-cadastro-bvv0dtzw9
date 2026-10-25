@@ -450,6 +450,7 @@ export interface ResultadoImportacaoLote {
   atualizados?: number
   ignorados: number
   espelhadosBaseMestre?: number
+  duplicadasNoLote?: Record<string, number>
   erros: ItemErroImportacao[]
   resumoCategorias: Record<string, number>
 }
@@ -582,6 +583,7 @@ export async function importarEmLote<T extends Record<string, unknown>>(
   let atualizados = 0
   let ignorados = 0
   let espelhadosBaseMestre = 0
+  let resultadoLoteDuplicadas: Record<string, number> | undefined
   const erros: ItemErroImportacao[] = []
   const resumoCategorias: Record<string, number> = {}
   const total = records.length
@@ -618,6 +620,7 @@ export async function importarEmLote<T extends Record<string, unknown>>(
       atualizados: number
       ignorados: number
       espelhadosBaseMestre?: number
+      duplicadasNoLote?: Record<string, number>
       erros: ItemErroImportacao[]
       resumoCategorias: Record<string, number>
       error?: string
@@ -699,6 +702,16 @@ export async function importarEmLote<T extends Record<string, unknown>>(
       ignorados += respostaChunk.ignorados || 0
       espelhadosBaseMestre += respostaChunk.espelhadosBaseMestre || 0
 
+      if (respostaChunk.duplicadasNoLote) {
+        // Acumular contagem de duplicadas retornadas pelo backend se houver
+        if (!resultadoLoteDuplicadas) {
+          resultadoLoteDuplicadas = {}
+        }
+        for (const [k, v] of Object.entries(respostaChunk.duplicadasNoLote)) {
+          resultadoLoteDuplicadas[k] = (resultadoLoteDuplicadas[k] || 0) + v
+        }
+      }
+
       if (Array.isArray(respostaChunk.erros)) {
         respostaChunk.erros.forEach((err) => {
           erros.push(err)
@@ -714,7 +727,15 @@ export async function importarEmLote<T extends Record<string, unknown>>(
     }
   }
 
-  return { inseridos, atualizados, ignorados, espelhadosBaseMestre, erros, resumoCategorias }
+  return {
+    inseridos,
+    atualizados,
+    ignorados,
+    espelhadosBaseMestre,
+    duplicadasNoLote: resultadoLoteDuplicadas,
+    erros,
+    resumoCategorias,
+  }
 }
 
 // -----------------------------------------------------------------------------
