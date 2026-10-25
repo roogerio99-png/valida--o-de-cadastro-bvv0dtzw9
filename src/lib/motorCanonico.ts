@@ -245,6 +245,265 @@ export function deduzirUnidade(
   return 'L'
 }
 
+export interface AnaliseFaixaTipiResultado {
+  possui_faixas: boolean
+  compativel: boolean
+  ncm_esperada: string
+  ncm_analisada: string
+  faixa_aplicavel_nome: string
+  faixa_aplicavel_codigo: 'f1' | 'f2' | 'f3' | 'f4' | 'padrao'
+  quantidade_analisada: number
+  unidade_analisada: string
+  alerta?: string
+  detalhe_regra: string
+}
+
+export interface ParametrosAnaliseFaixaTipi {
+  ncm?: string
+  quantidade?: number
+  unidade?: string
+  embalagem?: string
+  principio_ativo?: string
+  nome_produto?: string
+  nota_subpos_2?: string | boolean
+  tipo_produto?: string
+  ncm_faixa1_ate_300g?: string
+  ncm_faixa2_300g_a_7_5kg?: string
+  ncm_faixa3_7_5kg_a_10kg?: string
+  ncm_faixa4_acima_10kg?: string
+}
+
+/**
+ * Analisa permanentemente a compatibilidade entre a NCM informada/analisada
+ * e a quantidade da embalagem segundo as faixas de enquadramento da TIPI.
+ * Regra de Sistema Obrigatória:
+ * "SEMPRE TEM QUE ANALISAR A FAIXA DE ENQUADRAMENTO DA TIPI PARA VER SE A NCM É COMPATIVEL COM A QUANTIDADE DA EMBALAGEM"
+ */
+export function analisarCompatibilidadeFaixaTipi(
+  params: ParametrosAnaliseFaixaTipi,
+): AnaliseFaixaTipiResultado {
+  const {
+    ncm,
+    quantidade,
+    unidade,
+    embalagem,
+    principio_ativo,
+    nome_produto,
+    nota_subpos_2,
+    tipo_produto,
+    ncm_faixa1_ate_300g,
+    ncm_faixa2_300g_a_7_5kg,
+    ncm_faixa3_7_5kg_a_10kg,
+    ncm_faixa4_acima_10kg,
+  } = params
+
+  let qtd = typeof quantidade === 'number' && !isNaN(quantidade) && quantidade > 0 ? quantidade : 0
+  let un = (unidade || '').trim().toUpperCase()
+
+  // Se quantidade não veio diretamente, tenta extrair da embalagem
+  if (qtd <= 0 && embalagem) {
+    const parse = parsearEmbalagemComercial(embalagem)
+    qtd = parse.quantidade
+    if (!un) un = parse.unidade
+  }
+  if (!un) un = 'L'
+
+  const ncmAtualLimpa = (ncm || '').replace(/\D/g, '')
+  const ncmAtualMascara = formatarNcmMascara(ncmAtualLimpa)
+
+  // Verifica se é Nota de Subposições 2 (Bifentrina, etc.)
+  const isNota2 =
+    nota_subpos_2 === 'SIM' ||
+    nota_subpos_2 === true ||
+    verificarNotaSubpos2(principio_ativo, nome_produto)
+
+  const isFertilizante =
+    tipo_produto === 'Fertilizante Mineral / Organomineral' ||
+    (tipo_produto && tipo_produto.toLowerCase().includes('fertilizante'))
+
+  // Faixas cadastradas explícitas
+  const temFaixasCustomizadas = Boolean(
+    ncm_faixa1_ate_300g &&
+    ncm_faixa2_300g_a_7_5kg &&
+    (ncm_faixa1_ate_300g !== ncm_faixa2_300g_a_7_5kg ||
+      ncm_faixa2_300g_a_7_5kg !== (ncm_faixa4_acima_10kg || ncm_faixa3_7_5kg_a_10kg)),
+  )
+
+  const possuiFaixas = isNota2 || Boolean(isFertilizante) || temFaixasCustomizadas
+
+  if (!possuiFaixas) {
+    return {
+      possui_faixas: false,
+      compativel: true,
+      ncm_esperada: ncmAtualMascara,
+      ncm_analisada: ncmAtualMascara,
+      faixa_aplicavel_nome: 'Produto sem faixas escalonadas na TIPI',
+      faixa_aplicavel_codigo: 'padrao',
+      quantidade_analisada: qtd,
+      unidade_analisada: un,
+      detalhe_regra: 'Produto com NCM homogênea invariável por quantidade de embalagem.',
+    }
+  }
+
+  // Se possui faixas mas a quantidade não foi informada ou é zero
+  if (qtd <= 0) {
+    const ncmEsperadaFallback = isNota2
+      ? formatarNcmMascara(ncm_faixa2_300g_a_7_5kg || '3808.62.90')
+      : isFertilizante
+        ? '3105.10.00'
+        : formatarNcmMascara(ncm_faixa1_ate_300g || ncmAtualMascara)
+
+    return {
+      possui_faixas: true,
+      compativel: false,
+      ncm_esperada: ncmEsperadaFallback,
+      ncm_analisada: ncmAtualMascara,
+      faixa_aplicavel_nome: 'Quantidade da embalagem não informada',
+      faixa_aplicavel_codigo: 'padrao',
+      quantidade_analisada: 0,
+      unidade_analisada: un,
+      alerta:
+        'A quantidade da embalagem é obrigatória para determinar o enquadramento de NCM por faixa da TIPI.',
+      detalhe_regra:
+        'A TIPI escalona a NCM pela quantidade da embalagem. É imprescindível informar a quantidade.',
+    }
+  }
+
+  // CASO A: NOTA DE SUBPOSIÇÕES 2 (Cap. 38 TIPI - ex: BIFENTRINA / COFENRIN)
+  if (isNota2) {
+    const f1 = formatarNcmMascara(ncm_faixa1_ate_300g || '3808.61.00')
+    const f2 = formatarNcmMascara(ncm_faixa2_300g_a_7_5kg || '3808.62.90')
+    const f3 = formatarNcmMascara(ncm_faixa3_7_5kg_a_10kg || '3808.69.90')
+    const f4 = formatarNcmMascara(ncm_faixa4_acima_10kg || f3)
+
+    let ncmEsperada = ''
+    let faixaNome = ''
+    let faixaCodigo: 'f1' | 'f2' | 'f3' | 'f4' = 'f2'
+
+    // Limites da Nota 2:
+    // - Até 0,3 kg (300 g) -> 3808.61.00
+    // - Acima de 0,3 kg até 7,5 kg -> 3808.62.90
+    // - Acima de 7,5 kg -> 3808.69.90
+    if (qtd <= 0.3) {
+      ncmEsperada = f1
+      faixaNome = 'Até 300 g / 300 mL (≤ 0,3 kg)'
+      faixaCodigo = 'f1'
+    } else if (qtd <= 7.5) {
+      ncmEsperada = f2
+      faixaNome = 'Acima de 300 g até 7,5 kg / L'
+      faixaCodigo = 'f2'
+    } else if (qtd <= 10) {
+      ncmEsperada = f3
+      faixaNome = 'Acima de 7,5 kg até 10 kg / L'
+      faixaCodigo = 'f3'
+    } else {
+      ncmEsperada = f4
+      faixaNome = 'Acima de 10 kg / L'
+      faixaCodigo = 'f4'
+    }
+
+    const compativel =
+      ncmAtualLimpa.length === 8 && ncmAtualLimpa === ncmEsperada.replace(/\D/g, '')
+
+    const alerta = compativel
+      ? undefined
+      : `NCM ${ncmAtualMascara || 'não informada'} incompatível com embalagem de ${qtd} ${un} — faixa aplicável: ${faixaNome} → ${ncmEsperada}`
+
+    return {
+      possui_faixas: true,
+      compativel,
+      ncm_esperada: ncmEsperada,
+      ncm_analisada: ncmAtualMascara,
+      faixa_aplicavel_nome: faixaNome,
+      faixa_aplicavel_codigo: faixaCodigo,
+      quantidade_analisada: qtd,
+      unidade_analisada: un,
+      alerta,
+      detalhe_regra:
+        'Nota de Subposições 2 do Cap. 38 TIPI: enquadramento obrigatório pela quantidade da embalagem unitária.',
+    }
+  }
+
+  // CASO B: FERTILIZANTES (Cap. 31 TIPI: Nota 1 - até 10 kg bruta -> 3105.10.00)
+  if (isFertilizante) {
+    const fAte10 = '3105.10.00'
+    const fAcima10 = formatarNcmMascara(ncm_faixa4_acima_10kg || '3105.90.90')
+
+    const ate10kg = qtd <= 10 && un === 'KG'
+    const ncmEsperada = ate10kg ? fAte10 : fAcima10
+    const faixaNome = ate10kg ? 'Embalagem bruta até 10 kg' : 'Embalagem acima de 10 kg'
+    const faixaCodigo = ate10kg ? 'f1' : 'f4'
+
+    const compativel =
+      ncmAtualLimpa.length === 8 && ncmAtualLimpa === ncmEsperada.replace(/\D/g, '')
+
+    const alerta = compativel
+      ? undefined
+      : `NCM ${ncmAtualMascara || 'não informada'} incompatível com embalagem de ${qtd} ${un} — faixa aplicável: ${faixaNome} → ${ncmEsperada}`
+
+    return {
+      possui_faixas: true,
+      compativel,
+      ncm_esperada: ncmEsperada,
+      ncm_analisada: ncmAtualMascara,
+      faixa_aplicavel_nome: faixaNome,
+      faixa_aplicavel_codigo: faixaCodigo,
+      quantidade_analisada: qtd,
+      unidade_analisada: un,
+      alerta,
+      detalhe_regra:
+        'Nota 1 do Cap. 31 TIPI: fertilizantes em embalagens unitárias de peso bruto até 10 kg classificam-se obrigatoriamente na posição 3105.10.00.',
+    }
+  }
+
+  // CASO C: OUTRAS FAIXAS CUSTOMIZADAS
+  const f1 = formatarNcmMascara(ncm_faixa1_ate_300g || '')
+  const f2 = formatarNcmMascara(ncm_faixa2_300g_a_7_5kg || f1)
+  const f3 = formatarNcmMascara(ncm_faixa3_7_5kg_a_10kg || f2)
+  const f4 = formatarNcmMascara(ncm_faixa4_acima_10kg || f3)
+
+  let ncmEsperada = f2
+  let faixaNome = 'Faixa Intermediária'
+  let faixaCodigo: 'f1' | 'f2' | 'f3' | 'f4' = 'f2'
+
+  if (qtd <= 0.3 && f1) {
+    ncmEsperada = f1
+    faixaNome = 'Faixa 1 (≤ 300 g/mL)'
+    faixaCodigo = 'f1'
+  } else if (qtd <= 7.5 && f2) {
+    ncmEsperada = f2
+    faixaNome = 'Faixa 2 (300 g a 7,5 kg/L)'
+    faixaCodigo = 'f2'
+  } else if (qtd <= 10 && f3) {
+    ncmEsperada = f3
+    faixaNome = 'Faixa 3 (7,5 kg a 10 kg/L)'
+    faixaCodigo = 'f3'
+  } else if (f4) {
+    ncmEsperada = f4
+    faixaNome = 'Faixa 4 (> 10 kg/L)'
+    faixaCodigo = 'f4'
+  }
+
+  const compativel = ncmAtualLimpa.length === 8 && ncmAtualLimpa === ncmEsperada.replace(/\D/g, '')
+
+  const alerta = compativel
+    ? undefined
+    : `NCM ${ncmAtualMascara || 'não informada'} incompatível com embalagem de ${qtd} ${un} — faixa aplicável: ${faixaNome} → ${ncmEsperada}`
+
+  return {
+    possui_faixas: true,
+    compativel,
+    ncm_esperada: ncmEsperada,
+    ncm_analisada: ncmAtualMascara,
+    faixa_aplicavel_nome: faixaNome,
+    faixa_aplicavel_codigo: faixaCodigo,
+    quantidade_analisada: qtd,
+    unidade_analisada: un,
+    alerta,
+    detalhe_regra: 'Faixa cadastrada de enquadramento da TIPI.',
+  }
+}
+
 export interface MotorInput {
   nome_completo?: string
   nome_produto?: string
@@ -270,6 +529,11 @@ export interface MotorInput {
   ncm_padrao?: string
   ncm?: string
   url_oficial?: string
+  nota_subpos_2?: string | boolean
+  ncm_faixa1_ate_300g?: string
+  ncm_faixa2_300g_a_7_5kg?: string
+  ncm_faixa3_7_5kg_a_10kg?: string
+  ncm_faixa4_acima_10kg?: string
 }
 
 export function executarMotorCanonicoFrontend(
@@ -802,6 +1066,13 @@ export function executarMotorCanonicoFrontend(
 
   // 3.1 Resolução da NCM ESPECÍFICA para a Embalagem Comercial do cadastro
   const embParse = parsearEmbalagemComercial(input.embalagem)
+  const qtdInformada =
+    typeof input.quantidade_embalagem_principal === 'number' &&
+    input.quantidade_embalagem_principal > 0
+      ? input.quantidade_embalagem_principal
+      : embParse.quantidade
+  const unidadeInformada = input.unidade_medida_principal || embParse.unidade
+
   let ncmEspecifica = ncmPadrao
 
   // Regra crítica do ROUNDUP WG (MAPA 002094): NCM 3808.93.24 (uso agrícola)
@@ -811,24 +1082,28 @@ export function executarMotorCanonicoFrontend(
     nomeUpper === 'ROUNDUP WG'
   ) {
     ncmEspecifica = '3808.93.24'
-  } else if (pertenceNotaSubpos2) {
-    // Escalonamento por capacidade da embalagem principal
-    const qtdKgs = embParse.unidade === 'KG' ? embParse.quantidade : embParse.quantidade // L ~ KG aprox. para defensivos líquidos
-    if (qtdKgs <= 0.3) {
-      ncmEspecifica = ncmFaixa1 // 3808.61.00
-    } else if (qtdKgs <= 7.5) {
-      ncmEspecifica = ncmFaixa2 // 3808.62.90
-    } else {
-      ncmEspecifica = ncmFaixa4 // 3808.69.90
-    }
-  } else if (tipoProduto === 'Fertilizante Mineral / Organomineral') {
-    if (embParse.quantidade <= 10 && embParse.unidade === 'KG') {
-      ncmEspecifica = '3105.10.00'
+  } else {
+    // Análise e resolução obrigatória de NCM por Faixas da TIPI pela quantidade da embalagem
+    const analiseFaixa = analisarCompatibilidadeFaixaTipi({
+      ncm: ncmPadrao,
+      quantidade: qtdInformada,
+      unidade: unidadeInformada,
+      embalagem: input.embalagem,
+      principio_ativo: principioAtivoBruto,
+      nome_produto: nomeCompleto,
+      nota_subpos_2: pertenceNotaSubpos2 || input.nota_subpos_2,
+      tipo_produto: tipoProduto,
+      ncm_faixa1_ate_300g: input.ncm_faixa1_ate_300g || ncmFaixa1,
+      ncm_faixa2_300g_a_7_5kg: input.ncm_faixa2_300g_a_7_5kg || ncmFaixa2,
+      ncm_faixa3_7_5kg_a_10kg: input.ncm_faixa3_7_5kg_a_10kg || ncmFaixa3,
+      ncm_faixa4_acima_10kg: input.ncm_faixa4_acima_10kg || ncmFaixa4,
+    })
+
+    if (analiseFaixa.possui_faixas && analiseFaixa.ncm_esperada) {
+      ncmEspecifica = analiseFaixa.ncm_esperada
     } else {
       ncmEspecifica = ncmPadrao
     }
-  } else {
-    ncmEspecifica = ncmPadrao
   }
 
   ncmEspecifica = formatarNcmMascara(ncmEspecifica)

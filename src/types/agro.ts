@@ -426,6 +426,16 @@ export interface ValidarCadastroInput {
   auto_cadastrar?: boolean
 }
 
+export interface AnaliseFaixaTipiValidacao {
+  possui_faixas: boolean
+  compativel: boolean
+  alerta?: string | null
+  ncm_esperada?: string
+  faixa_aplicavel_nome?: string
+  quantidade_analisada?: number
+  unidade_analisada?: string
+}
+
 export interface RespostaValidacaoCadastro {
   veredito_geral: 'APROVADO' | 'APROVADO COM RESSALVAS' | 'REPROVADO'
   status: 'APROVADO' | 'REPROVADO'
@@ -437,6 +447,7 @@ export interface RespostaValidacaoCadastro {
   campos_validacao: CampoValidadoResultado[]
   possui_diferenca_ncm_embalagem: boolean
   linhas_ncm_embalagem: LinhaNcmEmbalagem[]
+  analise_faixa_tipi?: AnaliseFaixaTipiValidacao
   travas: TravaResultado[]
   comparacao_existente?: ComparacaoExistenteResultado | null
   fontes_consultadas: FonteConsultada[]

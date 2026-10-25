@@ -56,6 +56,7 @@ import {
   executarMotorCanonicoFrontend,
   formatarNcmMascara,
   sanitizarRegistroMapa,
+  analisarCompatibilidadeFaixaTipi,
 } from '@/lib/motorCanonico'
 import { PainelEnquadramentoTributario } from '@/components/PainelEnquadramentoTributario'
 import { determinarEnquadramentoTributario } from '@/lib/enquadramentoTributario'

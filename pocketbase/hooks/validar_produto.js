@@ -1277,24 +1277,162 @@ Consulte a base pública oficial do AGROFIT e a BULA oficial registrada no MAPA 
       mensagem: trava2Msg,
     })
 
-    // Linha de NCM por Embalagem resolvida da Base Mestre
-    const linhasNcmEmbalagem = [
-      {
-        faixa_id: 1,
-        faixa_nome: `${acondicionamentoFinal} ${qtdEmbalagemFinal} ${unidadeFinal}`,
-        faixa_rotulo: `${qtdEmbalagemFinal} ${unidadeFinal} (${acondicionamentoFinal})`,
-        exemplo_embalagem: embalagemFinal,
-        ncm_correta: ncmResolvidaBaseMestre || 'Sem NCM na Base Mestre',
-        ncm_informada_se_aplica: Boolean(ncmResolvidaBaseMestre),
-        status_aplicacao: ncmResolvidaBaseMestre
-          ? 'NCM RESOLVIDA DA BASE MESTRE'
-          : 'SEM CLASSIFICAÇÃO NA BASE MESTRE',
-        observacao: ncmResolvidaBaseMestre
-          ? `Classificação fiscal oficial resolvida da Base Mestre para ${acondicionamentoFinal} ${qtdEmbalagemFinal} ${unidadeFinal}.`
-          : 'Produto sem classificação tributária na Base Mestre.',
-      },
-    ]
-    const possuiDiferencaNcmPorEmbalagem = false
+    // -------------------------------------------------------------------------
+    // ANÁLISE PERMANENTE DA FAIXA DE ENQUADRAMENTO TIPI CONTRA A QUANTIDADE
+    // Regra permanente do sistema: sempre analisar a faixa de enquadramento da TIPI
+    // para ver se a NCM informada/analisada é compatível com a quantidade da embalagem.
+    // -------------------------------------------------------------------------
+    const ncmFaixa1Bm =
+      cadastroEmbalagemBaseMestre?.getString('ncm_faixa1_ate_300g') ||
+      motorCanonico.ncm_faixa1_ate_300g ||
+      ''
+    const ncmFaixa2Bm =
+      cadastroEmbalagemBaseMestre?.getString('ncm_faixa2_300g_a_7_5kg') ||
+      motorCanonico.ncm_faixa2_300g_a_7_5kg ||
+      ''
+    const ncmFaixa3Bm =
+      cadastroEmbalagemBaseMestre?.getString('ncm_faixa3_7_5kg_a_10kg') ||
+      motorCanonico.ncm_faixa3_7_5kg_a_10kg ||
+      ''
+    const ncmFaixa4Bm =
+      cadastroEmbalagemBaseMestre?.getString('ncm_faixa4_acima_10kg') ||
+      motorCanonico.ncm_faixa4_acima_10kg ||
+      ''
+    const notaSubpos2Bm =
+      cadastroEmbalagemBaseMestre?.getString('nota_subpos_2') || motorCanonico.nota_subpos_2
+
+    const isNota2Cap38 =
+      notaSubpos2Bm === 'SIM' ||
+      motor.verificarNotaSubpos2(principioAtivoFinal, nomeComercial) ||
+      motor.verificarNotaSubpos2(
+        cadastroEmbalagemBaseMestre?.getString('principio_ativo'),
+        cadastroEmbalagemBaseMestre?.getString('nome_completo'),
+      )
+
+    const temFaixasCadastradas = Boolean(
+      isNota2Cap38 ||
+      (ncmFaixa1Bm &&
+        ncmFaixa2Bm &&
+        (ncmFaixa1Bm !== ncmFaixa2Bm || ncmFaixa2Bm !== (ncmFaixa4Bm || ncmFaixa3Bm))),
+    )
+
+    let ncmEsperadaPelaFaixa = ncmResolvidaBaseMestre
+    let faixaNomeIdentificada = 'Faixa Geral'
+    let alertaFaixaIncompativel = null
+    let faixaCompativelComQtd = true
+
+    if (temFaixasCadastradas) {
+      const qNum = qtdEmbalagemFinal || 0
+      if (qNum <= 0) {
+        faixaCompativelComQtd = false
+        alertaFaixaIncompativel =
+          'Quantidade da embalagem não informada para o produto com faixas da TIPI.'
+      } else if (isNota2Cap38) {
+        const f1 = ncmFaixa1Bm || '3808.61.00'
+        const f2 = ncmFaixa2Bm || '3808.62.90'
+        const f4 = ncmFaixa4Bm || ncmFaixa3Bm || '3808.69.90'
+        if (qNum <= 0.3) {
+          ncmEsperadaPelaFaixa = f1
+          faixaNomeIdentificada = 'Até 300 g / 300 mL (≤ 0,3 kg)'
+        } else if (qNum <= 7.5) {
+          ncmEsperadaPelaFaixa = f2
+          faixaNomeIdentificada = 'Acima de 300 g até 7,5 kg / L'
+        } else {
+          ncmEsperadaPelaFaixa = f4
+          faixaNomeIdentificada = 'Acima de 7,5 kg / L'
+        }
+      } else {
+        if (qNum <= 0.3 && ncmFaixa1Bm) {
+          ncmEsperadaPelaFaixa = ncmFaixa1Bm
+          faixaNomeIdentificada = 'Até 300 g (≤ 0,3 kg)'
+        } else if (qNum <= 7.5 && ncmFaixa2Bm) {
+          ncmEsperadaPelaFaixa = ncmFaixa2Bm
+          faixaNomeIdentificada = 'Acima de 300 g até 7,5 kg / L'
+        } else if (ncmFaixa4Bm || ncmFaixa3Bm) {
+          ncmEsperadaPelaFaixa = ncmFaixa4Bm || ncmFaixa3Bm
+          faixaNomeIdentificada = 'Acima de 7,5 kg / L'
+        }
+      }
+
+      // Validar se o NCM informado pelo usuário (se preenchido) é compatível com a faixa
+      const ncmUserLimpa = String(data.ncm || '').replace(/\D/g, '')
+      const ncmEsperadaLimpa = ncmEsperadaPelaFaixa.replace(/\D/g, '')
+      if (ncmUserLimpa && ncmUserLimpa.length === 8 && ncmUserLimpa !== ncmEsperadaLimpa) {
+        faixaCompativelComQtd = false
+        const ncmUserFmt = motor.formatarNcmMascara(ncmUserLimpa)
+        alertaFaixaIncompativel = `NCM ${ncmUserFmt} incompatível com embalagem de ${qtdEmbalagemFinal} ${unidadeFinal} — faixa aplicável: ${faixaNomeIdentificada} → ${ncmEsperadaPelaFaixa}`
+      }
+    }
+
+    // Linhas de NCM por Embalagem resolvidas da Base Mestre e TIPI
+    let linhasNcmEmbalagem = []
+    let possuiDiferencaNcmPorEmbalagem = false
+
+    if (temFaixasCadastradas) {
+      possuiDiferencaNcmPorEmbalagem = true
+      const f1 = ncmFaixa1Bm || (isNota2Cap38 ? '3808.61.00' : ncmResolvidaBaseMestre)
+      const f2 = ncmFaixa2Bm || (isNota2Cap38 ? '3808.62.90' : ncmResolvidaBaseMestre)
+      const f4 =
+        ncmFaixa4Bm || ncmFaixa3Bm || (isNota2Cap38 ? '3808.69.90' : ncmResolvidaBaseMestre)
+
+      linhasNcmEmbalagem = [
+        {
+          faixa_id: 1,
+          faixa_nome: 'Faixa 1: Embalagens até 300 g / 300 mL (≤ 0,3 kg)',
+          faixa_rotulo: '≤ 300 g (Frascos / Sachês)',
+          exemplo_embalagem: 'Frasco 250 mL / Sachê 100 g',
+          ncm_correta: f1,
+          ncm_informada_se_aplica: qtdEmbalagemFinal <= 0.3,
+          status_aplicacao:
+            qtdEmbalagemFinal <= 0.3 ? 'FAIXA APLICÁVEL' : 'OUTRO ENQUADRAMENTO TIPI',
+          observacao:
+            'Subposição específica TIPI para apresentação em embalagens de peso líquido ≤ 300 g.',
+        },
+        {
+          faixa_id: 2,
+          faixa_nome: 'Faixa 2: Embalagens acima de 300 g até 7,5 kg / L',
+          faixa_rotulo: '> 300 g e ≤ 7,5 kg (Frascos / Galões)',
+          exemplo_embalagem: 'Frasco 1 L / Galão 5 L',
+          ncm_correta: f2,
+          ncm_informada_se_aplica: qtdEmbalagemFinal > 0.3 && qtdEmbalagemFinal <= 7.5,
+          status_aplicacao:
+            qtdEmbalagemFinal > 0.3 && qtdEmbalagemFinal <= 7.5
+              ? 'FAIXA APLICÁVEL'
+              : 'OUTRO ENQUADRAMENTO TIPI',
+          observacao:
+            'Subposição específica TIPI para embalagens comerciais intermediárias (até 7,5 kg/L).',
+        },
+        {
+          faixa_id: 3,
+          faixa_nome: 'Faixa 3: Embalagens acima de 7,5 kg / L',
+          faixa_rotulo: '> 7,5 kg (Bombonas / Tambores / IBC)',
+          exemplo_embalagem: 'Bombona 20 L / Tambor 200 L',
+          ncm_correta: f4,
+          ncm_informada_se_aplica: qtdEmbalagemFinal > 7.5,
+          status_aplicacao:
+            qtdEmbalagemFinal > 7.5 ? 'FAIXA APLICÁVEL' : 'OUTRO ENQUADRAMENTO TIPI',
+          observacao:
+            'Subposição residual TIPI para embalagens agrícolas de grande porte (> 7,5 kg/L).',
+        },
+      ]
+    } else {
+      linhasNcmEmbalagem = [
+        {
+          faixa_id: 1,
+          faixa_nome: `${acondicionamentoFinal} ${qtdEmbalagemFinal} ${unidadeFinal}`,
+          faixa_rotulo: `${qtdEmbalagemFinal} ${unidadeFinal} (${acondicionamentoFinal})`,
+          exemplo_embalagem: embalagemFinal,
+          ncm_correta: ncmResolvidaBaseMestre || 'Sem NCM na Base Mestre',
+          ncm_informada_se_aplica: Boolean(ncmResolvidaBaseMestre),
+          status_aplicacao: ncmResolvidaBaseMestre
+            ? 'NCM RESOLVIDA DA BASE MESTRE'
+            : 'SEM CLASSIFICAÇÃO NA BASE MESTRE',
+          observacao: ncmResolvidaBaseMestre
+            ? `Classificação fiscal oficial resolvida da Base Mestre para ${acondicionamentoFinal} ${qtdEmbalagemFinal} ${unidadeFinal}.`
+            : 'Produto sem classificação tributária na Base Mestre.',
+        },
+      ]
+    }
 
     // Trava 3: Princípio Ativo na Matriz
     const trava3Passou = Boolean(
@@ -1754,6 +1892,15 @@ Consulte a base pública oficial do AGROFIT e a BULA oficial registrada no MAPA 
       campos_validacao: camposValidacao,
       possui_diferenca_ncm_embalagem: possuiDiferencaNcmPorEmbalagem,
       linhas_ncm_embalagem: linhasNcmEmbalagem,
+      analise_faixa_tipi: {
+        possui_faixas: temFaixasCadastradas,
+        compativel: faixaCompativelComQtd,
+        alerta: alertaFaixaIncompativel,
+        ncm_esperada: ncmEsperadaPelaFaixa,
+        faixa_aplicavel_nome: faixaNomeIdentificada,
+        quantidade_analisada: qtdEmbalagemFinal,
+        unidade_analisada: unidadeFinal,
+      },
       travas: travas,
       comparacao_existente: comparacaoExistente,
       fontes_consultadas: fontesConsultadas,

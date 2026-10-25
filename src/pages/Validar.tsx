@@ -1524,6 +1524,42 @@ export function Validar() {
                 </ScrollableTable>
               </Card>
 
+              {/* ALERTA DE INCOMPATIBILIDADE NCM X FAIXA TIPI */}
+              {resultado.analise_faixa_tipi?.possui_faixas &&
+                !resultado.analise_faixa_tipi?.compativel &&
+                resultado.analise_faixa_tipi?.alerta && (
+                  <Card className="rounded-2xl border-amber-300 bg-amber-50 p-4 shadow-sm">
+                    <div className="flex items-start gap-3">
+                      <div className="w-8 h-8 rounded-lg bg-amber-600 text-white flex items-center justify-center shrink-0">
+                        <AlertTriangle className="w-5 h-5" />
+                      </div>
+                      <div className="flex-1">
+                        <div className="flex items-center gap-2">
+                          <h4 className="text-sm font-bold text-amber-900">
+                            Incompatibilidade NCM × Faixa de Embalagem (TIPI)
+                          </h4>
+                          <Badge className="bg-amber-200 text-amber-900 border-amber-300 text-[10px] font-bold">
+                            Regra Permanente TIPI
+                          </Badge>
+                        </div>
+                        <p className="text-xs text-amber-800 mt-1 font-medium">
+                          {resultado.analise_faixa_tipi.alerta}
+                        </p>
+                        <div className="mt-2.5 flex flex-wrap items-center gap-2 text-xs">
+                          <span className="text-amber-800">Faixa aplicável identificada:</span>
+                          <span className="font-bold text-amber-950">
+                            {resultado.analise_faixa_tipi.faixa_aplicavel_nome}
+                          </span>
+                          <span className="text-amber-800">→ NCM esperada:</span>
+                          <span className="font-mono font-bold text-amber-950 bg-amber-200/80 px-2 py-0.5 rounded">
+                            {resultado.analise_faixa_tipi.ncm_esperada}
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+                  </Card>
+                )}
+
               {/* ENQUADRAMENTO TIPI POR FAIXA DE EMBALAGEM */}
               {resultado.linhas_ncm_embalagem && resultado.linhas_ncm_embalagem.length > 0 && (
                 <Card className="rounded-2xl border-[#DCE5DC] bg-white shadow-sm overflow-hidden">
