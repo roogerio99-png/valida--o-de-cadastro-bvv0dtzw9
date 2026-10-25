@@ -1150,7 +1150,7 @@ export async function obterRegraIcmsSimulador(
     if (grTribLimpo) {
       const escGr = grTribLimpo.replace(/'/g, "\\'")
       const resExata = await pb.collection('sim_regras_icms').getList<SimRegraIcmsItem>(1, 1, {
-        filter: `chave_origem_destino = '${chave}' && grupo_tributario_codigo = '${escGr}'`,
+        filter: `uf_origem = '${ufOrigem.toUpperCase()}' && uf_destino = '${ufDestino.toUpperCase()}' && grupo_tributario_codigo = '${escGr}'`,
         sort: '-created',
       })
       if (resExata.items.length > 0) {
@@ -1160,7 +1160,7 @@ export async function obterRegraIcmsSimulador(
 
     // 2. Fallback: regra do par de UFs sem filtro de grupo ou quando produto não tem gr_trib
     const resUf = await pb.collection('sim_regras_icms').getList<SimRegraIcmsItem>(1, 1, {
-      filter: `chave_origem_destino = '${chave}'`,
+      filter: `uf_origem = '${ufOrigem.toUpperCase()}' && uf_destino = '${ufDestino.toUpperCase()}'`,
       sort: '-created',
     })
     if (resUf.items.length > 0) {

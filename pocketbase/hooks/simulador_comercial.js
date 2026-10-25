@@ -6,10 +6,13 @@
  *
  * Executa a regra de negócio comercial e fiscal no servidor com:
  * 1. Resolução do produto em sim_produtos_base ou base_mestre (caso informado código/nome)
- * 2. Consulta automática da regra de ICMS na coleção sim_regras_icms por chave_origem_destino (UF_ORIGEM + '_' + UF_DESTINO)
- * 3. Consulta da parametrização fiscal (parametrizacao_fiscal) da NCM do produto
- * 4. Aplicação estrita da conversão cambial por PTAX manual para produtos em moeda USD / importados
- * 5. Retorno estruturado do relatório de tributos, composição de custos e memória de cálculo
+ * 2. Embalagens e volume total da simulação
+ * 3. Modalidade de frete CIF vs FOB
+ * 4. Consulta de regra de ICMS por UF_ORIGEM e UF_DESTINO com prioridade para gr_trib
+ * 5. Dedução de ICMS detalhado (débito, diferimento, desonerado, créditos)
+ * 6. PIS/COFINS com base de cálculo com exclusão do ICMS (Tema 69 STF)
+ * 7. IBS/CBS com redução de 60% para insumos agrícolas
+ * 8. DRE / Cascata de preço (faturamento, receita líquida, CMV, comissão, juros, margem de contribuição)
  */
 
 routerAdd('POST', '/backend/v1/simulador/calcular', (e) => {
@@ -38,10 +41,17 @@ routerAdd('POST', '/backend/v1/simulador/calcular', (e) => {
     const quantidade = Number(body.quantidade) || 0
     const precoUnitario = Number(body.preco_unitario) || 0
     const frete = Number(body.frete) || 0
+    const modalidadeFrete = String(body.modalidade_frete || 'CIF')
+      .trim()
+      .toUpperCase()
     const seguro = Number(body.seguro) || 0
     const outrasDespesas = Number(body.outras_despesas) || 0
     const ptaxManual = Number(body.ptax_manual) || 0
     const margemPerc = Number(body.margem_perc) || 0
+    const comissaoPercInput =
+      body.comissao_perc !== undefined ? Number(body.comissao_perc) : undefined
+    const custoFinanceiroPerc = Number(body.custo_financeiro_perc) || 0
+    const enquadramentoCliente = String(body.enquadramento_cliente || 'produtor_rural').trim()
 
     let produtoEncontrado = null
 
@@ -50,7 +60,6 @@ routerAdd('POST', '/backend/v1/simulador/calcular', (e) => {
       try {
         produtoEncontrado = $app.findRecordById('sim_produtos_base', produtoId)
       } catch (_) {
-        // Tentar localizar em base_mestre
         try {
           produtoEncontrado = $app.findRecordById('base_mestre', produtoId)
         } catch (_) {}
@@ -63,6 +72,8 @@ routerAdd('POST', '/backend/v1/simulador/calcular', (e) => {
     let moeda = 'BRL'
     let origem = 'Nacional'
     let codigo = 'S/C'
+    let embalagem = 'Padrão'
+    let comissaoPadrao = 2.5
 
     if (produtoEncontrado) {
       descricao =
@@ -86,8 +97,14 @@ routerAdd('POST', '/backend/v1/simulador/calcular', (e) => {
         produtoEncontrado.getString('codigo') ||
         produtoEncontrado.getString('registro_mapa') ||
         codigo
+      embalagem = produtoEncontrado.getString('embalagem') || embalagem
+      const cp = produtoEncontrado.getFloat('comissao_padrao')
+      if (cp > 0) {
+        comissaoPadrao = cp < 1 ? cp * 100 : cp
+      }
     }
 
+    const comissaoPerc = comissaoPercInput !== undefined ? comissaoPercInput : comissaoPadrao
     const grTrib =
       (produtoEncontrado && produtoEncontrado.getString('gr_trib')) || grTribManual || ''
 
@@ -121,24 +138,25 @@ routerAdd('POST', '/backend/v1/simulador/calcular', (e) => {
     const valorMercadoriaReais = quantidade * valorUnitarioReais
     const totalDespesas = frete + seguro + outrasDespesas
     const baseOperacao = valorMercadoriaReais + totalDespesas
+    const freteNaBaseIcms = modalidadeFrete === 'CIF' ? frete : 0
+    const baseCalculoBrutaIcms = valorMercadoriaReais + freteNaBaseIcms + seguro + outrasDespesas
 
     // 2. Consulta da Regra de ICMS para ufOrigem -> ufDestino com cruzamento por gr_trib
-    const chavePar = `${ufOrigem}_${ufDestino}`
     let regraIcmsEncontrada = null
     let temRegraIcms = false
     let statusRegra = 'sem_regra'
     let avisoIcms = null
 
     try {
-      const escChave = chavePar.replace(/'/g, "\\'")
+      const escOrigem = ufOrigem.replace(/'/g, "\\'")
+      const escDestino = ufDestino.replace(/'/g, "\\'")
 
-      // 2.1 Se houver gr_trib no produto, tenta busca exata por par + grupo_tributario_codigo
       if (grTrib) {
         const escGr = grTrib.replace(/'/g, "\\'")
         const recordsExatos =
           $app.findRecordsByFilter(
             'sim_regras_icms',
-            `chave_origem_destino = '${escChave}' && grupo_tributario_codigo = '${escGr}'`,
+            `uf_origem = '${escOrigem}' && uf_destino = '${escDestino}' && grupo_tributario_codigo = '${escGr}'`,
             '-created',
             1,
             0,
@@ -150,12 +168,11 @@ routerAdd('POST', '/backend/v1/simulador/calcular', (e) => {
         }
       }
 
-      // 2.2 Fallback: busca pelo par de UFs sem filtro ou geral
       if (!regraIcmsEncontrada) {
         const recordsIcms =
           $app.findRecordsByFilter(
             'sim_regras_icms',
-            `chave_origem_destino = '${escChave}'`,
+            `uf_origem = '${escOrigem}' && uf_destino = '${escDestino}'`,
             '-created',
             1,
             0,
@@ -184,7 +201,12 @@ routerAdd('POST', '/backend/v1/simulador/calcular', (e) => {
     let icmsAliqEfetiva = 0
     let icmsDiferimento = false
     let icmsPercDif = 0
-    let icmsValor = 0
+    let icmsDebito = 0
+    let icmsValorDiferido = 0
+    let icmsDesoneradoValor = 0
+    let icmsCreditoValor = 0
+    let icmsEfetivoRecolher = 0
+    let tipoDesonerado = 'Não Calcula'
     let icmsFundamentacao = ''
 
     if (temRegraIcms && regraIcmsEncontrada) {
@@ -198,17 +220,34 @@ routerAdd('POST', '/backend/v1/simulador/calcular', (e) => {
         icmsAliqNominal * (1 - icmsRedBase / 100)
       icmsFundamentacao =
         regraIcmsEncontrada.getString('fundamentacao_legal') || `Regra ${ufOrigem} → ${ufDestino}`
+      tipoDesonerado = regraIcmsEncontrada.getString('tipo_desonerado') || 'Não Calcula'
+      const taxaDeson = regraIcmsEncontrada.getFloat('icms_desonerado') || 0
 
-      const baseReduzida = baseOperacao * (1 - icmsRedBase / 100)
-      icmsValor = baseReduzida * (icmsAliqNominal / 100)
+      const baseReduzida = baseCalculoBrutaIcms * (1 - icmsRedBase / 100)
+      icmsDebito = baseReduzida * (icmsAliqNominal / 100)
 
       if (icmsDiferimento || icmsPercDif > 0) {
-        icmsValor = Math.max(0, icmsValor * (1 - icmsPercDif / 100))
-        icmsAliqEfetiva = icmsAliqEfetiva * (1 - icmsPercDif / 100)
+        icmsValorDiferido = icmsDebito * (icmsPercDif / 100)
       }
-      const regCod = regraIcmsEncontrada.getString('grupo_tributario_codigo')
-      memoriaCalculo.push(
-        `ICMS Regra Encontrada (${ufOrigem} → ${ufDestino}${regCod ? ` | GrTrib ${regCod}` : ''}): Nominal ${icmsAliqNominal}%, Redução ${icmsRedBase}%, Efetiva ${icmsAliqEfetiva.toFixed(2)}% → R$ ${icmsValor.toFixed(2)}`,
+
+      if (tipoDesonerado.toLowerCase().includes('desconta') || taxaDeson > 0) {
+        const percDeson = taxaDeson > 0 ? taxaDeson : icmsAliqNominal - icmsAliqEfetiva
+        if (percDeson > 0) {
+          icmsDesoneradoValor = baseCalculoBrutaIcms * (percDeson / 100)
+        }
+      }
+
+      const regraCredito = regraIcmsEncontrada.getString('regra_credito_entrada') || ''
+      if (regraCredito.toLowerCase().includes('presumido')) {
+        icmsCreditoValor = baseReduzida * ((icmsAliqEfetiva * 0.5) / 100)
+      }
+
+      icmsEfetivoRecolher = Math.max(
+        0,
+        icmsDebito -
+          icmsValorDiferido -
+          icmsCreditoValor -
+          (tipoDesonerado.toLowerCase().includes('desconta') ? icmsDesoneradoValor : 0),
       )
     } else {
       avisoIcms = `Sem regra de ICMS para origem ${ufOrigem} → destino ${ufDestino}${grTrib ? ` (GrTrib ${grTrib})` : ''}. Importe a planilha de regras ou cadastre o par na central.`
@@ -223,31 +262,56 @@ routerAdd('POST', '/backend/v1/simulador/calcular', (e) => {
             : 12
       icmsAliqNominal = aliqFallback
       icmsAliqEfetiva = aliqFallback
-      icmsValor = baseOperacao * (aliqFallback / 100)
+      icmsDebito = baseCalculoBrutaIcms * (aliqFallback / 100)
+      icmsEfetivoRecolher = icmsDebito
       icmsFundamentacao = 'Alíquota padrão estimada (sem regra origem→destino)'
     }
 
-    // 3. PIS/COFINS Agro (Lei 10.925/2004 c/c LC 224/2025)
+    // 3. PIS/COFINS Agro (Tema 69 STF - Exclusão do ICMS)
+    const basePisCofins = Math.max(0, baseOperacao - icmsEfetivoRecolher)
     const pisAliq = 0.165
     const cofinsAliq = 0.76
-    const pisValor = baseOperacao * (pisAliq / 100)
-    const cofinsValor = baseOperacao * (cofinsAliq / 100)
+    const pisValor = basePisCofins * (pisAliq / 100)
+    const cofinsValor = basePisCofins * (cofinsAliq / 100)
 
     // 4. IBS/CBS (LC 214/2025 com 60% de redução no agro)
     const ibsAliqEfetiva = 0.1 * 0.4 // 0,04%
     const cbsAliqEfetiva = 0.9 * 0.4 // 0,36%
-    const ibsValor = baseOperacao * (ibsAliqEfetiva / 100)
-    const cbsValor = baseOperacao * (cbsAliqEfetiva / 100)
+    const baseIbsCbs = baseOperacao * 0.4
+    const ibsValor = baseIbsCbs * (0.1 / 100)
+    const cbsValor = baseIbsCbs * (0.9 / 100)
 
-    const totalTributos = icmsValor + pisValor + cofinsValor + ibsValor + cbsValor
-    const custoTotal = baseOperacao + totalTributos
+    const totalTributos = icmsEfetivoRecolher + pisValor + cofinsValor + ibsValor + cbsValor
+    const comissaoValor = baseOperacao * (comissaoPerc / 100)
+    const custoFinanceiroValor = baseOperacao * (custoFinanceiroPerc / 100)
 
-    const precoVenda =
-      margemPerc > 0 && margemPerc < 100
-        ? custoTotal / (1 - margemPerc / 100)
-        : custoTotal * (1 + margemPerc / 100)
+    const receitaBruta = baseOperacao
+    const receitaLiquida = receitaBruta - totalTributos
+    const custosOperacionais =
+      valorMercadoriaReais +
+      (modalidadeFrete === 'CIF' ? frete : 0) +
+      seguro +
+      outrasDespesas +
+      comissaoValor +
+      custoFinanceiroValor
+    const margemContribuicaoValor = receitaLiquida - custosOperacionais
+    const margemContribuicaoPerc =
+      receitaBruta > 0 ? (margemContribuicaoValor / receitaBruta) * 100 : 0
 
-    const margemValor = precoVenda - custoTotal
+    // Formação de preço
+    const somaCargasPerc =
+      (baseOperacao > 0 ? (totalTributos / baseOperacao) * 100 : 0) +
+      comissaoPerc +
+      custoFinanceiroPerc
+    const custoBaseFixo =
+      valorMercadoriaReais + (modalidadeFrete === 'CIF' ? frete : 0) + seguro + outrasDespesas
+    const divisorBreakEven = Math.max(0.01, 1 - somaCargasPerc / 100)
+    const precoMinimoBreakEven = custoBaseFixo / divisorBreakEven
+    const divisorComMargem = Math.max(0.01, 1 - somaCargasPerc / 100 - margemPerc / 100)
+    const precoVendaSugerido =
+      margemPerc > 0 && divisorComMargem > 0
+        ? custoBaseFixo / divisorComMargem
+        : precoMinimoBreakEven * (1 + margemPerc / 100)
 
     return e.json(200, {
       sucesso: true,
@@ -257,14 +321,17 @@ routerAdd('POST', '/backend/v1/simulador/calcular', (e) => {
         descricao: descricao,
         ncm: ncm,
         unidade: unidade,
+        embalagem: embalagem,
         origem: origem,
         gr_trib: grTrib,
         is_importado: isImportado,
+        enquadramento_cliente: enquadramentoCliente,
       },
       operacao: {
         uf_origem: ufOrigem,
         uf_destino: ufDestino,
         tipo: ufOrigem === ufDestino ? 'Interna' : 'Interestadual',
+        modalidade_frete: modalidadeFrete,
       },
       cambio: {
         moeda: moeda,
@@ -276,19 +343,32 @@ routerAdd('POST', '/backend/v1/simulador/calcular', (e) => {
         quantidade: quantidade,
         valor_mercadoria_reais: valorMercadoriaReais,
         frete: frete,
+        modalidade_frete: modalidadeFrete,
         seguro: seguro,
         outras_despesas: outrasDespesas,
         base_operacao: baseOperacao,
+        base_calculo_bruta_icms: baseCalculoBrutaIcms,
+        comissao_perc: comissaoPerc,
+        comissao_valor: comissaoValor,
+        custo_financeiro_perc: custoFinanceiroPerc,
+        custo_financeiro_valor: custoFinanceiroValor,
       },
       tributos: {
         icms: {
           nome: 'ICMS',
+          base_calculo_bruta: baseCalculoBrutaIcms,
+          base_calculo_efetiva: baseCalculoBrutaIcms * (1 - icmsRedBase / 100),
           aliquota_nominal: icmsAliqNominal,
           reducao_base: icmsRedBase,
           aliquota_efetiva: icmsAliqEfetiva,
+          debito_icms: icmsDebito,
           diferimento: icmsDiferimento,
           percentual_diferimento: icmsPercDif,
-          valor: icmsValor,
+          valor_diferimento: icmsValorDiferido,
+          tipo_desonerado: tipoDesonerado,
+          valor_desonerado: icmsDesoneradoValor,
+          credito_entrada_valor: icmsCreditoValor,
+          icms_efetivo_recolher: icmsEfetivoRecolher,
           tem_regra: temRegraIcms,
           status_regra: statusRegra,
           aviso: avisoIcms,
@@ -296,24 +376,28 @@ routerAdd('POST', '/backend/v1/simulador/calcular', (e) => {
         },
         pis: {
           nome: 'PIS',
+          base_calculo: basePisCofins,
           aliquota: pisAliq,
           valor: pisValor,
-          fundamentacao: 'LC 224/2025 (Carga residual pós-Abr/2026)',
+          fundamentacao: 'LC 224/2025 (Tema 69 STF: base sem ICMS)',
         },
         cofins: {
           nome: 'COFINS',
+          base_calculo: basePisCofins,
           aliquota: cofinsAliq,
           valor: cofinsValor,
-          fundamentacao: 'LC 224/2025 (Carga residual pós-Abr/2026)',
+          fundamentacao: 'LC 224/2025 (Tema 69 STF: base sem ICMS)',
         },
         ibs: {
           nome: 'IBS',
+          base_calculo: baseIbsCbs,
           aliquota: ibsAliqEfetiva,
           valor: ibsValor,
           fundamentacao: 'LC 214/2025 (Redução 60% insumos agro)',
         },
         cbs: {
           nome: 'CBS',
+          base_calculo: baseIbsCbs,
           aliquota: cbsAliqEfetiva,
           valor: cbsValor,
           fundamentacao: 'LC 214/2025 (Redução 60% insumos agro)',
@@ -321,11 +405,22 @@ routerAdd('POST', '/backend/v1/simulador/calcular', (e) => {
         total_tributos: totalTributos,
         carga_efetiva_perc: baseOperacao > 0 ? (totalTributos / baseOperacao) * 100 : 0,
       },
+      dre: {
+        receita_bruta: receitaBruta,
+        deducoes_tributarias: totalTributos,
+        receita_liquida: receitaLiquida,
+        cmv: valorMercadoriaReais,
+        frete: modalidadeFrete === 'CIF' ? frete : 0,
+        seguro_outros: seguro + outrasDespesas,
+        comissao_valor: comissaoValor,
+        custo_financeiro_valor: custoFinanceiroValor,
+        margem_contribuicao_valor: margemContribuicaoValor,
+        margem_contribuicao_perc: margemContribuicaoPerc,
+      },
       resultado_comercial: {
-        custo_total: custoTotal,
+        preco_minimo_break_even: precoMinimoBreakEven,
+        preco_venda_sugerido: precoVendaSugerido,
         margem_perc: margemPerc,
-        margem_valor: margemValor,
-        preco_venda_sugerido: precoVenda,
       },
       alertas: alertas,
       memoria_calculo: memoriaCalculo,
