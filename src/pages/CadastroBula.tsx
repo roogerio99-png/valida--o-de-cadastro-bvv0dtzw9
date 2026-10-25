@@ -457,7 +457,7 @@ export function CadastroBula() {
               className="border-[#DCE5DC] text-[#1C2B1C] hover:bg-emerald-50 hover:text-[#1B5E20] text-xs h-9 rounded-xl shadow-sm flex items-center gap-1.5"
             >
               <UploadCloud className="w-4 h-4 text-[#F57F17]" />
-              <span>Importar Planilhas</span>
+              <span>Importador</span>
             </Button>
           </Link>
         </div>
@@ -527,8 +527,7 @@ export function CadastroBula() {
           {totalCount === 0 && !loading && (
             <span className="text-[#F57F17] font-medium text-[11px] flex items-center gap-1">
               <Info className="w-3.5 h-3.5" />
-              Nenhuma bula cadastrada ainda — use o botão Importar Planilhas acima para subir o
-              XLSX.
+              Nenhuma bula cadastrada ainda — use o botão Importador acima para subir o XLSX.
             </span>
           )}
         </div>
@@ -586,7 +585,7 @@ export function CadastroBula() {
                       <Link to="/importar">
                         <Button size="sm" className="mt-2 bg-[#1B5E20] hover:bg-[#2E7D32] text-xs">
                           <UploadCloud className="w-3.5 h-3.5 mr-1.5" />
-                          Ir para Importar Planilhas
+                          Ir para o Importador
                         </Button>
                       </Link>
                     </div>
@@ -1397,7 +1396,7 @@ function PainelBlocosAcessoriosBula({ bula }: PainelBlocosProps) {
           ) : !composicao || composicao.length === 0 ? (
             <EmptyBloco
               titulo="Nenhuma composição importada para este produto"
-              descricao="Use a tela Importar Planilhas para carregar a aba 'Sheet 2. Composicao_Em_Linhas'."
+              descricao="Use a tela do Importador para carregar a aba 'Sheet 2. Composicao_Em_Linhas'."
             />
           ) : (
             <div className="border border-[#DCE5DC] rounded-xl overflow-hidden bg-white shadow-xs">
@@ -1469,7 +1468,7 @@ function PainelBlocosAcessoriosBula({ bula }: PainelBlocosProps) {
           ) : !empresas || empresas.length === 0 ? (
             <EmptyBloco
               titulo="Nenhuma empresa vinculada para este produto"
-              descricao="Use a tela Importar Planilhas para carregar a aba 'Sheet 3. Cadeia_Empresas_Linhas'."
+              descricao="Use a tela do Importador para carregar a aba 'Sheet 3. Cadeia_Empresas_Linhas'."
             />
           ) : (
             <div className="border border-[#DCE5DC] rounded-xl overflow-hidden bg-white shadow-xs">
@@ -1548,7 +1547,7 @@ function PainelBlocosAcessoriosBula({ bula }: PainelBlocosProps) {
           ) : !embalagens || embalagens.length === 0 ? (
             <EmptyBloco
               titulo="Nenhuma embalagem importada para este produto"
-              descricao="Use a tela Importar Planilhas para carregar a aba 'Sheet 4. Embalagens_Linhas'."
+              descricao="Use a tela do Importador para carregar a aba 'Sheet 4. Embalagens_Linhas'."
             />
           ) : (
             <div className="border border-[#DCE5DC] rounded-xl overflow-hidden bg-white shadow-xs">
@@ -1617,7 +1616,7 @@ function PainelBlocosAcessoriosBula({ bula }: PainelBlocosProps) {
           ) : !culturas || culturas.length === 0 ? (
             <EmptyBloco
               titulo="Nenhuma cultura/carência importada para este produto"
-              descricao="Use a tela Importar Planilhas para carregar a aba 'Sheet 5. Culturas_Carencia_Linhas'."
+              descricao="Use a tela do Importador para carregar a aba 'Sheet 5. Culturas_Carencia_Linhas'."
             />
           ) : (
             <div className="border border-[#DCE5DC] rounded-xl overflow-hidden bg-white shadow-xs">
@@ -1698,7 +1697,7 @@ function PainelBlocosAcessoriosBula({ bula }: PainelBlocosProps) {
           ) : !alvos || alvos.length === 0 ? (
             <EmptyBloco
               titulo="Nenhum alvo/dose importado para este produto"
-              descricao="Use a tela Importar Planilhas para carregar a aba 'Sheet 6. Alvos_e_Doses_Linhas'."
+              descricao="Use a tela do Importador para carregar a aba 'Sheet 6. Alvos_e_Doses_Linhas'."
             />
           ) : (
             <div className="border border-[#DCE5DC] rounded-xl overflow-hidden bg-white shadow-xs">
@@ -1782,7 +1781,7 @@ function PainelBlocosAcessoriosBula({ bula }: PainelBlocosProps) {
           ) : !aplicacao || aplicacao.length === 0 ? (
             <EmptyBloco
               titulo="Nenhuma instrução de aplicação/EPI importada"
-              descricao="Use a tela Importar Planilhas para carregar a aba 'Sheet 7. Aplicacao_e_EPI_Linhas'."
+              descricao="Use a tela do Importador para carregar a aba 'Sheet 7. Aplicacao_e_EPI_Linhas'."
             />
           ) : (
             <div className="space-y-3">
@@ -1912,7 +1911,7 @@ function EmptyBloco({ titulo, descricao }: { titulo: string; descricao: string }
       <Link to="/importar">
         <Button variant="outline" size="sm" className="mt-2 text-xs h-7 border-[#DCE5DC]">
           <UploadCloud className="w-3.5 h-3.5 mr-1 text-[#1B5E20]" />
-          Importar Planilhas
+          Importador
         </Button>
       </Link>
     </div>

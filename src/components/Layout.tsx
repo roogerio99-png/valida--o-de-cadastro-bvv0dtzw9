@@ -50,7 +50,7 @@ const navItems = [
   { path: '/travas', label: 'Travas de Auditoria', icon: ShieldAlert },
   { path: '/parametrizacao', label: 'Parametrização Fiscal', icon: Percent },
   { path: '/tributacao', label: 'Chat Especialista', icon: Scale },
-  { path: '/importar', label: 'Importar Planilhas', icon: UploadCloud },
+  { path: '/importar', label: 'Importador', icon: UploadCloud },
   { path: '/configuracoes', label: 'Configurações', icon: User },
 ]
 
@@ -349,7 +349,7 @@ export function Layout() {
                     className="cursor-pointer"
                   >
                     <UploadCloud className="mr-2 h-4 h-4 text-[#F57F17]" />
-                    <span>Importar Planilhas</span>
+                    <span>Importador</span>
                   </DropdownMenuItem>
                 )}
                 {isAdmin && (
