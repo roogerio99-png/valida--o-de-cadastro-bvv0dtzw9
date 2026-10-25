@@ -259,21 +259,30 @@ const BASE_MESTRE_FIXTURE: MockBaseMestreRegistro[] = [
     quantidade_embalagem_principal: 20,
     unidade_medida_principal: 'L',
     forma_acondicionamento: 'Bombona',
-    ncm_especifica: '3808.93.29',
-    ncm_padrao: '3808.93.29',
+    ncm_especifica: '3808.93.24',
+    ncm_padrao: '3808.93.24',
   },
 ]
 
 const REGRAS_NCM_FIXTURE: MockRegraNcmEmbalagem[] = [
   {
     ncm: '38089324',
-    descricao: 'Herbicidas à base de glifosato para uso agrícola em grânulos',
-    embalagens_permitidas: ['Saco', 'Sacaria', 'Big Bag'],
+    descricao: 'Herbicidas à base de glifosato ou seus sais para uso agrícola',
+    embalagens_permitidas: [
+      'Saco',
+      'Sacaria',
+      'Big Bag',
+      'Bombona',
+      'Tambor',
+      'Container / IBC',
+      'Frasco',
+      'Galão',
+    ],
   },
   {
     ncm: '38089329',
-    descricao: 'Outros herbicidas à base de glifosato',
-    embalagens_permitidas: ['Bombona', 'Tambor', 'Container / IBC', 'Frasco'],
+    descricao: 'Outros herbicidas, inibidores de germinação e reguladores de crescimento',
+    embalagens_permitidas: ['Bombona', 'Tambor', 'Container / IBC', 'Frasco', 'Saco'],
   },
 ]
 
@@ -307,7 +316,7 @@ describe('Travas de Auditoria de NCM (validar_produto.js)', () => {
       expect(res.veredito_geral).toBe('APROVADO')
     })
 
-    it('deve aprovar ROUNDUP ORIGINAL MAIS (MAPA 01119, 20 L, Bombona) com NCM 3808.93.29', () => {
+    it('deve aprovar ROUNDUP ORIGINAL MAIS (MAPA 01119, 20 L, Bombona) com NCM 3808.93.24', () => {
       const res = executarAuditoriaTravas(
         {
           nome_comercial: 'ROUNDUP ORIGINAL MAIS',
@@ -321,12 +330,12 @@ describe('Travas de Auditoria de NCM (validar_produto.js)', () => {
         REGRAS_NCM_FIXTURE,
       )
 
-      expect(res.ncm_resolvida).toBe('3808.93.29')
+      expect(res.ncm_resolvida).toBe('3808.93.24')
       expect(res.ncm_resolvida_origem).toBe('BASE_MESTRE')
 
       const trava1 = res.travas.find((t) => t.id_trava === 1)
       expect(trava1?.aprovado).toBe(true)
-      expect(trava1?.mensagem).toContain('3808.93.29')
+      expect(trava1?.mensagem).toContain('3808.93.24')
 
       const trava2 = res.travas.find((t) => t.id_trava === 2)
       expect(trava2?.aprovado).toBe(true)
@@ -388,7 +397,7 @@ describe('Travas de Auditoria de NCM (validar_produto.js)', () => {
       expect(trava1?.mensagem).toContain('3808.93.24')
     })
 
-    it('mesmo que o usuário envie NCM de outro produto no payload de ROUNDUP ORIGINAL MAIS, preserva 3808.93.29', () => {
+    it('mesmo que o usuário envie NCM de outro produto no payload de ROUNDUP ORIGINAL MAIS, preserva 3808.93.24', () => {
       const res = executarAuditoriaTravas(
         {
           nome_comercial: 'ROUNDUP ORIGINAL MAIS',
@@ -403,7 +412,7 @@ describe('Travas de Auditoria de NCM (validar_produto.js)', () => {
         REGRAS_NCM_FIXTURE,
       )
 
-      expect(res.ncm_resolvida).toBe('3808.93.29')
+      expect(res.ncm_resolvida).toBe('3808.93.24')
       expect(res.ncm_resolvida).not.toBe('3808.91.99')
     })
   })

@@ -2119,14 +2119,21 @@ routerAdd('POST', '/backend/v1/importar-lote', (e) => {
             const isNota2 = MOLECULAS_NOTA_2.some((mol) => paTexto.includes(mol))
 
             // (d) NCM específica da embalagem comercial
-            // EXCEÇÃO EXCLUSIVA DO ROUNDUP WG (MAPA 002094): NCM 3808.93.24
+            // Regra canônica: Herbicidas agrícolas à base de glifosato (ROUNDUP WG, ROUNDUP ORIGINAL MAIS, etc.) usam NCM 3808.93.24
             const isRoundupWg =
               regMapa.includes('002094') ||
               marcaPad.toUpperCase() === 'ROUNDUP WG' ||
               nomeProdFinal.toUpperCase() === 'ROUNDUP WG'
+            const isGlifosatoEmb =
+              isRoundupWg ||
+              marcaPad.toUpperCase().includes('ROUNDUP') ||
+              nomeProdFinal.toUpperCase().includes('ROUNDUP') ||
+              String(paFinal || '')
+                .toUpperCase()
+                .includes('GLIFOSATO')
 
             let ncmEsp = data.ncm || (prodRef ? prodRef.getString('ncm_padrao') : '')
-            if (isRoundupWg) {
+            if (isGlifosatoEmb) {
               ncmEsp = '3808.93.24'
             } else if (isNota2) {
               if (qtdPrinc <= 0.3) ncmEsp = '3808.61.00'

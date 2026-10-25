@@ -1701,18 +1701,19 @@ routerAdd('POST', '/backend/v1/bula/analisar-pdf', (e) => {
     }
 
     // 9. DEDUÇÃO DA NCM DINÂMICA (SEM CONTAMINAÇÃO DO ROUNDUP WG)
-    // EXCEÇÃO PERMANENTE DO PROJETO: ROUNDUP WG (MAPA 002094) usa NCM 3808.93.24
+    // REGRA DO PROJETO: Herbicidas agrícolas à base de glifosato (ROUNDUP ORIGINAL MAIS, ROUNDUP WG MAPA 002094, etc.) usam NCM 3808.93.24
     let ncmDeducao = '3808.93.29'
     const isRoundupWg =
       (registroMapa && registroMapa.includes('002094')) ||
       (nomeComercial && nomeComercial.toUpperCase().includes('ROUNDUP WG'))
+    const isGlifosatoAgricola =
+      /glifosato/i.test(principioAtivoCalculado) ||
+      (nomeComercial && nomeComercial.toUpperCase().includes('ROUNDUP'))
 
-    if (isRoundupWg) {
-      ncmDeducao = '3808.93.24'
-    } else if (/glifosato/i.test(principioAtivoCalculado) && /3808\.93\.24/.test(textoCompleto)) {
+    if (isRoundupWg || isGlifosatoAgricola) {
       ncmDeducao = '3808.93.24'
     } else {
-      // Para Sulfentrazone ou outros defensivos não-glifosato WG, a NCM padrão brasileira é 3808.93.29 (outros herbicidas agrícolas)
+      // Para defensivos não-glifosato genéricos, a NCM residual é 3808.93.29 (outros herbicidas agrícolas)
       ncmDeducao = '3808.93.29'
     }
 
@@ -2424,14 +2425,19 @@ routerAdd('POST', '/backend/v1/bula/gravar-pdf', (e) => {
             }
           }
 
-          // EXCEÇÃO EXCLUSIVA DO ROUNDUP WG (MAPA 002094): NCM 3808.93.24
+          // Regra canônica: Herbicidas agrícolas à base de glifosato (ROUNDUP WG, ROUNDUP ORIGINAL MAIS, etc.) usam NCM 3808.93.24
           const isRoundupWg =
             regMapa.includes('002094') ||
             marcaPad.toUpperCase() === 'ROUNDUP WG' ||
             nomeComercial.toUpperCase() === 'ROUNDUP WG'
+          const isGlifosatoItem =
+            isRoundupWg ||
+            marcaPad.toUpperCase().includes('ROUNDUP') ||
+            nomeComercial.toUpperCase().includes('ROUNDUP') ||
+            /glifosato/i.test(String(produto.principio_ativo || ''))
 
           let ncmEsp = embItem.ncm || ncmDeducao
-          if (isRoundupWg) {
+          if (isGlifosatoItem) {
             ncmEsp = '3808.93.24'
           } else if (isNota2) {
             if (qtdPrinc <= 0.3) ncmEsp = '3808.61.00'
@@ -2501,9 +2507,8 @@ routerAdd('POST', '/backend/v1/bula/gravar-pdf', (e) => {
 
           recMestre.set('ncm_especifica', ncmMascara)
           recMestre.set('ncm_padrao', ncmMascara)
-          recMestre.set('ncm', ncmLimpo || (isRoundupWg ? '38089324' : '38089329'))
+          recMestre.set('ncm', ncmLimpo || (isGlifosatoItem ? '38089324' : '38089329'))
           recMestre.set('nota_subpos_2', nota2Val)
-
           if (isNota2) {
             recMestre.set('ncm_faixa1_ate_300g', '3808.61.00')
             recMestre.set('ncm_faixa2_300g_a_7_5kg', '3808.62.90')
