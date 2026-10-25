@@ -57,6 +57,8 @@ import {
   formatarNcmMascara,
   sanitizarRegistroMapa,
 } from '@/lib/motorCanonico'
+import { PainelEnquadramentoTributario } from '@/components/PainelEnquadramentoTributario'
+import { determinarEnquadramentoTributario } from '@/lib/enquadramentoTributario'
 import {
   formatarRotuloLegivelDuplicada,
   encontrarDuplicadoNaLista,
@@ -83,6 +85,10 @@ export function BaseMestre() {
   const [tipoProdutoFilter, setTipoProdutoFilter] = useState<string>('todos')
   const [nota2Filter, setNota2Filter] = useState<string>('todos')
   const [statusPisFilter, setStatusPisFilter] = useState<string>('todos')
+  const [enquadramentoFilter, setEnquadramentoFilter] = useState<string>('todos')
+  const [modalEnquadramentoItem, setModalEnquadramentoItem] = useState<BaseMestreProduto | null>(
+    null,
+  )
   const [paIdFilter, setPaIdFilter] = useState<string>('')
   const [, startTransition] = useTransition()
 
@@ -474,6 +480,11 @@ export function BaseMestre() {
       'cst_saida',
       'cst_entrada',
       'ibs_cbs_2027',
+      'enquadramento_pis_lei',
+      'enquadramento_pis_artigo',
+      'enquadramento_pis_inciso',
+      'enquadramento_cofins_artigo',
+      'enquadramento_ibs_cbs_regra',
       'macro_grupo',
       'sub_grupo',
       'origem_base',
@@ -485,6 +496,15 @@ export function BaseMestre() {
       const unEmb = p.unidade_medida_principal || p.unidade || 'L'
       const acond = p.forma_acondicionamento || ''
       const ncmEsp = formatarNcmMascara(p.ncm_especifica || p.ncm_padrao || p.ncm)
+      const enq = determinarEnquadramentoTributario({
+        ncm: p.ncm_especifica || p.ncm_padrao || p.ncm,
+        tipo_produto: p.tipo_produto,
+        principio_ativo: p.principio_ativo,
+        macro_grupo: p.macro_grupo,
+        sub_grupo: p.sub_grupo,
+        registro_mapa: p.registro_mapa,
+        titular_fabricante: p.titular_fabricante || p.fabricante,
+      })
 
       return [
         `"${p.id}"`,
@@ -508,6 +528,11 @@ export function BaseMestre() {
         `"${(p.cst_saida || 'CST 06').replace(/"/g, '""')}"`,
         `"${(p.cst_entrada || 'CST 73').replace(/"/g, '""')}"`,
         `"${(p.ibs_cbs_2027 || '').replace(/"/g, '""')}"`,
+        `"${enq.pis.citacao.norma.replace(/"/g, '""')}"`,
+        `"${enq.pis.citacao.artigo.replace(/"/g, '""')}"`,
+        `"${(enq.pis.citacao.inciso || '').replace(/"/g, '""')}"`,
+        `"${enq.cofins.citacao.artigo.replace(/"/g, '""')}"`,
+        `"${enq.ibs.resumoClaro.replace(/"/g, '""')}"`,
         `"${(p.macro_grupo || 'Defensivos').replace(/"/g, '""')}"`,
         `"${(p.sub_grupo || '').replace(/"/g, '""')}"`,
         `"${(p.origem_base || '').replace(/"/g, '""')}"`,
@@ -1085,6 +1110,25 @@ export function BaseMestre() {
                 <SelectItem value="tributado">Tributado Integralmente</SelectItem>
               </SelectContent>
             </Select>
+
+            {/* Enquadramento Tributário / Categoria */}
+            <Select
+              value={enquadramentoFilter}
+              onValueChange={(val) => {
+                setEnquadramentoFilter(val)
+              }}
+            >
+              <SelectTrigger className="h-10 text-xs border-[#DCE5DC]">
+                <SelectValue placeholder="Enquadramento" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="todos">Todos Enquadramentos</SelectItem>
+                <SelectItem value="agro">Insumo Agro (Redução 60% IBS/CBS)</SelectItem>
+                <SelectItem value="defensivos">Defensivos (Posição 38.08)</SelectItem>
+                <SelectItem value="fertilizantes">Fertilizantes (Capítulo 31)</SelectItem>
+                <SelectItem value="geral">Regime Padrão / Geral</SelectItem>
+              </SelectContent>
+            </Select>
           </div>
         </div>
       </Card>
@@ -1125,21 +1169,22 @@ export function BaseMestre() {
                 <th className="py-3 px-3 font-semibold">Acondicionamento</th>
                 <th className="py-3 px-3 font-semibold">NCM Específica</th>
                 <th className="py-3 px-3 font-semibold">Status PIS/COFINS</th>
-                <th className="py-3 px-3 font-semibold">CST Saída/Entrada</th>
+                <th className="py-3 px-3 font-semibold">IBS / CBS (LC 214/25)</th>
+                <th className="py-3 px-3 font-semibold">Enquadramento Legal</th>
                 <th className="py-3 px-3 font-semibold text-right">Ação</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-[#F0F4F0]">
               {loading ? (
                 <tr>
-                  <td colSpan={12} className="py-12 text-center text-xs text-[#5A6D5A]">
+                  <td colSpan={13} className="py-12 text-center text-xs text-[#5A6D5A]">
                     <Loader2 className="w-6 h-6 animate-spin mx-auto text-[#1B5E20] mb-2" />
                     Carregando produtos da Base Tributária por Embalagem Final...
                   </td>
                 </tr>
               ) : produtos.length === 0 ? (
                 <tr>
-                  <td colSpan={12} className="py-12 text-center text-xs text-[#5A6D5A]">
+                  <td colSpan={13} className="py-12 text-center text-xs text-[#5A6D5A]">
                     Nenhuma embalagem cadastrada na Base Tributária com os critérios atuais.
                   </td>
                 </tr>
@@ -1170,6 +1215,35 @@ export function BaseMestre() {
                   const ncmEspecificaExibida = formatarNcmMascara(
                     p.ncm_especifica || p.ncm_padrao || p.ncm,
                   )
+
+                  // Enquadramento derivado do produto
+                  const enquadramento = determinarEnquadramentoTributario({
+                    ncm: p.ncm_especifica || p.ncm_padrao || p.ncm,
+                    tipo_produto: p.tipo_produto,
+                    principio_ativo: p.principio_ativo,
+                    macro_grupo: p.macro_grupo,
+                    sub_grupo: p.sub_grupo,
+                    registro_mapa: p.registro_mapa,
+                    titular_fabricante: p.titular_fabricante || p.fabricante,
+                  })
+
+                  // Filtro local adicional de Enquadramento
+                  if (enquadramentoFilter !== 'todos') {
+                    if (enquadramentoFilter === 'agro' && !enquadramento.qualificadoAgro)
+                      return null
+                    if (
+                      enquadramentoFilter === 'defensivos' &&
+                      !enquadramento.categoriaProduto.includes('Defensivo')
+                    )
+                      return null
+                    if (
+                      enquadramentoFilter === 'fertilizantes' &&
+                      !enquadramento.categoriaProduto.includes('Adubo')
+                    )
+                      return null
+                    if (enquadramentoFilter === 'geral' && enquadramento.qualificadoAgro)
+                      return null
+                  }
 
                   return (
                     <React.Fragment key={p.id}>
@@ -1298,20 +1372,54 @@ export function BaseMestre() {
                             </Badge>
                           ) : (
                             <Badge className="bg-emerald-100 text-emerald-900 border border-emerald-300 text-[10px] py-0 px-1.5 font-medium">
-                              Beneficiado 0%
+                              {enquadramento.pis.regime.includes('Alíquota Zero')
+                                ? 'Alíquota Zero (Lei 10.925)'
+                                : 'Beneficiado 0%'}
                             </Badge>
+                          )}
+                          <span className="block text-[10px] text-[#5A6D5A] font-mono mt-0.5">
+                            {p.cst_saida || 'CST 06'} / {p.cst_entrada || 'CST 73'}
+                          </span>
+                        </td>
+
+                        {/* 10. IBS / CBS (LC 214/2025) */}
+                        <td className="py-3 px-3 whitespace-nowrap">
+                          {enquadramento.qualificadoAgro ? (
+                            <div>
+                              <Badge className="bg-blue-50 text-blue-900 border border-blue-200 text-[10px] py-0 px-1.5 font-medium">
+                                Redução 60% + Diferido
+                              </Badge>
+                              <span className="block text-[10px] text-[#5A6D5A] font-mono mt-0.5">
+                                Art. 138 LC 214/25
+                              </span>
+                            </div>
+                          ) : (
+                            <div>
+                              <Badge className="bg-gray-100 text-gray-800 border border-gray-300 text-[10px] py-0 px-1.5 font-medium">
+                                Alíquota Padrão
+                              </Badge>
+                              <span className="block text-[10px] text-[#5A6D5A] font-mono mt-0.5">
+                                Arts. 4º e 50 LC 214/25
+                              </span>
+                            </div>
                           )}
                         </td>
 
-                        {/* 10. CST Saída/Entrada */}
-                        <td className="py-3 px-3 font-mono text-[11px] whitespace-nowrap text-[#1C2B1C]">
-                          <span className="font-semibold text-emerald-900">
-                            {p.cst_saida || 'CST 06'}
-                          </span>
-                          <span className="text-[#8A9A86] mx-1">/</span>
-                          <span className="text-blue-900 font-semibold">
-                            {p.cst_entrada || 'CST 73'}
-                          </span>
+                        {/* 11. Enquadramento Legal Específico & Acesso Rápido */}
+                        <td className="py-3 px-3 whitespace-nowrap">
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              setModalEnquadramentoItem(p)
+                            }}
+                            className="h-7 text-[11px] font-semibold bg-emerald-50/70 hover:bg-emerald-100 text-[#1B5E20] border-emerald-200 px-2 py-0"
+                            title="Ver enquadramento tributário completo com artigos, incisos e parágrafos"
+                          >
+                            <Scale className="w-3 h-3 mr-1" />
+                            <span>Ver 4 Impostos</span>
+                          </Button>
                         </td>
 
                         {/* Ações */}
@@ -1364,7 +1472,21 @@ export function BaseMestre() {
                                   <span className="text-[10px] text-[#5A6D5A] font-mono">
                                     ID: {p.id}
                                   </span>
+                                  <Button
+                                    variant="outline"
+                                    size="sm"
+                                    onClick={() => setModalEnquadramentoItem(p)}
+                                    className="h-7 text-xs bg-white text-[#1B5E20] border-emerald-300 hover:bg-emerald-50"
+                                  >
+                                    <Scale className="w-3.5 h-3.5 mr-1" />
+                                    Abrir em Modal
+                                  </Button>
                                 </div>
+                              </div>
+
+                              {/* PAINEL COMPLETO DE ENQUADRAMENTO TRIBUTÁRIO (PIS, COFINS, IBS, CBS) */}
+                              <div className="pt-1">
+                                <PainelEnquadramentoTributario produto={p} />
                               </div>
 
                               <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-4 gap-4">
@@ -1574,6 +1696,51 @@ export function BaseMestre() {
           }
         }}
       />
+
+      {/* ------------------------------------------------------------------ */}
+      {/* MODAL DE DETALHAMENTO DO ENQUADRAMENTO TRIBUTÁRIO COMPLETO */}
+      {/* ------------------------------------------------------------------ */}
+      {modalEnquadramentoItem && (
+        <Dialog
+          open={Boolean(modalEnquadramentoItem)}
+          onOpenChange={(open) => {
+            if (!open) setModalEnquadramentoItem(null)
+          }}
+        >
+          <DialogContent className="max-w-4xl rounded-2xl max-h-[90vh] overflow-y-auto">
+            <DialogHeader>
+              <DialogTitle className="text-base font-bold text-[#1C2B1C] flex items-center gap-2">
+                <Scale className="w-5 h-5 text-[#1B5E20]" />
+                <span>
+                  Enquadramento Tributário —{' '}
+                  {modalEnquadramentoItem.marca_padronizada ||
+                    modalEnquadramentoItem.nome_produto ||
+                    modalEnquadramentoItem.nome_completo}
+                </span>
+              </DialogTitle>
+              <DialogDescription className="text-xs text-[#5A6D5A]">
+                Citação jurídica e fundamentação legal exata por imposto: PIS, COFINS, IBS e CBS
+                para a embalagem e NCM cadastrados.
+              </DialogDescription>
+            </DialogHeader>
+
+            <div className="py-2">
+              <PainelEnquadramentoTributario produto={modalEnquadramentoItem} />
+            </div>
+
+            <DialogFooter>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setModalEnquadramentoItem(null)}
+                className="text-xs"
+              >
+                Fechar
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+      )}
 
       {/* ------------------------------------------------------------------ */}
       {/* MODAL DE EDIÇÃO DE PRODUTO CANÔNICO */}
