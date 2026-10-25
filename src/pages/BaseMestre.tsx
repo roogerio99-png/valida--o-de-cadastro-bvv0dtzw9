@@ -243,8 +243,8 @@ export function BaseMestre() {
   const carregarDuplicidades = async () => {
     setLoadingDuplicidades(true)
     try {
-      // Solicita explicitamente o agrupamento canônico pela regra dos 4 campos
-      const res = await obterRelatorioDuplicidades('quatro_campos')
+      // O endpoint do servidor agrupa canonicamente pela regra dos 4 campos
+      const res = await obterRelatorioDuplicidades()
       setRelatorioDuplicidades(res)
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : 'Falha ao buscar duplicidades.'
