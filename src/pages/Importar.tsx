@@ -1771,7 +1771,6 @@ export function Importar() {
               (itemData.quantidade_embalagem_principal as number | string) || undefined,
             embalagem: itemData.embalagem as string,
             registro_mapa: itemData.registro_mapa as string,
-            ncm: (itemData.ncm as string) || (itemData.ncm_padrao as string),
           }
           chave = gerarChaveDuplicidadeBaseMestre(payloadDedupe)
           rotuloLegivel = formatarRotuloLegivelDuplicada(payloadDedupe)

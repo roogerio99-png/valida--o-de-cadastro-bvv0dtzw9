@@ -57,6 +57,11 @@ import {
   formatarNcmMascara,
   sanitizarRegistroMapa,
 } from '@/lib/motorCanonico'
+import {
+  formatarRotuloLegivelDuplicada,
+  encontrarDuplicadoNaLista,
+  type PayloadItemBaseMestre,
+} from '@/lib/baseMestreDedupe'
 import type {
   BaseMestreProduto,
   GrupoDuplicidade,
@@ -91,6 +96,10 @@ export function BaseMestre() {
   const [editingItem, setEditingItem] = useState<BaseMestreProduto | null>(null)
   const [isEditModalOpen, setIsEditModalOpen] = useState(false)
   const [savingEdit, setSavingEdit] = useState(false)
+  const [duplicidadeEdicaoAviso, setDuplicidadeEdicaoAviso] = useState<{
+    rotulo: string
+    idExistente: string
+  } | null>(null)
 
   // Rolagem Infinita & Totais
   const [totalCount, setTotalCount] = useState(0)
@@ -112,7 +121,6 @@ export function BaseMestre() {
   const [relatorioDuplicidades, setRelatorioDuplicidades] = useState<RelatorioDuplicidades | null>(
     null,
   )
-  const [filtroCriterio, setFiltroCriterio] = useState<string>('todos')
   const [resolvendoId, setResolvendoId] = useState<string | null>(null)
 
   const toggleRowExpanded = (id: string) => {
@@ -235,7 +243,8 @@ export function BaseMestre() {
   const carregarDuplicidades = async () => {
     setLoadingDuplicidades(true)
     try {
-      const res = await obterRelatorioDuplicidades()
+      // Solicita explicitamente o agrupamento canônico pela regra dos 4 campos
+      const res = await obterRelatorioDuplicidades('quatro_campos')
       setRelatorioDuplicidades(res)
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : 'Falha ao buscar duplicidades.'
@@ -526,6 +535,7 @@ export function BaseMestre() {
   // Abrir Modal de Edição
   const handleOpenEdit = (p: BaseMestreProduto) => {
     setEditingItem({ ...p })
+    setDuplicidadeEdicaoAviso(null)
     setIsEditModalOpen(true)
   }
 
@@ -540,6 +550,34 @@ export function BaseMestre() {
       return
     }
     if (!editingItem) return
+
+    // Validação de duplicidade pela regra dos 4 campos canônicos
+    // (Nome Comercial + Princípio Ativo + Quantidade Embalagem + Registro MAPA)
+    const payloadNovo: PayloadItemBaseMestre = {
+      nome_comercial:
+        editingItem.marca_padronizada ||
+        editingItem.nome_produto ||
+        editingItem.nome_completo ||
+        '',
+      marca_padronizada: editingItem.marca_padronizada,
+      nome_produto: editingItem.nome_produto,
+      nome_completo: editingItem.nome_completo,
+      principio_ativo: editingItem.principio_ativo,
+      quantidade_embalagem_principal: editingItem.quantidade_embalagem_principal,
+      embalagem: editingItem.embalagem_original || editingItem.embalagem,
+      registro_mapa: editingItem.registro_mapa,
+    }
+
+    const duplicadoLocal = encontrarDuplicadoNaLista(payloadNovo, produtos, editingItem.id)
+    if (duplicadoLocal && !duplicidadeEdicaoAviso) {
+      const rotulo = formatarRotuloLegivelDuplicada(payloadNovo)
+      setDuplicidadeEdicaoAviso({
+        rotulo,
+        idExistente: duplicadoLocal.id,
+      })
+      return
+    }
+
     setSavingEdit(true)
     try {
       // Re-executa motor canônico se necessário para manter integridade dos campos
@@ -585,6 +623,7 @@ export function BaseMestre() {
         title: 'Produto Atualizado',
         description: 'Alterações gravadas na Base Tributária por Embalagem Final.',
       })
+      setDuplicidadeEdicaoAviso(null)
       setIsEditModalOpen(false)
       carregarProdutos()
     } catch (err: unknown) {
@@ -757,8 +796,11 @@ export function BaseMestre() {
                   )}
                 </h3>
                 <p className="text-xs text-[#5A6D5A]">
-                  Análise multicritério da Trava 4: (a) NCM + Princípio Ativo; (b) Registro MAPA
-                  idêntico; (c) Marca Comercial / Nome + NCM.
+                  Regra Canônica dos 4 Campos: apenas produtos com mesmo{' '}
+                  <strong>Nome Comercial</strong>, <strong>Princípio Ativo</strong>,{' '}
+                  <strong>Quantidade de Embalagem</strong> e <strong>Registro MAPA</strong> são
+                  classificados como duplicados. Mesma marca com embalagens distintas não configura
+                  duplicidade.
                 </p>
               </div>
             </div>
@@ -792,64 +834,21 @@ export function BaseMestre() {
             </div>
           </div>
 
-          {/* Filtros por Critério */}
+          {/* Badge Informativa da Regra Canônica dos 4 Campos */}
           <div className="flex flex-wrap items-center gap-2 pt-1 text-xs">
-            <span className="font-semibold text-[#1C2B1C] text-[11px]">Filtrar critério:</span>
-            <Button
-              size="sm"
-              variant={filtroCriterio === 'todos' ? 'default' : 'outline'}
-              onClick={() => setFiltroCriterio('todos')}
-              className={`h-7 text-xs rounded-lg ${
-                filtroCriterio === 'todos'
-                  ? 'bg-amber-700 text-white'
-                  : 'bg-white border-[#DCE5DC] text-[#1C2B1C]'
-              }`}
-            >
-              Todos os Critérios
-            </Button>
-            <Button
-              size="sm"
-              variant={filtroCriterio === 'nome_ncm' ? 'default' : 'outline'}
-              onClick={() => setFiltroCriterio('nome_ncm')}
-              className={`h-7 text-xs rounded-lg ${
-                filtroCriterio === 'nome_ncm'
-                  ? 'bg-amber-700 text-white'
-                  : 'bg-white border-[#DCE5DC] text-[#1C2B1C]'
-              }`}
-            >
-              Marca + NCM
-            </Button>
-            <Button
-              size="sm"
-              variant={filtroCriterio === 'registro_mapa' ? 'default' : 'outline'}
-              onClick={() => setFiltroCriterio('registro_mapa')}
-              className={`h-7 text-xs rounded-lg ${
-                filtroCriterio === 'registro_mapa'
-                  ? 'bg-amber-700 text-white'
-                  : 'bg-white border-[#DCE5DC] text-[#1C2B1C]'
-              }`}
-            >
-              Registro MAPA
-            </Button>
-            <Button
-              size="sm"
-              variant={filtroCriterio === 'ncm_pa' ? 'default' : 'outline'}
-              onClick={() => setFiltroCriterio('ncm_pa')}
-              className={`h-7 text-xs rounded-lg ${
-                filtroCriterio === 'ncm_pa'
-                  ? 'bg-amber-700 text-white'
-                  : 'bg-white border-[#DCE5DC] text-[#1C2B1C]'
-              }`}
-            >
-              NCM + Princípio Ativo
-            </Button>
+            <span className="font-semibold text-[#1C2B1C] text-[11px]">
+              Critério Canônico Ativo:
+            </span>
+            <Badge className="bg-amber-700 text-white text-[11px] py-0.5 px-2.5">
+              4 Campos Canônicos (Nome Comercial + Princípio Ativo + Quantidade + MAPA)
+            </Badge>
           </div>
 
           {/* Conteúdo do Relatório */}
           {loadingDuplicidades ? (
             <div className="p-8 text-center text-xs text-[#5A6D5A]">
               <Loader2 className="w-6 h-6 animate-spin mx-auto text-amber-700 mb-2" />
-              Executando cruzamento multicritério de duplicidades no servidor...
+              Executando diagnóstico de duplicidades pela regra dos 4 campos no servidor...
             </div>
           ) : !relatorioDuplicidades || relatorioDuplicidades.grupos.length === 0 ? (
             <div className="p-6 text-center text-xs text-emerald-800 bg-emerald-50 rounded-xl border border-emerald-200">
@@ -858,98 +857,109 @@ export function BaseMestre() {
                 Nenhuma duplicidade encontrada na Base Mestre!
               </p>
               <p className="text-[11px] text-emerald-700 mt-0.5">
-                Todos os produtos estão com identificadores, registros MAPA e combinações NCM +
-                Marca Padronizada únicos.
+                Todos os produtos possuem combinações únicas dos 4 campos (Nome Comercial, Princípio
+                Ativo, Quantidade da Embalagem e Código MAPA).
               </p>
             </div>
           ) : (
             <div className="space-y-3 max-h-96 overflow-y-auto pr-1">
-              {relatorioDuplicidades.grupos
-                .filter((g) => filtroCriterio === 'todos' || g.criterio_tipo === filtroCriterio)
-                .map((grupo) => {
-                  const isResolving = resolvendoId === grupo.id
-                  return (
-                    <div
-                      key={grupo.id}
-                      className="p-4 rounded-xl bg-white border border-amber-200 shadow-sm space-y-3"
-                    >
-                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-amber-100 pb-2.5">
-                        <div className="flex items-center gap-2">
-                          <AlertTriangle className="w-4 h-4 text-amber-600 flex-shrink-0" />
-                          <div>
-                            <span className="font-bold text-xs text-[#1C2B1C]">{grupo.chave}</span>
-                            <span className="text-[11px] text-[#5A6D5A] ml-2">
-                              Critério: <strong>{grupo.criterio}</strong> ({grupo.total_ocorrencias}{' '}
-                              ocorrências)
-                            </span>
-                          </div>
+              {relatorioDuplicidades.grupos.map((grupo) => {
+                const isResolving = resolvendoId === grupo.id
+                return (
+                  <div
+                    key={grupo.id}
+                    className="p-4 rounded-xl bg-white border border-amber-200 shadow-sm space-y-3"
+                  >
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-amber-100 pb-2.5">
+                      <div className="flex items-center gap-2">
+                        <AlertTriangle className="w-4 h-4 text-amber-600 flex-shrink-0" />
+                        <div>
+                          <span className="font-bold text-xs text-[#1C2B1C]">
+                            {grupo.registros[0]
+                              ? formatarRotuloLegivelDuplicada({
+                                  nome_comercial:
+                                    grupo.registros[0].marca_padronizada ||
+                                    grupo.registros[0].nome_produto ||
+                                    grupo.registros[0].nome_completo,
+                                  principio_ativo: grupo.registros[0].principio_ativo,
+                                  quantidade_embalagem_principal:
+                                    grupo.registros[0].quantidade_embalagem_principal,
+                                  embalagem:
+                                    grupo.registros[0].embalagem_original ||
+                                    grupo.registros[0].embalagem,
+                                  registro_mapa: grupo.registros[0].registro_mapa,
+                                })
+                              : grupo.chave}
+                          </span>
+                          <span className="text-[11px] text-[#5A6D5A] ml-2">
+                            ({grupo.total_ocorrencias} ocorrências)
+                          </span>
                         </div>
                       </div>
-
-                      <div className="space-y-1.5">
-                        {grupo.registros.map((item) => (
-                          <div
-                            key={item.id}
-                            className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 p-2.5 rounded-lg bg-[#F5F7F1]/80 hover:bg-[#F5F7F1] text-xs transition-colors"
-                          >
-                            <div className="grid grid-cols-1 sm:grid-cols-4 gap-2 flex-1">
-                              <div>
-                                <span className="block font-bold text-[#1C2B1C]">
-                                  {item.marca_padronizada ||
-                                    item.nome_completo ||
-                                    item.nome_produto}
-                                </span>
-                                <span className="text-[10px] font-mono text-[#1B5E20]">
-                                  NCM: {formatarNcmMascara(item.ncm_padrao || item.ncm)}
-                                </span>
-                              </div>
-                              <div>
-                                <span className="block text-[11px] text-[#1C2B1C]">
-                                  P.A.: {item.principio_ativo || '—'}
-                                </span>
-                                <span className="text-[10px] text-[#5A6D5A]">
-                                  Emb: {item.embalagem || '—'} ({item.unidade || 'L'})
-                                </span>
-                              </div>
-                              <div>
-                                <span className="block text-[11px] text-[#1C2B1C]">
-                                  Titular:{' '}
-                                  {item.titular_fabricante || item.fabricante || 'Não Informado'}
-                                </span>
-                                <span className="text-[10px] font-mono text-[#5A6D5A]">
-                                  MAPA: {item.registro_mapa || '—'}
-                                </span>
-                              </div>
-                              <div className="flex items-center gap-1.5">
-                                <Badge className="text-[9px] py-0 px-1.5 bg-emerald-100 text-emerald-800">
-                                  {item.status_pis_cofins?.slice(0, 24) || 'Beneficiado'}...
-                                </Badge>
-                              </div>
-                            </div>
-
-                            {isAdmin ? (
-                              <Button
-                                size="sm"
-                                disabled={isResolving}
-                                onClick={() => handleManterUmExcluirOutros(grupo, item.id)}
-                                className="text-[10px] h-7 bg-[#1B5E20] hover:bg-[#2E7D32] text-white font-medium px-2.5 rounded-lg whitespace-nowrap"
-                              >
-                                Manter Este e Excluir Outros
-                              </Button>
-                            ) : (
-                              <Badge
-                                variant="outline"
-                                className="text-[10px] text-slate-500 bg-slate-50 border-slate-200"
-                              >
-                                Leitura
-                              </Badge>
-                            )}
-                          </div>
-                        ))}
-                      </div>
                     </div>
-                  )
-                })}
+
+                    <div className="space-y-1.5">
+                      {grupo.registros.map((item) => (
+                        <div
+                          key={item.id}
+                          className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 p-2.5 rounded-lg bg-[#F5F7F1]/80 hover:bg-[#F5F7F1] text-xs transition-colors"
+                        >
+                          <div className="grid grid-cols-1 sm:grid-cols-4 gap-2 flex-1">
+                            <div>
+                              <span className="block font-bold text-[#1C2B1C]">
+                                {item.marca_padronizada || item.nome_completo || item.nome_produto}
+                              </span>
+                              <span className="text-[10px] font-mono text-[#1B5E20]">
+                                NCM: {formatarNcmMascara(item.ncm_padrao || item.ncm)}
+                              </span>
+                            </div>
+                            <div>
+                              <span className="block text-[11px] text-[#1C2B1C]">
+                                P.A.: {item.principio_ativo || '—'}
+                              </span>
+                              <span className="text-[10px] text-[#5A6D5A]">
+                                Emb: {item.embalagem || '—'} ({item.unidade || 'L'})
+                              </span>
+                            </div>
+                            <div>
+                              <span className="block text-[11px] text-[#1C2B1C]">
+                                Titular:{' '}
+                                {item.titular_fabricante || item.fabricante || 'Não Informado'}
+                              </span>
+                              <span className="text-[10px] font-mono text-[#5A6D5A]">
+                                MAPA: {item.registro_mapa || '—'}
+                              </span>
+                            </div>
+                            <div className="flex items-center gap-1.5">
+                              <Badge className="text-[9px] py-0 px-1.5 bg-emerald-100 text-emerald-800">
+                                {item.status_pis_cofins?.slice(0, 24) || 'Beneficiado'}...
+                              </Badge>
+                            </div>
+                          </div>
+
+                          {isAdmin ? (
+                            <Button
+                              size="sm"
+                              disabled={isResolving}
+                              onClick={() => handleManterUmExcluirOutros(grupo, item.id)}
+                              className="text-[10px] h-7 bg-[#1B5E20] hover:bg-[#2E7D32] text-white font-medium px-2.5 rounded-lg whitespace-nowrap"
+                            >
+                              Manter Este e Excluir Outros
+                            </Button>
+                          ) : (
+                            <Badge
+                              variant="outline"
+                              className="text-[10px] text-slate-500 bg-slate-50 border-slate-200"
+                            >
+                              Leitura
+                            </Badge>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )
+              })}
             </div>
           )}
         </Card>
@@ -1605,6 +1615,47 @@ export function BaseMestre() {
                   className="h-9 text-xs border-[#DCE5DC]"
                 />
               </div>
+
+              {/* Alerta de Duplicidade nos 4 Campos Canônicos */}
+              {duplicidadeEdicaoAviso && (
+                <div className="p-3 bg-amber-50 border border-amber-300 rounded-xl space-y-2 animate-in fade-in">
+                  <div className="flex items-start gap-2">
+                    <AlertTriangle className="w-4 h-4 text-amber-700 flex-shrink-0 mt-0.5" />
+                    <div className="text-xs text-amber-950">
+                      <p className="font-bold text-amber-900">
+                        Atenção: Combinação de 4 campos já existente na Base Mestre
+                      </p>
+                      <p className="text-[11px] text-amber-800 mt-0.5 font-medium">
+                        {duplicidadeEdicaoAviso.rotulo}
+                      </p>
+                      <p className="text-[10px] text-amber-700 mt-1">
+                        Já existe outro cadastro ativo com o mesmo Nome Comercial, Princípio Ativo,
+                        Quantidade de Embalagem e Registro MAPA (ID:{' '}
+                        {duplicidadeEdicaoAviso.idExistente}).
+                      </p>
+                    </div>
+                  </div>
+                  <div className="flex items-center justify-end gap-2 pt-1 border-t border-amber-200">
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => setDuplicidadeEdicaoAviso(null)}
+                      className="h-7 text-xs text-[#5A6D5A] hover:text-black"
+                    >
+                      Ajustar Campos
+                    </Button>
+                    <Button
+                      type="submit"
+                      disabled={savingEdit}
+                      size="sm"
+                      className="h-7 text-xs bg-amber-700 hover:bg-amber-800 text-white font-medium"
+                    >
+                      Prosseguir e Salvar Mesmo Assim
+                    </Button>
+                  </div>
+                </div>
+              )}
 
               {/* Parâmetros da Embalagem: Quantidade, Unidade, Forma de Acondicionamento */}
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 p-3 bg-[#F5F7F1]/80 rounded-xl border border-[#DCE5DC]">

@@ -470,7 +470,7 @@ export interface ProdutoInput {
 export interface GrupoDuplicidade {
   id: string
   criterio: string
-  criterio_tipo: 'ncm_pa' | 'registro_mapa' | 'nome_ncm'
+  criterio_tipo: 'quatro_campos' | 'ncm_pa' | 'registro_mapa' | 'nome_ncm'
   chave: string
   total_ocorrencias: number
   registros: BaseMestreProduto[]

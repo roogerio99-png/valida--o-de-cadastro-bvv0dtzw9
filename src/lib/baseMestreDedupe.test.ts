@@ -138,6 +138,25 @@ describe('Regra de Identificação de Produto Duplicado na Base Mestre (4 campos
       expect(saoProdutosDuplicados(prodA, prodB)).toBe(false)
     })
 
+    // 4b. Sem registro MAPA (ISENTO / vazio)
+    it('produtos sem registro MAPA são tratados como ISENTO na chave', () => {
+      const prodA = {
+        nome_comercial: 'ADJUVANTE SILICONE',
+        principio_ativo: 'Polioxietileno',
+        quantidade_embalagem_principal: 5,
+        embalagem: '5 L',
+        registro_mapa: '',
+      }
+      const prodB = {
+        nome_comercial: 'ADJUVANTE SILICONE',
+        principio_ativo: 'Polioxietileno',
+        quantidade_embalagem_principal: 5,
+        embalagem: '5 L',
+        registro_mapa: 'ISENTO',
+      }
+      expect(saoProdutosDuplicados(prodA, prodB)).toBe(true)
+    })
+
     // 5. Idempotência de reimportação
     it('idempotência de reimportação: detecta item existente na base pela chave dos 4 campos e permite atualizar em vez de duplicar', () => {
       const baseExistente = [
