@@ -2576,20 +2576,33 @@ routerAdd('POST', '/backend/v1/importar-lote', (e) => {
             tipoProduto = normalizarTipoProduto(tipoProduto, bmDesc, `${b1Grupo} ${descricao}`)
           }
 
-          // 8. Origem
+          // 8. Origem (com proteção anti-contaminação de descrição fiscal)
           let origem = String(data.origem || '').trim()
+          // Se a origem recebida contiver descrição fiscal (ex: "ORIGEM 0,4,5,6,7 (NCM ...)" ou "TRIBUTADO"), não usar como procedência
+          const origemUpCheck = origem.toUpperCase()
+          if (
+            (origemUpCheck.includes('ORIGEM') && origemUpCheck.includes('(NCM')) ||
+            origemUpCheck.includes('TRIBUTAD')
+          ) {
+            origem = ''
+          }
+
           const x5Origem = String(
             rawObj.X5_TABELA || rawObj.X5_DESC || rawObj.x5_tabela || '',
           ).trim()
           if (x5Origem) {
             const x5Up = x5Origem.toUpperCase()
-            if (x5Up.includes('IMP') || x5Up.includes('ESTRANGEIR')) {
-              origem = 'Importado'
-            } else if (x5Up.includes('NAC')) {
-              origem = 'Nacional'
+            const isDescricaoFiscalX5 =
+              (x5Up.includes('ORIGEM') && x5Up.includes('(NCM')) || x5Up.includes('TRIBUTAD')
+            if (!isDescricaoFiscalX5) {
+              if (x5Up.includes('ESTRANGEIR') || /\bIMP\b/.test(x5Up) || x5Up.startsWith('IMP')) {
+                origem = 'Importado'
+              } else if (/\bNAC\b/.test(x5Up) || x5Up.startsWith('NAC')) {
+                origem = 'Nacional'
+              }
             }
           }
-          if (!origem) {
+          if (!origem || (origem !== 'Nacional' && origem !== 'Importado')) {
             const descUp = descricao.toUpperCase()
             const embUp = embalagem.toUpperCase()
             if (
@@ -2643,6 +2656,70 @@ routerAdd('POST', '/backend/v1/importar-lote', (e) => {
               : rawObj.B1_PRV1 || rawObj.b1_prv1 || data.preco_base || data.preco || 0
           const precoBase = Number(rawPreco) || 0
 
+          // 13. Campos novos da planilha "Produtos Base" (A–M)
+          const grupoCodigo = String(
+            data.grupo_codigo ||
+              rawObj.B1_GRUPO ||
+              rawObj.b1_grupo ||
+              rawObj.B1_GRUPO_ORIGINAL ||
+              '',
+          ).trim()
+
+          const grupoDescricao = String(
+            data.grupo_descricao ||
+              rawObj.BM_DESC ||
+              rawObj.bm_desc ||
+              rawObj.BM_DESC_ORIGINAL ||
+              bmDesc ||
+              '',
+          ).trim()
+
+          let descGrupoTrib = String(
+            data.descricao_grupo_tributario ||
+              rawObj['DESCRIÇÃO GRUPO TRIBUTARIO'] ||
+              rawObj['DESCRICAO GRUPO TRIBUTARIO'] ||
+              rawObj['DESCRIÇÃO DO GRUPO TRIBUTÁRIO'] ||
+              rawObj.descricao_grupo_tributario ||
+              rawObj.desc_grupo_tributario ||
+              rawObj.desc_grtrib ||
+              '',
+          ).trim()
+
+          if (!descGrupoTrib) {
+            const x5Descri = String(
+              rawObj.X5_DESCRI || rawObj.x5_descri || rawObj.X5_DESC || rawObj.x5_desc || '',
+            ).trim()
+            if (
+              x5Descri &&
+              (x5Descri.includes('(NCM') ||
+                x5Descri.includes('TRIBUTAD') ||
+                x5Descri.includes('ORIGEM'))
+            ) {
+              descGrupoTrib = x5Descri
+            }
+          }
+
+          const segmento = String(data.segmento || rawObj.SEGMENTO || rawObj.segmento || '').trim()
+
+          const rawComissao =
+            data.comissao_padrao !== undefined
+              ? data.comissao_padrao
+              : rawObj.COMISSAO_PADRAO !== undefined
+                ? rawObj.COMISSAO_PADRAO
+                : rawObj.comissao_padrao !== undefined
+                  ? rawObj.comissao_padrao
+                  : rawObj.comissao
+          let comissaoPadrao = 0
+          if (rawComissao !== undefined && rawComissao !== null && rawComissao !== '') {
+            const parsedCom =
+              typeof rawComissao === 'number'
+                ? rawComissao
+                : parseFloat(String(rawComissao).replace(',', '.'))
+            if (!isNaN(parsedCom)) {
+              comissaoPadrao = parsedCom
+            }
+          }
+
           // Upsert por código (se houver) ou por descrição exata
           let record = null
           let isUpdate = false
@@ -2695,6 +2772,11 @@ routerAdd('POST', '/backend/v1/importar-lote', (e) => {
           record.set('moeda', moeda)
           record.set('preco_base_sugerido', precoBase)
           record.set('gr_trib', grTrib)
+          record.set('grupo_codigo', grupoCodigo)
+          record.set('grupo_descricao', grupoDescricao)
+          record.set('descricao_grupo_tributario', descGrupoTrib)
+          record.set('segmento', segmento)
+          record.set('comissao_padrao', comissaoPadrao)
 
           // Preservar dados_extras íntegros
           if (data.dados_extras) {

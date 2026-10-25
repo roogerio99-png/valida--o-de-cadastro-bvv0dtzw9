@@ -71,6 +71,11 @@ interface FormEdicaoProduto {
   moeda: string
   preco_base_sugerido: string // manipulado como string para permitir vírgula pt-BR
   gr_trib: string
+  grupo_codigo: string
+  grupo_descricao: string
+  descricao_grupo_tributario: string
+  segmento: string
+  comissao_padrao: string
   fabricante: string
   principio_ativo: string
 }
@@ -109,7 +114,7 @@ export function AbaBaseProdutos({ ativa }: AbaBaseProdutosProps) {
     const termo = search.trim()
     if (!termo) return undefined
     const clean = termo.replace(/'/g, "\\'")
-    return `codigo ~ '${clean}' || descricao ~ '${clean}' || ncm ~ '${clean}'`
+    return `codigo ~ '${clean}' || descricao ~ '${clean}' || ncm ~ '${clean}' || descricao_grupo_tributario ~ '${clean}' || segmento ~ '${clean}'`
   }, [search])
 
   const carregarDados = useCallback(
@@ -184,6 +189,11 @@ export function AbaBaseProdutos({ ativa }: AbaBaseProdutosProps) {
         ? String(prod.preco_base_sugerido).replace('.', ',')
         : '0,00'
 
+    const comissaoFormatada =
+      prod.comissao_padrao !== undefined && prod.comissao_padrao !== null
+        ? String(prod.comissao_padrao).replace('.', ',')
+        : ''
+
     setItemEditando({
       id: prod.id,
       codigo: prod.codigo || '',
@@ -196,6 +206,11 @@ export function AbaBaseProdutos({ ativa }: AbaBaseProdutosProps) {
       moeda: prod.moeda || 'BRL',
       preco_base_sugerido: precoFormatado,
       gr_trib: prod.gr_trib || '',
+      grupo_codigo: prod.grupo_codigo || '',
+      grupo_descricao: prod.grupo_descricao || '',
+      descricao_grupo_tributario: prod.descricao_grupo_tributario || '',
+      segmento: prod.segmento || '',
+      comissao_padrao: comissaoFormatada,
       fabricante: prod.fabricante || '',
       principio_ativo: prod.principio_ativo || '',
     })
@@ -242,6 +257,10 @@ export function AbaBaseProdutos({ ativa }: AbaBaseProdutosProps) {
       novosErros.preco = 'Informe um preço numérico válido maior ou igual a zero.'
     }
 
+    // Validação da comissão padrão se preenchida
+    const comissaoLimpa = itemEditando.comissao_padrao.trim().replace(/\./g, '').replace(',', '.')
+    const comissaoNum = comissaoLimpa === '' ? 0 : parseFloat(comissaoLimpa)
+
     if (Object.keys(novosErros).length > 0) {
       setErrosEdicao(novosErros)
       return
@@ -259,6 +278,11 @@ export function AbaBaseProdutos({ ativa }: AbaBaseProdutosProps) {
         moeda: itemEditando.moeda,
         preco_base_sugerido: precoNum,
         gr_trib: itemEditando.gr_trib,
+        grupo_codigo: itemEditando.grupo_codigo,
+        grupo_descricao: itemEditando.grupo_descricao,
+        descricao_grupo_tributario: itemEditando.descricao_grupo_tributario,
+        segmento: itemEditando.segmento,
+        comissao_padrao: comissaoNum,
         fabricante: itemEditando.fabricante,
         principio_ativo: itemEditando.principio_ativo,
       })
@@ -396,16 +420,23 @@ export function AbaBaseProdutos({ ativa }: AbaBaseProdutosProps) {
                 <th className="py-3 px-3 font-semibold w-24 whitespace-nowrap text-center">
                   GrTrib
                 </th>
+                <th className="py-3 px-3 font-semibold min-w-[150px] whitespace-nowrap">
+                  Desc. Gr. Trib.
+                </th>
+                <th className="py-3 px-3 font-semibold w-28 whitespace-nowrap">Segmento</th>
+                <th className="py-3 px-3 font-semibold w-24 text-right whitespace-nowrap">
+                  Comissão
+                </th>
                 <th className="py-3 px-3 font-semibold w-28 whitespace-nowrap">NCM</th>
-                <th className="py-3 px-3 font-semibold w-28 whitespace-nowrap">Embalagem</th>
+                <th className="py-3 px-3 font-semibold w-24 whitespace-nowrap">Embalagem</th>
                 <th className="py-3 px-3 font-semibold w-24 whitespace-nowrap">Origem</th>
-                <th className="py-3 px-3 font-semibold w-20 text-center whitespace-nowrap">
+                <th className="py-3 px-3 font-semibold w-16 text-center whitespace-nowrap">
                   Moeda
                 </th>
-                <th className="py-3 px-3 font-semibold w-28 text-right whitespace-nowrap">
+                <th className="py-3 px-3 font-semibold w-24 text-right whitespace-nowrap">
                   Preço Base
                 </th>
-                <th className="py-3 px-3 font-semibold w-20 text-center whitespace-nowrap">
+                <th className="py-3 px-3 font-semibold w-16 text-center whitespace-nowrap">
                   Ações
                 </th>
               </tr>
@@ -413,14 +444,14 @@ export function AbaBaseProdutos({ ativa }: AbaBaseProdutosProps) {
             <tbody className="divide-y divide-[#F0F4F0]">
               {loading ? (
                 <tr>
-                  <td colSpan={9} className="py-12 text-center text-xs text-[#5A6D5A]">
+                  <td colSpan={12} className="py-12 text-center text-xs text-[#5A6D5A]">
                     <Loader2 className="w-6 h-6 animate-spin mx-auto text-[#1B5E20] mb-2" />
                     Carregando base de produtos...
                   </td>
                 </tr>
               ) : items.length === 0 ? (
                 <tr>
-                  <td colSpan={9} className="py-12 text-center text-xs text-[#5A6D5A]">
+                  <td colSpan={12} className="py-12 text-center text-xs text-[#5A6D5A]">
                     <div className="max-w-md mx-auto space-y-2">
                       <p className="font-semibold text-gray-800">Nenhum produto encontrado</p>
                       <p className="text-gray-500">
@@ -467,6 +498,38 @@ export function AbaBaseProdutos({ ativa }: AbaBaseProdutosProps) {
                         {prod.gr_trib ? (
                           <span className="font-mono text-[11px] font-bold bg-blue-50 text-blue-800 px-2 py-0.5 rounded border border-blue-200">
                             {prod.gr_trib}
+                          </span>
+                        ) : (
+                          <span className="text-gray-400">—</span>
+                        )}
+                      </td>
+
+                      <td className="py-2.5 px-3 text-gray-700 whitespace-nowrap">
+                        {prod.descricao_grupo_tributario ? (
+                          <span className="text-[11px] font-medium bg-slate-100 text-slate-800 px-2 py-0.5 rounded border border-slate-200">
+                            {prod.descricao_grupo_tributario}
+                          </span>
+                        ) : (
+                          <span className="text-gray-400">—</span>
+                        )}
+                      </td>
+
+                      <td className="py-2.5 px-3 text-gray-700 whitespace-nowrap">
+                        {prod.segmento ? (
+                          <span className="text-[11px] font-semibold text-emerald-800 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200">
+                            {prod.segmento}
+                          </span>
+                        ) : (
+                          <span className="text-gray-400">—</span>
+                        )}
+                      </td>
+
+                      <td className="py-2.5 px-3 text-right font-mono text-[11px] text-gray-800 whitespace-nowrap">
+                        {prod.comissao_padrao !== undefined &&
+                        prod.comissao_padrao !== null &&
+                        prod.comissao_padrao > 0 ? (
+                          <span className="font-semibold">
+                            {(prod.comissao_padrao * 100).toFixed(1).replace('.', ',')}%
                           </span>
                         ) : (
                           <span className="text-gray-400">—</span>
@@ -628,7 +691,7 @@ export function AbaBaseProdutos({ ativa }: AbaBaseProdutosProps) {
                 {/* Descrição */}
                 <div className="space-y-1">
                   <Label className="text-xs font-semibold text-[#1C2B1C]">
-                    Descrição do Produto *
+                    Descrição do Produto (B1_DESC) *
                   </Label>
                   <Input
                     required
@@ -647,6 +710,83 @@ export function AbaBaseProdutos({ ativa }: AbaBaseProdutosProps) {
                   {errosEdicao.descricao && (
                     <p className="text-[10px] text-red-600 font-medium">{errosEdicao.descricao}</p>
                   )}
+                </div>
+
+                {/* Linha dos Novos Campos: Descrição Grupo Tributário, Segmento e Comissão Padrão */}
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 p-3 bg-emerald-50/50 rounded-xl border border-emerald-200">
+                  <div className="space-y-1">
+                    <Label className="text-xs font-semibold text-[#1C2B1C]">
+                      Descrição Grupo Tributário
+                    </Label>
+                    <Input
+                      value={itemEditando.descricao_grupo_tributario}
+                      onChange={(e) =>
+                        setItemEditando({
+                          ...itemEditando,
+                          descricao_grupo_tributario: e.target.value,
+                        })
+                      }
+                      placeholder="Ex: DEFENSIVOS, FERTILIZANTES"
+                      className="h-9 text-xs border-[#DCE5DC] bg-white"
+                    />
+                  </div>
+
+                  <div className="space-y-1">
+                    <Label className="text-xs font-semibold text-[#1C2B1C]">Segmento</Label>
+                    <Input
+                      value={itemEditando.segmento}
+                      onChange={(e) =>
+                        setItemEditando({ ...itemEditando, segmento: e.target.value })
+                      }
+                      placeholder="Ex: CROP, ESSENTIALS"
+                      className="h-9 text-xs border-[#DCE5DC] bg-white font-medium"
+                    />
+                  </div>
+
+                  <div className="space-y-1">
+                    <Label className="text-xs font-semibold text-[#1C2B1C]">
+                      Comissão Padrão (Ex: 0,025 = 2,5%)
+                    </Label>
+                    <Input
+                      value={itemEditando.comissao_padrao}
+                      onChange={(e) =>
+                        setItemEditando({ ...itemEditando, comissao_padrao: e.target.value })
+                      }
+                      placeholder="Ex: 0,025"
+                      className="h-9 text-xs font-mono border-[#DCE5DC] bg-white font-semibold"
+                    />
+                  </div>
+                </div>
+
+                {/* Grupo ERP: B1_GRUPO e BM_DESC */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div className="space-y-1">
+                    <Label className="text-xs font-semibold text-[#1C2B1C]">
+                      Código do Grupo ERP (B1_GRUPO)
+                    </Label>
+                    <Input
+                      value={itemEditando.grupo_codigo}
+                      onChange={(e) =>
+                        setItemEditando({ ...itemEditando, grupo_codigo: e.target.value })
+                      }
+                      placeholder="Ex: 0102, 0213"
+                      className="h-9 text-xs font-mono border-[#DCE5DC]"
+                    />
+                  </div>
+
+                  <div className="space-y-1">
+                    <Label className="text-xs font-semibold text-[#1C2B1C]">
+                      Descrição do Grupo ERP (BM_DESC)
+                    </Label>
+                    <Input
+                      value={itemEditando.grupo_descricao}
+                      onChange={(e) =>
+                        setItemEditando({ ...itemEditando, grupo_descricao: e.target.value })
+                      }
+                      placeholder="Ex: DEFENSIVOS - FUNGICIDAS"
+                      className="h-9 text-xs border-[#DCE5DC]"
+                    />
+                  </div>
                 </div>
 
                 {/* Embalagem, Unidade e Tipo de Produto */}

@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-10-25T01:28:36.545Z",
+  "generatedAt": "2026-10-25T01:42:06.584Z",
   "collections": [
     {
       "name": "users",
@@ -1875,6 +1875,36 @@
         {
           "name": "gr_trib",
           "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "grupo_codigo",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "grupo_descricao",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "descricao_grupo_tributario",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "segmento",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "comissao_padrao",
+          "type": "number",
           "required": false,
           "system": false
         }

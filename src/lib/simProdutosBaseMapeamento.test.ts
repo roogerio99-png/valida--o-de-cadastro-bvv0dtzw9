@@ -64,6 +64,9 @@ describe('Mapeamento Canônico de Produtos Base (sim_produtos_base)', () => {
       B1_GRUPO: '0102',
       B1_POSIPI: '38089299',
       B1_GRTRIB2: '001',
+      'DESCRIÇÃO GRUPO TRIBUTARIO': 'DEFENSIVO - ORIGEM 0,4,5,6,7 (NCM 3808)',
+      SEGMENTO: 'CROP',
+      COMISSAO_PADRAO: '0.015',
       BM_DESC: 'DEFENSIVOS - FUNGICIDAS',
       BUSCA_PRODUTO: '007243 - SYNPROLE 480 SC 1X20L (IMP) SS',
     }
@@ -95,6 +98,13 @@ describe('Mapeamento Canônico de Produtos Base (sim_produtos_base)', () => {
 
     // 8. Tipo de produto
     expect(res.tipo_produto).toBe('Produto Formulado Comercial')
+
+    // 9. Novos campos mapeados da planilha A–M
+    expect(res.grupo_codigo).toBe('0102')
+    expect(res.grupo_descricao).toBe('DEFENSIVOS - FUNGICIDAS')
+    expect(res.descricao_grupo_tributario).toBe('DEFENSIVO - ORIGEM 0,4,5,6,7 (NCM 3808)')
+    expect(res.segmento).toBe('CROP')
+    expect(res.comissao_padrao).toBe(0.015)
   })
 
   it('2. Deve extrair fabricante e tipo fertilizante para o item 007221 (FFALM 10 15 15 - MOSAIC (AGENCIADO))', () => {
@@ -104,6 +114,9 @@ describe('Mapeamento Canônico de Produtos Base (sim_produtos_base)', () => {
       B1_GRUPO: '0213',
       B1_POSIPI: '31052000',
       B1_GRTRIB2: '002',
+      'DESCRIÇÃO GRUPO TRIBUTARIO': 'FERTILIZANTES',
+      SEGMENTO: 'ESSENTIALS',
+      COMISSAO_PADRAO: '0.03',
       BM_DESC: 'FERTILIZANTES GRANULADOS',
     }
 
@@ -118,6 +131,11 @@ describe('Mapeamento Canônico de Produtos Base (sim_produtos_base)', () => {
     expect(res.gr_trib).toBe('002')
     // Item 4 do enunciado: fertilizantes granulados/sólidos devem derivar unidade "KG" (não "L")
     expect(res.unidade).toBe('KG')
+    expect(res.grupo_codigo).toBe('0213')
+    expect(res.grupo_descricao).toBe('FERTILIZANTES GRANULADOS')
+    expect(res.descricao_grupo_tributario).toBe('FERTILIZANTES')
+    expect(res.segmento).toBe('ESSENTIALS')
+    expect(res.comissao_padrao).toBe(0.03)
   })
 
   it('3. Deve extrair embalagem de 200L e classificar adjuvante para 002203 (AGRICOIL PREMIUM PURO 200L)', () => {
@@ -127,6 +145,9 @@ describe('Mapeamento Canônico de Produtos Base (sim_produtos_base)', () => {
       B1_GRUPO: '0210',
       B1_POSIPI: '27101931',
       B1_GRTRIB2: '004',
+      'DESCRIÇÃO GRUPO TRIBUTARIO': 'TRIBUTADOS',
+      SEGMENTO: 'ESSENTIALS',
+      COMISSAO_PADRAO: '0.025',
       BM_DESC: 'OLEO MINERAL',
     }
 
@@ -137,6 +158,41 @@ describe('Mapeamento Canônico de Produtos Base (sim_produtos_base)', () => {
     expect(res.ncm).toBe('2710.19.31')
     expect(res.tipo_produto).toBe('Adjuvante / Espalhante Adesivo')
     expect(res.unidade).toBe('L')
+    expect(res.grupo_codigo).toBe('0210')
+    expect(res.grupo_descricao).toBe('OLEO MINERAL')
+    expect(res.descricao_grupo_tributario).toBe('TRIBUTADOS')
+    expect(res.segmento).toBe('ESSENTIALS')
+    expect(res.comissao_padrao).toBe(0.025)
+  })
+
+  it('10. Anti-contaminação: X5 ou coluna de origem trazendo descrição fiscal não deve contaminar origem nem moeda em produto (IMP)', () => {
+    const rawRowContaminado = {
+      B1_COD: '007243',
+      B1_DESC: 'SYNPROLE 480 SC 1X20L (IMP) SS',
+      X5_TABELA: 'DEFENSIVO - ORIGEM 0,4,5,6,7 (NCM 3808)',
+      origem: 'DEFENSIVO - ORIGEM 0,4,5,6,7 (NCM 3808)',
+      'DESCRIÇÃO GRUPO TRIBUTARIO': 'DEFENSIVO - ORIGEM 0,4,5,6,7 (NCM 3808)',
+    }
+
+    const res = mapearLinhaSimProdutoBase(rawRowContaminado)
+    // Mesmo que X5_TABELA e 'origem' venham contaminados com texto descritivo fiscal,
+    // a procedência deve ser 'Importado' por causa do sufixo (IMP), e moeda 'USD'.
+    expect(res.origem).toBe('Importado')
+    expect(res.moeda).toBe('USD')
+    expect(res.descricao_grupo_tributario).toBe('DEFENSIVO - ORIGEM 0,4,5,6,7 (NCM 3808)')
+  })
+
+  it('11. Anti-contaminação: X5 com descrição fiscal em produto nacional deve resultar em Nacional e BRL', () => {
+    const rawRowContaminadoNacional = {
+      B1_COD: '007221',
+      B1_DESC: 'FFALM 10 15 15 - MOSAIC (AGENCIADO)',
+      X5_TABELA: 'FERTILIZANTE - ORIGEM 0,4,5,6,7 (NCM 31)',
+      origem: 'FERTILIZANTE - ORIGEM 0,4,5,6,7 (NCM 31)',
+    }
+
+    const res = mapearLinhaSimProdutoBase(rawRowContaminadoNacional)
+    expect(res.origem).toBe('Nacional')
+    expect(res.moeda).toBe('BRL')
   })
 
   it('4. Deve extrair múltiplos padrões de embalagem preferindo quantidade×conteúdo e não formulação', () => {

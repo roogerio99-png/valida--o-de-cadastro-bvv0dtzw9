@@ -26,7 +26,13 @@ export interface LinhaPlanilhaProdutoBase {
   BM_DESC?: string
   X5_TABELA?: string
   X5_DESC?: string
+  X5_DESCRI?: string
   gr_trib?: string
+  grupo_codigo?: string
+  grupo_descricao?: string
+  descricao_grupo_tributario?: string
+  segmento?: string
+  comissao_padrao?: number | string
   [key: string]: unknown
 }
 
@@ -43,6 +49,11 @@ export interface ProdutoBaseEstruturado {
   moeda: 'BRL' | 'USD'
   preco_base_sugerido: number
   gr_trib?: string
+  grupo_codigo?: string
+  grupo_descricao?: string
+  descricao_grupo_tributario?: string
+  segmento?: string
+  comissao_padrao?: number
   dados_extras?: Record<string, unknown>
 }
 
@@ -108,7 +119,9 @@ export function extrairFabricanteAgenciado(desc: string | undefined | null): str
 }
 
 /**
- * Deriva a procedência/origem (Nacional ou Importado)
+ * Deriva a procedência/origem (Nacional ou Importado).
+ * Anti-contaminação: se x5Tabela trouxer texto de descrição do grupo fiscal
+ * (ex.: contendo "ORIGEM" e "(NCM", ou "TRIBUTADO"), não deve ser interpretado como procedência pura.
  */
 export function derivarOrigemProduto(
   x5Tabela?: string | null,
@@ -117,8 +130,14 @@ export function derivarOrigemProduto(
 ): 'Nacional' | 'Importado' {
   if (x5Tabela) {
     const up = String(x5Tabela).toUpperCase()
-    if (up.includes('IMP') || up.includes('ESTRANGEIR')) return 'Importado'
-    if (up.includes('NAC')) return 'Nacional'
+    // Anti-contaminação: se o texto descreve grupo fiscal ("DEFENSIVO - ORIGEM 0,4,5,6,7 (NCM 3808)")
+    const isDescricaoFiscal =
+      (up.includes('ORIGEM') && up.includes('(NCM')) || up.includes('TRIBUTAD')
+    if (!isDescricaoFiscal) {
+      if (up.includes('ESTRANGEIR') || /\bIMP\b/.test(up) || up.startsWith('IMP'))
+        return 'Importado'
+      if (/\bNAC\b/.test(up) || up.startsWith('NAC')) return 'Nacional'
+    }
   }
   const dUp = String(desc || '').toUpperCase()
   const eUp = String(emb || '').toUpperCase()
@@ -295,6 +314,62 @@ export function mapearLinhaSimProdutoBase(
               ? row.valor
               : 0
 
+  // Campos novos das 13 colunas (A a M) da planilha "Produtos Base":
+  // Coluna C: B1_GRUPO -> grupo_codigo
+  const grupoCodigoFinal = String(
+    row.B1_GRUPO || row.b1_grupo || row.B1_GRUPO_ORIGINAL || row.grupo_codigo || '',
+  ).trim()
+
+  // Coluna D: BM_DESC -> grupo_descricao
+  const grupoDescricaoFinal = String(
+    row.BM_DESC || row.bm_desc || row.BM_DESC_ORIGINAL || row.grupo_descricao || '',
+  ).trim()
+
+  // Coluna G: "DESCRIÇÃO GRUPO TRIBUTARIO" -> descricao_grupo_tributario
+  let descGrupoTribFinal = String(
+    row['DESCRIÇÃO GRUPO TRIBUTARIO'] ||
+      row['DESCRICAO GRUPO TRIBUTARIO'] ||
+      row['DESCRIÇÃO DO GRUPO TRIBUTÁRIO'] ||
+      row.descricao_grupo_tributario ||
+      row.desc_grupo_tributario ||
+      row.desc_grtrib ||
+      '',
+  ).trim()
+
+  // Se X5 contiver texto de grupo fiscal e descGrupoTribFinal estiver vazio, aproveita
+  if (!descGrupoTribFinal) {
+    const x5Descri = String(
+      row.X5_DESCRI || row.x5_descri || row.X5_DESC || row.x5_desc || '',
+    ).trim()
+    if (
+      x5Descri &&
+      (x5Descri.includes('(NCM') || x5Descri.includes('TRIBUTAD') || x5Descri.includes('ORIGEM'))
+    ) {
+      descGrupoTribFinal = x5Descri
+    }
+  }
+
+  // Coluna H: "SEGMENTO" -> segmento
+  const segmentoFinal = String(row.SEGMENTO || row.segmento || '').trim()
+
+  // Coluna I: "COMISSAO_PADRAO" -> comissao_padrao (number)
+  const rawComissao =
+    row.COMISSAO_PADRAO !== undefined
+      ? row.COMISSAO_PADRAO
+      : row.comissao_padrao !== undefined
+        ? row.comissao_padrao
+        : row.comissao
+  let comissaoPadraoFinal: number | undefined
+  if (rawComissao !== undefined && rawComissao !== null && rawComissao !== '') {
+    const parsedCom =
+      typeof rawComissao === 'number'
+        ? rawComissao
+        : parseFloat(String(rawComissao).replace(',', '.'))
+    if (!isNaN(parsedCom)) {
+      comissaoPadraoFinal = parsedCom
+    }
+  }
+
   // 1. Descrição: prioridade absoluta B1_DESC; NUNCA BM_DESC
   let descricaoFinal = b1Desc
   if (!descricaoFinal && fallbackDescricao) {
@@ -348,6 +423,11 @@ export function mapearLinhaSimProdutoBase(
     moeda: moedaFinal,
     preco_base_sugerido: precoFinal,
     gr_trib: b1Grtrib2,
+    grupo_codigo: grupoCodigoFinal || undefined,
+    grupo_descricao: grupoDescricaoFinal || undefined,
+    descricao_grupo_tributario: descGrupoTribFinal || undefined,
+    segmento: segmentoFinal || undefined,
+    comissao_padrao: comissaoPadraoFinal,
     dados_extras: row as Record<string, unknown>,
   }
 }

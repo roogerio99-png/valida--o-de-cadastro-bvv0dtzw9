@@ -1906,7 +1906,7 @@ export function Importar() {
           }
         }
 
-        // 6. Origem: coluna x5_tabela ou sufixo (IMP)/(SS)
+        // 6. Origem: coluna x5_tabela ou sufixo (IMP)/(SS) com proteção anti-contaminação
         const x5Origem = getFieldValue(row, [
           'x5_tabela',
           'x5_desc',
@@ -1919,12 +1919,15 @@ export function Importar() {
         let origem = ''
         if (x5Origem) {
           const x5Up = x5Origem.toUpperCase()
-          if (x5Up.includes('IMP') || x5Up.includes('ESTRANGEIR')) {
-            origem = 'Importado'
-          } else if (x5Up.includes('NAC')) {
-            origem = 'Nacional'
-          } else {
-            origem = x5Origem
+          // Anti-contaminação: se for descrição fiscal (ex: "ORIGEM 0,4,5,6,7 (NCM 3808)" ou "TRIBUTADO")
+          const isDescricaoFiscal =
+            (x5Up.includes('ORIGEM') && x5Up.includes('(NCM')) || x5Up.includes('TRIBUTAD')
+          if (!isDescricaoFiscal) {
+            if (x5Up.includes('IMP') || x5Up.includes('ESTRANGEIR')) {
+              origem = 'Importado'
+            } else if (x5Up.includes('NAC')) {
+              origem = 'Nacional'
+            }
           }
         }
         if (!origem) {
@@ -2000,6 +2003,54 @@ export function Importar() {
           'cod_grtrib',
         ])
 
+        // 9.1 Campos novos da planilha "Produtos Base" (A–M):
+        // Coluna C: grupo_codigo (B1_GRUPO)
+        const grupoCodigo =
+          getFieldValue(row, ['b1_grupo', 'b1_grupo_original', 'grupo_codigo', 'cod_grupo']) ||
+          b1Grupo ||
+          ''
+
+        // Coluna D: grupo_descricao (BM_DESC)
+        const grupoDescricao =
+          getFieldValue(row, [
+            'bm_desc',
+            'bm_desc_original',
+            'grupo_descricao',
+            'desc_grupo',
+            'grupo_desc',
+          ]) ||
+          bmDesc ||
+          ''
+
+        // Coluna G: descricao_grupo_tributario ("DESCRIÇÃO GRUPO TRIBUTARIO")
+        let descGrupoTrib =
+          getFieldValue(row, [
+            'descrição grupo tributario',
+            'descricao grupo tributario',
+            'descrição do grupo tributário',
+            'descricao_grupo_tributario',
+            'desc_grupo_tributario',
+            'desc_grtrib',
+          ]) || ''
+        if (!descGrupoTrib && x5Origem) {
+          const x5Up = x5Origem.toUpperCase()
+          if ((x5Up.includes('ORIGEM') && x5Up.includes('(NCM')) || x5Up.includes('TRIBUTAD')) {
+            descGrupoTrib = x5Origem
+          }
+        }
+
+        // Coluna H: segmento ("SEGMENTO")
+        const segmento = getFieldValue(row, ['segmento', 'seg']) || ''
+
+        // Coluna I: comissao_padrao ("COMISSAO_PADRAO")
+        const rawComissao = getFieldValue(row, [
+          'comissao_padrao',
+          'comissao',
+          'comissao_padrao_perc',
+          'taxa_comissao',
+        ])
+        const comissaoPadrao = rawComissao ? cleanNumber(rawComissao) : 0
+
         // 10. Moeda e Preço
         const moeda =
           getFieldValue(row, ['moeda', 'currency']) || (origem === 'Importado' ? 'USD' : 'BRL')
@@ -2063,6 +2114,11 @@ export function Importar() {
             moeda: moeda.toUpperCase(),
             preco_base_sugerido: precoBase,
             gr_trib: grTrib || '',
+            grupo_codigo: grupoCodigo,
+            grupo_descricao: grupoDescricao,
+            descricao_grupo_tributario: descGrupoTrib,
+            segmento: segmento,
+            comissao_padrao: comissaoPadrao,
             dados_extras: {
               ...row,
               ...(bmDesc ? { BM_DESC_ORIGINAL: bmDesc } : {}),

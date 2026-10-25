@@ -905,6 +905,11 @@ export interface SimProdutoBaseItem {
   moeda?: string
   preco_base_sugerido?: number
   gr_trib?: string
+  grupo_codigo?: string
+  grupo_descricao?: string
+  descricao_grupo_tributario?: string
+  segmento?: string
+  comissao_padrao?: number
   dados_extras?: Record<string, unknown>
   created: string
   updated: string
@@ -961,6 +966,11 @@ export type AtualizarSimProdutoBaseInput = {
   moeda?: string
   preco_base_sugerido?: number
   gr_trib?: string
+  grupo_codigo?: string
+  grupo_descricao?: string
+  descricao_grupo_tributario?: string
+  segmento?: string
+  comissao_padrao?: number
   fabricante?: string
   principio_ativo?: string
 }
@@ -985,6 +995,17 @@ export async function atualizarProdutoBaseSimulador(
   if (data.unidade !== undefined) payload.unidade = data.unidade.trim()
   if (data.tipo_produto !== undefined) payload.tipo_produto = data.tipo_produto.trim()
   if (data.gr_trib !== undefined) payload.gr_trib = data.gr_trib.trim()
+  if (data.grupo_codigo !== undefined) payload.grupo_codigo = data.grupo_codigo.trim()
+  if (data.grupo_descricao !== undefined) payload.grupo_descricao = data.grupo_descricao.trim()
+  if (data.descricao_grupo_tributario !== undefined)
+    payload.descricao_grupo_tributario = data.descricao_grupo_tributario.trim()
+  if (data.segmento !== undefined) payload.segmento = data.segmento.trim()
+  if (data.comissao_padrao !== undefined) {
+    payload.comissao_padrao =
+      typeof data.comissao_padrao === 'number' && !isNaN(data.comissao_padrao)
+        ? data.comissao_padrao
+        : 0
+  }
   if (data.fabricante !== undefined) payload.fabricante = data.fabricante.trim()
   if (data.principio_ativo !== undefined) payload.principio_ativo = data.principio_ativo.trim()
 
