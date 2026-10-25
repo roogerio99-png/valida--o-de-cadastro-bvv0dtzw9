@@ -3,46 +3,30 @@
  *
  * Motor de Cálculo Comercial Canônico do AgroSimulador (Aba "Simulador" do Excel - 53 linhas).
  *
- * Responsável por:
- * 1. Composição de Volume e Embalagens:
- *    - Quantidade de embalagens (unidades físicas de embalagem)
- *    - Volume/peso por embalagem e Volume total da simulação (L/Kg/un)
- * 2. Conversão cambial quando produto for importado via PTAX digitada manualmente.
- * 3. Modalidade de Frete (CIF vs FOB):
- *    - Se CIF: frete entra na base de cálculo do ICMS e no custo/DRE.
- *    - Se FOB: frete sai da base do ICMS (responsabilidade do cliente).
- *    - Suporta frete informado em R$ ou em % sobre a mercadoria.
- * 4. Despesas Comerciais e Financeiras:
- *    - Comissão de vendas (%) sugerida da comissao_padrao do produto, editável.
- *    - Custo financeiro / prazo de pagamento (% de juros/prazo embutidos).
- *    - Enquadramento do cliente (Produtor Rural / Revenda / Cooperativa / Consumidor Final).
- * 5. ICMS Detalhado:
- *    - Base bruta e base efetiva (reduzida)
- *    - Alíquota nominal vs efetiva
- *    - ICMS débito próprio em R$
- *    - % e valor do diferimento em R$
- *    - ICMS desonerado em R$ com tipo ("Desconta do Preço", "Demonstra", "Não Calcula")
- *    - Crédito presumido / regra crédito entrada
- *    - ICMS efetivo a recolher (débito - diferimento - créditos)
- * 6. PIS / COFINS (Tema 69 do STF):
- *    - Exclusão do ICMS destacado da base de cálculo do PIS/COFINS (Base = Faturamento - ICMS)
- *    - Discriminação das alíquotas conforme regime (Lei 10.925 isento vs LC 224/2025 reoneração 0,925%)
- * 7. IBS / CBS (Transição Reforma LC 214/2025):
- *    - Alíquotas padrão (CBS 8,8% / IBS 17,7%), alíquotas efetivas com redução de 60% (CBS 3,52% / IBS 7,08%)
- *    - Alíquotas de teste 2026 (0,1% IBS / 0,9% CBS) opcionais
- * 8. DRE / CASCATA DE PREÇO (3 colunas: Unitário R$, Total do lote R$, % sobre Faturamento):
- *    - Faturamento bruto
- *    - (-) Deduções tributárias: ICMS efetivo, PIS, COFINS, IBS, CBS
- *    - (=) Receita líquida
- *    - (-) CMV / Custo da mercadoria
- *    - (-) Frete (CIF)
- *    - (-) Seguro & outras despesas
- *    - (-) Comissão de vendas (R$)
- *    - (-) Custo financeiro (R$)
- *    - (=) MARGEM DE CONTRIBUIÇÃO (R$ e % sobre receita líquida)
- *    - Markup multiplicador
- *    - Preço mínimo (break-even para margem zero)
- *    - Preço sugerido para a margem-alvo digitada
+ * Suporta a segregação completa entre:
+ * 1. OPERAÇÃO DE COMPRA (Aquisição):
+ *    - Data da compra, prazo de pagamento (dias corridos), data de vencimento calculada
+ *    - Preço/custo de aquisição unitário (BRL ou USD com PTAX manual)
+ *    - Despesas de compra (frete compra CIF/FOB, seguro, outras despesas)
+ *    - Tributos de compra / Créditos de entrada (ICMS crédito entrada, PIS/COFINS crédito)
+ *    - Taxa de juros da compra (% a.m. ou % no período) e cálculo de juros proporcionais ao prazo
+ *    - Produz: CUSTO TOTAL DE AQUISIÇÃO (com e sem juros)
+ *
+ * 2. OPERAÇÃO DE VENDA (Revenda Comercial):
+ *    - Data da venda, prazo de pagamento concedido (dias corridos), data de vencimento calculada
+ *    - Preço de venda unitário, faturamento bruto
+ *    - Despesas de venda (frete venda CIF/FOB, seguro, outras despesas, comissão de vendas)
+ *    - Tributos de venda / Débitos (ICMS débito próprio, diferimento, desonerado, ICMS efetivo, PIS/COFINS Tema 69 STF, IBS/CBS)
+ *    - Taxa de juros da venda (% a.m. ou % no período) e juros proporcionais cobrados/embutidos
+ *    - Produz: RECEITA BRUTA e RECEITA LÍQUIDA da venda
+ *
+ * 3. RESULTADO DA OPERAÇÃO:
+ *    - Resultado Operacional Bruto (Receita Bruta - Custo de Aquisição)
+ *    - Deduções Tributárias Líquidas (Tributos de Venda - Créditos de Compra)
+ *    - Margem de Contribuição Operacional (Receita Líquida - Custo Total de Compra - Despesas)
+ *    - Resultado Financeiro Segregado: (+/-) Juros da Venda (-) Juros da Compra = Resultado Financeiro Líquido
+ *    - RESULTADO FINAL DA OPERAÇÃO (R$ e % sobre faturamento e sobre investimento)
+ *    - Memória de cálculo detalhada com blocos segregados de Compra, Venda e Resultado
  */
 
 export type EnquadramentoCliente = 'produtor_rural' | 'revenda' | 'cooperativa' | 'consumidor_final'
@@ -89,49 +73,142 @@ export interface RegraIcmsSimulador {
   dados_extras?: Record<string, unknown>
 }
 
-export interface SimuladorInput {
-  // Produto
-  produto: ProdutoBaseSimulador
-  // Par interestadual
-  ufOrigem: string
-  ufDestino: string
+// -----------------------------------------------------------------------------
+// ENTRADAS DA OPERAÇÃO DE COMPRA
+// -----------------------------------------------------------------------------
+export interface OperacaoCompraInput {
+  // Prazos e Datas
+  dataOperacao?: string // 'YYYY-MM-DD'
+  prazoDias?: number // Prazo em dias corridos até o vencimento
+  dataVencimentoManual?: string // Opcional: sobrescreve o cálculo dataOperacao + prazoDias
 
-  // Quantidade e Embalagem
-  quantidade: number // Em volume/peso (ex: 1.000 L ou 1.000 KG) ou unidades
-  unidade?: string
-  embalagem?: string
-  qtdEmbalagens?: number // Quantidade de caixas/tambores/sacos (opcional, calculado ou digitado)
-  volumePorEmbalagem?: number // Capacidade por embalagem em L ou KG (ex: 20 para galão de 20L)
+  // Custo de Aquisição Unitário
+  precoUnitario: number // Na moeda indicada (BRL ou USD)
+  moeda?: 'BRL' | 'USD'
+  ptaxManual?: number // Cotação PTAX para compra se USD
 
-  // Enquadramento do Cliente
+  // Logística & Despesas de Compra
+  modalidadeFrete?: ModalidadeFrete // 'CIF' (incluso) ou 'FOB' (adicional)
+  frete?: number
+  fretePerc?: number
+  usarFretePerc?: boolean
+  seguro?: number
+  outrasDespesas?: number
+
+  // Tributos / Créditos de Entrada
+  ufOrigem?: string // UF do Fornecedor / Fabricante
+  ufDestino?: string // UF da Empresa adquirente
+  regraIcms?: RegraIcmsSimulador | null
+  creditarIcms?: boolean // Se a empresa aproveita crédito de entrada (padrão true no Lucro Real/Presumido c/ débito)
+  aliquotaIcmsCreditoManual?: number // % crédito de entrada
+  creditarPisCofins?: boolean // Se aproveita crédito de PIS/COFINS (Lucro Real)
+  aliquotaPisCreditoManual?: number
+  aliquotaCofinsCreditoManual?: number
+
+  // Custos Financeiros / Juros da Compra
+  taxaJurosMensalPerc?: number // Taxa % a.m. (base 30 dias)
+  taxaJurosPeriodoPerc?: number // Taxa % direta do período
+  usarTaxaMensal?: boolean // true = calcula pró-rata dias: (taxa / 30) * prazoDias
+}
+
+// -----------------------------------------------------------------------------
+// ENTRADAS DA OPERAÇÃO DE VENDA
+// -----------------------------------------------------------------------------
+export interface OperacaoVendaInput {
+  // Prazos e Datas
+  dataOperacao?: string // 'YYYY-MM-DD'
+  prazoDias?: number // Prazo concedido em dias corridos
+  dataVencimentoManual?: string
+
+  // Preço de Venda
+  precoUnitario: number
+  moeda?: 'BRL' | 'USD'
+  ptaxManual?: number
+
+  // Destino e Cliente
+  ufOrigem?: string
+  ufDestino?: string
   enquadramentoCliente?: EnquadramentoCliente
 
-  // Comercial & Moeda
-  precoUnitario: number // Na moeda do produto (BRL ou USD)
-  moeda?: 'BRL' | 'USD'
-  ptaxManual?: number // Cotação Dólar informada manualmente
-
-  // Logística & Modalidade de Frete
-  modalidadeFrete?: ModalidadeFrete // 'CIF' (incluso na base ICMS) ou 'FOB' (fora da base ICMS)
-  frete?: number // R$
-  fretePerc?: number // % opcional sobre mercadoria
+  // Logística & Despesas de Venda
+  modalidadeFrete?: ModalidadeFrete
+  frete?: number
+  fretePerc?: number
   usarFretePerc?: boolean
-  seguro?: number // R$
-  outrasDespesas?: number // R$
+  seguro?: number
+  outrasDespesas?: number
 
-  // Variáveis Comerciais
-  comissaoPerc?: number // % comissão sobre faturamento (padrão sugerido do produto)
-  custoFinanceiroPerc?: number // % juros embutidos / custo de prazo de pagamento
-  margemComercialPerc?: number // % de margem de contribuição desejada
+  // Comercial
+  comissaoPerc?: number // % comissão de venda
+  margemAlvoPerc?: number // % margem comercial desejada para preço sugerido
 
-  // Parâmetros Fiscais Opcionais
+  // Tributos de Saída
+  regraIcms?: RegraIcmsSimulador | null
+  aliquotaPisManual?: number
+  aliquotaCofinsManual?: number
+  aliquotaIbsManual?: number
+  aliquotaCbsManual?: number
+  considerarReoneracao2026?: boolean // LC 224/2025
+  usarAliquotaReformaPlena?: boolean // CBS 8,8% / IBS 17,7% vs teste 2026
+
+  // Juros / Financiamento da Venda
+  taxaJurosMensalPerc?: number // % a.m. cobrado do cliente
+  taxaJurosPeriodoPerc?: number
+  usarTaxaMensal?: boolean
+}
+
+// -----------------------------------------------------------------------------
+// ENTRADA COMPLETA DO SIMULADOR
+// Suporta a nova estrutura segregada (compra + venda) com retrocompatibilidade
+// -----------------------------------------------------------------------------
+export interface SimuladorInput {
+  // Produto Base
+  produto: ProdutoBaseSimulador
+
+  // Volume & Embalagem (compartilhados pelo lote)
+  quantidade: number
+  unidade?: string
+  embalagem?: string
+  qtdEmbalagens?: number
+  volumePorEmbalagem?: number
+
+  // Operação Segregada de Compra (nova estrutura recomendada)
+  compra?: OperacaoCompraInput
+
+  // Operação Segregada de Venda (nova estrutura recomendada)
+  venda?: OperacaoVendaInput
+
+  // CAMPOS LEGADOS (mantidos para retrocompatibilidade direta com chamadas antigas):
+  ufOrigem?: string
+  ufDestino?: string
+  enquadramentoCliente?: EnquadramentoCliente
+  precoUnitario?: number
+  moeda?: 'BRL' | 'USD'
+  ptaxManual?: number
+  modalidadeFrete?: ModalidadeFrete
+  frete?: number
+  fretePerc?: number
+  usarFretePerc?: boolean
+  seguro?: number
+  outrasDespesas?: number
+  comissaoPerc?: number
+  custoFinanceiroPerc?: number
+  margemComercialPerc?: number
   regraIcms?: RegraIcmsSimulador | null
   aliquotaPisManual?: number
   aliquotaCofinsManual?: number
   aliquotaIbsManual?: number
   aliquotaCbsManual?: number
   considerarReoneracao2026?: boolean
-  usarAliquotaReformaPlena?: boolean // CBS 8,8% e IBS 17,7% (com redução de 60%) vs alíquota teste 2026
+  usarAliquotaReformaPlena?: boolean
+
+  // Prazos e Datas no nível raiz (se não passados dentro de compra/venda)
+  dataCompra?: string
+  prazoCompraDias?: number
+  taxaJurosCompraPerc?: number
+  dataVenda?: string
+  prazoVendaDias?: number
+  taxaJurosVendaPerc?: number
 }
 
 export interface DetalhamentoIcms {
@@ -173,6 +250,125 @@ export interface LinhaDRE {
   natureza: 'receita' | 'deducao' | 'custo' | 'despesa' | 'subtotal' | 'resultado'
 }
 
+// -----------------------------------------------------------------------------
+// RESULTADOS DETALHADOS DAS DUAS PONTAS
+// -----------------------------------------------------------------------------
+export interface ResultadoCompraSegregada {
+  dataOperacao: string
+  prazoDias: number
+  dataVencimento: string
+
+  ufOrigem: string
+  ufDestino: string
+  moedaOriginal: 'BRL' | 'USD'
+  ptaxAplicada: number
+  precoUnitarioOriginal: number
+  precoUnitarioReais: number
+  valorMercadoriaReais: number
+
+  modalidadeFrete: ModalidadeFrete
+  frete: number
+  seguro: number
+  outrasDespesas: number
+  totalDespesasAcessorias: number
+
+  // Juros da Compra
+  taxaJurosMensalPerc: number
+  taxaJurosEfetivaPerc: number
+  jurosValor: number
+
+  // Tributos / Créditos de Entrada
+  icmsCreditoAliquota: number
+  icmsCreditoValor: number
+  pisCreditoAliquota: number
+  pisCreditoValor: number
+  cofinsCreditoAliquota: number
+  cofinsCreditoValor: number
+  totalCreditosTributarios: number
+
+  // Custos Finais de Aquisição
+  custoAquisicaoMercadoria: number // Valor mercadoria + frete + seguro + outros
+  custoAquisicaoLiquidoSemTributos: number // Custo menos créditos fiscais
+  custoTotalComJuros: number // Custo com juros financeiros de compra
+  custoUnitarioTotal: number // Por unidade de volume
+}
+
+export interface ResultadoVendaSegregada {
+  dataOperacao: string
+  prazoDias: number
+  dataVencimento: string
+
+  ufOrigem: string
+  ufDestino: string
+  operacao: 'Interna' | 'Interestadual'
+  enquadramentoCliente: EnquadramentoCliente
+
+  moedaOriginal: 'BRL' | 'USD'
+  ptaxAplicada: number
+  precoUnitarioOriginal: number
+  precoUnitarioReais: number
+  valorMercadoriaReais: number
+
+  modalidadeFrete: ModalidadeFrete
+  frete: number
+  seguro: number
+  outrasDespesas: number
+  totalDespesasAcessorias: number
+
+  // Comercial
+  comissaoPerc: number
+  comissaoValor: number
+
+  // Juros / Financiamento Concedido
+  taxaJurosMensalPerc: number
+  taxaJurosEfetivaPerc: number
+  jurosValor: number
+
+  // Tributos destacados
+  icms: DetalhamentoIcms
+  pis: DetalhamentoTributo
+  cofins: DetalhamentoTributo
+  ibs: DetalhamentoTributo
+  cbs: DetalhamentoTributo
+  totalTributos: number
+  cargaTributariaEfetivaPerc: number
+
+  // Faturamento e Receita Líquida
+  faturamentoBrutoMercadoria: number
+  faturamentoBrutoTotal: number // Com frete CIF e acréscimos
+  receitaLiquida: number // Bruto - deduções tributárias
+}
+
+export interface ResultadoOperacaoConsolidado {
+  receitaBruta: number
+  faturamentoComJurosVenda: number
+  custoAquisicaoTotal: number
+  custoAquisicaoComJuros: number
+
+  // Tributos
+  tributosVenda: number
+  creditosCompra: number
+  tributacaoLiquida: number
+
+  // Despesas Comerciais e Logísticas
+  despesasOperacionaisVenda: number // frete CIF venda + seguro + comissão
+  despesasOperacionaisCompra: number // frete compra + outros compra
+
+  // Resultado Financeiro
+  jurosRecebidosVenda: number
+  jurosPagosCompra: number
+  resultadoFinanceiroLiquido: number // juros venda - juros compra
+
+  // Margens e Resultados
+  resultadoOperacionalBruto: number // Receita Líquida - Custo de Aquisição Líquido
+  resultadoOperacionalLiquido: number // Após comissões e despesas de venda
+  resultadoFinalOperacao: number // Após resultado financeiro dos juros
+  resultadoFinalUnitario: number
+  margemSobreReceitaBrutaPerc: number
+  margemSobreReceitaLiquidaPerc: number
+  margemSobreCustoInvestidoPerc: number // ROI sobre o desembolso da compra
+}
+
 export interface SimuladorResultado {
   // Identificação do Produto e Operação
   produtoNome: string
@@ -194,7 +390,7 @@ export interface SimuladorResultado {
   volumePorEmbalagem: number
   volumeTotal: number
 
-  // Câmbio
+  // Câmbio (Venda / Geral)
   moedaOriginal: 'BRL' | 'USD'
   ptaxAplicada: number
   valorUnitarioOriginal: number
@@ -204,7 +400,7 @@ export interface SimuladorResultado {
   valorMercadoriaOriginal: number
   valorMercadoriaReais: number
 
-  // Logística & Despesas
+  // Logística & Despesas (Venda)
   modalidadeFrete: ModalidadeFrete
   frete: number
   seguro: number
@@ -212,13 +408,13 @@ export interface SimuladorResultado {
   totalDespesasAcessorias: number
   baseOperacaoComercial: number
 
-  // Comercial & Financeiro
+  // Comercial & Financeiro (Venda)
   comissaoPerc: number
   comissaoValor: number
   custoFinanceiroPerc: number
   custoFinanceiroValor: number
 
-  // Tributos destacados
+  // Tributos destacados da Venda
   icms: DetalhamentoIcms
   temRegraIcms: boolean
   statusRegraIcms?: 'exata_grtrib' | 'fallback_uf' | 'sem_regra'
@@ -232,7 +428,7 @@ export interface SimuladorResultado {
   totalTributos: number
   cargaTributariaEfetivaPerc: number
 
-  // DRE / Cascata de Preço
+  // DRE / Cascata de Preço (3 Colunas)
   dre: LinhaDRE[]
   receitaBruta: number
   deducoesTributarias: number
@@ -248,9 +444,82 @@ export interface SimuladorResultado {
   precoVendaSugerido: number
   precoVendaSugeridoUnitario: number
 
+  // ---------------------------------------------------------------------------
+  // NOVOS BLOCOS SEGREGADOS (Exigência do usuário para paridade com a planilha)
+  // ---------------------------------------------------------------------------
+  compra: ResultadoCompraSegregada
+  venda: ResultadoVendaSegregada
+  resultadoOperacao: ResultadoOperacaoConsolidado
+
   // Auditoria
   alertas: string[]
   memoriaCalculo: string[]
+}
+
+// -----------------------------------------------------------------------------
+// UTILITÁRIOS DE DATA E JUROS
+// -----------------------------------------------------------------------------
+
+/**
+ * Formata ou valida string de data YYYY-MM-DD
+ */
+export function formatarDataIso(data?: string | Date): string {
+  if (!data) {
+    const hoje = new Date()
+    return hoje.toISOString().split('T')[0]
+  }
+  if (data instanceof Date) {
+    return data.toISOString().split('T')[0]
+  }
+  const limpa = String(data).trim()
+  if (/^\d{4}-\d{2}-\d{2}$/.test(limpa)) return limpa
+  const d = new Date(limpa)
+  if (!isNaN(d.getTime())) {
+    return d.toISOString().split('T')[0]
+  }
+  return new Date().toISOString().split('T')[0]
+}
+
+/**
+ * Adiciona dias corridos a uma data no formato YYYY-MM-DD
+ */
+export function calcularDataVencimento(dataInicioIso: string, diasCorridos: number): string {
+  const [ano, mes, dia] = dataInicioIso.split('-').map(Number)
+  const d = new Date(ano, (mes || 1) - 1, dia || 1)
+  d.setDate(d.getDate() + Math.max(0, Math.round(diasCorridos)))
+  const a = d.getFullYear()
+  const m = String(d.getMonth() + 1).padStart(2, '0')
+  const dt = String(d.getDate()).padStart(2, '0')
+  return `${a}-${m}-${dt}`
+}
+
+/**
+ * Calcula a taxa de juros efetiva proporcional aos dias corridos (base pró-rata mês comercial 30 dias)
+ * Conforme convenção de planilhas de crédito comercial do agro:
+ * taxa_periodo = (taxa_mensal / 30) * dias_corridos
+ */
+export function calcularTaxaJurosProporcional(
+  taxaMensalPerc: number,
+  prazoDias: number,
+  taxaPeriodoDireta?: number,
+  usarTaxaMensal: boolean = true,
+): { taxaEfetivaPerc: number; jurosCalculadosSobreValor: (base: number) => number } {
+  let taxaEfetivaPerc = 0
+
+  if (!usarTaxaMensal && taxaPeriodoDireta !== undefined && taxaPeriodoDireta > 0) {
+    taxaEfetivaPerc = taxaPeriodoDireta
+  } else if (taxaMensalPerc > 0 && prazoDias > 0) {
+    taxaEfetivaPerc = (taxaMensalPerc / 30) * prazoDias
+  } else if (taxaMensalPerc > 0 && prazoDias === 0) {
+    taxaEfetivaPerc = 0 // À vista: sem juros de prazo
+  } else if (taxaPeriodoDireta !== undefined && taxaPeriodoDireta > 0) {
+    taxaEfetivaPerc = taxaPeriodoDireta
+  }
+
+  return {
+    taxaEfetivaPerc,
+    jurosCalculadosSobreValor: (base: number) => base * (taxaEfetivaPerc / 100),
+  }
 }
 
 /**
@@ -260,7 +529,7 @@ export function deduzirCapacidadeEmbalagem(textoEmbalagem?: string): number {
   if (!textoEmbalagem) return 1
   const t = textoEmbalagem.trim().toUpperCase()
 
-  // Formato multix: 4X5L -> 20, 2X10L -> 20, 12X1L -> 12
+  // Formato multix: 4X5L -> 20, 2X10L -> 20, 12X1L -> 12, 1X20L -> 20
   const multiMatch = t.match(/(\d+)\s*[X*]\s*([\d,.]+)/)
   if (multiMatch) {
     const qtd = parseFloat(multiMatch[1])
@@ -280,9 +549,9 @@ export function deduzirCapacidadeEmbalagem(textoEmbalagem?: string): number {
   return 1
 }
 
-/**
- * Executa o cálculo comercial completo com paridade do gabarito Excel
- */
+// -----------------------------------------------------------------------------
+// MOTOR PRINCIPAL DE CÁLCULO
+// -----------------------------------------------------------------------------
 export function executarCalculoSimulador(input: SimuladorInput): SimuladorResultado {
   const alertas: string[] = []
   const memoriaCalculo: string[] = []
@@ -294,10 +563,8 @@ export function executarCalculoSimulador(input: SimuladorInput): SimuladorResult
   const unid = input.unidade || produto.unidade || 'L'
   const emb = input.embalagem || produto.embalagem || 'Padrão'
   const grTrib = (produto.gr_trib || '').trim()
-  const enquadramento = input.enquadramentoCliente || 'produtor_rural'
-  const modalidadeFrete = input.modalidadeFrete || 'CIF'
 
-  // 1. Quantidade e Volume da Simulação
+  // 1. Quantidade e Volume da Simulação (Lote)
   const qtdInformada = Math.max(0, Number(input.quantidade) || 0)
   const volumePorEmb =
     input.volumePorEmbalagem !== undefined && input.volumePorEmbalagem > 0
@@ -317,69 +584,219 @@ export function executarCalculoSimulador(input: SimuladorInput): SimuladorResult
     volumeTotal = qtdInformada
   }
 
-  // 2. Identificação de Produto Importado e Câmbio PTAX
-  const origemStr = String(produto.origem || '').toUpperCase()
-  const isImportado =
-    origemStr.includes('IMP') ||
-    desc.toUpperCase().includes('(IMP)') ||
-    input.moeda === 'USD' ||
-    produto.moeda === 'USD'
+  // 2. Resolução de Parâmetros de COMPRA
+  const compraIn: OperacaoCompraInput = input.compra || { precoUnitario: 0 }
+  const dataCompraIso = formatarDataIso(compraIn.dataOperacao || input.dataCompra)
+  const prazoCompraDias =
+    compraIn.prazoDias !== undefined
+      ? Math.max(0, Number(compraIn.prazoDias))
+      : input.prazoCompraDias !== undefined
+        ? Math.max(0, Number(input.prazoCompraDias))
+        : 30
+  const dataVencimentoCompraIso =
+    compraIn.dataVencimentoManual || calcularDataVencimento(dataCompraIso, prazoCompraDias)
 
-  const moedaOriginal: 'BRL' | 'USD' = input.moeda || (isImportado ? 'USD' : 'BRL')
-  const precoUnitarioOriginal = Math.max(0, Number(input.precoUnitario) || 0)
-
-  let ptaxAplicada = 1.0
-  let valorUnitarioReais = precoUnitarioOriginal
-
-  if (moedaOriginal === 'USD') {
-    const ptax = Number(input.ptaxManual) || 0
-    if (ptax <= 0) {
-      alertas.push(
-        'Produto importado cotado em dólar (USD): informe a cotação PTAX manual para conversão cambial exata.',
-      )
-    }
-    ptaxAplicada = ptax > 0 ? ptax : 1.0
-    valorUnitarioReais = precoUnitarioOriginal * ptaxAplicada
-    memoriaCalculo.push(
-      `Câmbio PTAX: US$ ${precoUnitarioOriginal.toFixed(2)} × R$ ${ptaxAplicada.toFixed(4)} = R$ ${valorUnitarioReais.toFixed(2)} / ${unid}`,
+  const taxaJurosCompraMensal =
+    compraIn.taxaJurosMensalPerc !== undefined
+      ? Number(compraIn.taxaJurosMensalPerc)
+      : input.taxaJurosCompraPerc !== undefined
+        ? Number(input.taxaJurosCompraPerc)
+        : 0
+  const usarTaxaMensalCompra = compraIn.usarTaxaMensal !== false
+  const { taxaEfetivaPerc: taxaEfetivaCompraPerc, jurosCalculadosSobreValor: calcularJurosCompra } =
+    calcularTaxaJurosProporcional(
+      taxaJurosCompraMensal,
+      prazoCompraDias,
+      compraIn.taxaJurosPeriodoPerc,
+      usarTaxaMensalCompra,
     )
-  } else {
-    memoriaCalculo.push(
-      `Preço unitário em moeda nacional: R$ ${valorUnitarioReais.toFixed(2)} / ${unid}`,
-    )
+
+  const precoUnitarioCompra =
+    compraIn.precoUnitario !== undefined
+      ? Math.max(0, Number(compraIn.precoUnitario))
+      : produto.preco_base_sugerido !== undefined && produto.preco_base_sugerido > 0
+        ? Number(produto.preco_base_sugerido)
+        : Number(input.precoUnitario) || 0
+
+  const moedaCompra = compraIn.moeda || (produto.moeda?.toUpperCase() === 'USD' ? 'USD' : 'BRL')
+  const isCompraImportada =
+    moedaCompra === 'USD' ||
+    produto.origem?.toLowerCase().includes('imp') ||
+    desc.toUpperCase().includes('(IMP)')
+  const ptaxCompra =
+    compraIn.ptaxManual || (isCompraImportada ? Number(input.ptaxManual) || 1.0 : 1.0)
+  const precoUnitarioCompraReais =
+    moedaCompra === 'USD' ? precoUnitarioCompra * ptaxCompra : precoUnitarioCompra
+
+  const valorMercadoriaCompraReais = volumeTotal * precoUnitarioCompraReais
+  const modalidadeFreteCompra = compraIn.modalidadeFrete || 'FOB'
+  let freteCompraReais = Math.max(0, Number(compraIn.frete) || 0)
+  if (compraIn.usarFretePerc && compraIn.fretePerc !== undefined && compraIn.fretePerc > 0) {
+    freteCompraReais = valorMercadoriaCompraReais * (compraIn.fretePerc / 100)
+  }
+  const seguroCompra = Math.max(0, Number(compraIn.seguro) || 0)
+  const outrasDespesasCompra = Math.max(0, Number(compraIn.outrasDespesas) || 0)
+  const totalDespesasCompra = freteCompraReais + seguroCompra + outrasDespesasCompra
+  const custoAquisicaoMercadoria = valorMercadoriaCompraReais + totalDespesasCompra
+
+  // Créditos Tributários na Entrada (Compra)
+  // Regra ICMS na entrada: alíquota de crédito (geralmente alíquota interestadual 4%, 7%, 12% ou regra específica)
+  let icmsCreditoAliq = 0
+  if (compraIn.aliquotaIcmsCreditoManual !== undefined) {
+    icmsCreditoAliq = Number(compraIn.aliquotaIcmsCreditoManual)
+  } else if (compraIn.regraIcms) {
+    icmsCreditoAliq =
+      Number(compraIn.regraIcms.aliquota_efetiva ?? compraIn.regraIcms.aliquota_icms) || 0
+  } else if (compraIn.creditarIcms !== false) {
+    // Estimativa padrão de crédito de entrada para produtos agropecuários (alíquota efetiva de entrada)
+    icmsCreditoAliq = 4.0
+  }
+  const baseCreditoIcms =
+    modalidadeFreteCompra === 'CIF' ? custoAquisicaoMercadoria : valorMercadoriaCompraReais
+  const icmsCreditoValor = baseCreditoIcms * (icmsCreditoAliq / 100)
+
+  // Crédito PIS/COFINS na entrada
+  const pisCreditoAliq =
+    compraIn.aliquotaPisCreditoManual !== undefined
+      ? Number(compraIn.aliquotaPisCreditoManual)
+      : compraIn.creditarPisCofins
+        ? 0.165
+        : 0
+  const cofinsCreditoAliq =
+    compraIn.aliquotaCofinsCreditoManual !== undefined
+      ? Number(compraIn.aliquotaCofinsCreditoManual)
+      : compraIn.creditarPisCofins
+        ? 0.76
+        : 0
+  const pisCreditoValor = custoAquisicaoMercadoria * (pisCreditoAliq / 100)
+  const cofinsCreditoValor = custoAquisicaoMercadoria * (cofinsCreditoAliq / 100)
+  const totalCreditosTributarios = icmsCreditoValor + pisCreditoValor + cofinsCreditoValor
+
+  const custoAquisicaoLiquidoSemTributos = Math.max(
+    0,
+    custoAquisicaoMercadoria - totalCreditosTributarios,
+  )
+
+  // Juros de Compra (calculados sobre o valor financiado da aquisição)
+  const jurosCompraValor = calcularJurosCompra(custoAquisicaoMercadoria)
+  const custoTotalCompraComJuros = custoAquisicaoMercadoria + jurosCompraValor
+  const custoUnitarioTotalCompra = volumeTotal > 0 ? custoTotalCompraComJuros / volumeTotal : 0
+
+  const blocoCompra: ResultadoCompraSegregada = {
+    dataOperacao: dataCompraIso,
+    prazoDias: prazoCompraDias,
+    dataVencimento: dataVencimentoCompraIso,
+    ufOrigem: compraIn.ufOrigem || 'SP',
+    ufDestino: compraIn.ufDestino || 'SP',
+    moedaOriginal: moedaCompra,
+    ptaxAplicada: ptaxCompra,
+    precoUnitarioOriginal: precoUnitarioCompra,
+    precoUnitarioReais: precoUnitarioCompraReais,
+    valorMercadoriaReais: valorMercadoriaCompraReais,
+    modalidadeFrete: modalidadeFreteCompra,
+    frete: freteCompraReais,
+    seguro: seguroCompra,
+    outrasDespesas: outrasDespesasCompra,
+    totalDespesasAcessorias: totalDespesasCompra,
+    taxaJurosMensalPerc: taxaJurosCompraMensal,
+    taxaJurosEfetivaPerc: taxaEfetivaCompraPerc,
+    jurosValor: jurosCompraValor,
+    icmsCreditoAliquota: icmsCreditoAliq,
+    icmsCreditoValor: icmsCreditoValor,
+    pisCreditoAliquota: pisCreditoAliq,
+    pisCreditoValor: pisCreditoValor,
+    cofinsCreditoAliquota: cofinsCreditoAliq,
+    cofinsCreditoValor: cofinsCreditoValor,
+    totalCreditosTributarios,
+    custoAquisicaoMercadoria,
+    custoAquisicaoLiquidoSemTributos,
+    custoTotalComJuros: custoTotalCompraComJuros,
+    custoUnitarioTotal: custoUnitarioTotalCompra,
   }
 
-  // 3. Mercadoria e Logística (CIF vs FOB)
-  const valorMercadoriaOriginal = volumeTotal * precoUnitarioOriginal
-  const valorMercadoriaReais = volumeTotal * valorUnitarioReais
+  // 3. Resolução de Parâmetros de VENDA
+  const vendaIn: OperacaoVendaInput = input.venda || { precoUnitario: 0 }
+  const dataVendaIso = formatarDataIso(vendaIn.dataOperacao || input.dataVenda)
+  const prazoVendaDias =
+    vendaIn.prazoDias !== undefined
+      ? Math.max(0, Number(vendaIn.prazoDias))
+      : input.prazoVendaDias !== undefined
+        ? Math.max(0, Number(input.prazoVendaDias))
+        : 60
+  const dataVencimentoVendaIso =
+    vendaIn.dataVencimentoManual || calcularDataVencimento(dataVendaIso, prazoVendaDias)
 
-  let freteReais = Math.max(0, Number(input.frete) || 0)
-  if (input.usarFretePerc && input.fretePerc !== undefined && input.fretePerc > 0) {
-    freteReais = valorMercadoriaReais * (input.fretePerc / 100)
+  const taxaJurosVendaMensal =
+    vendaIn.taxaJurosMensalPerc !== undefined
+      ? Number(vendaIn.taxaJurosMensalPerc)
+      : input.taxaJurosVendaPerc !== undefined
+        ? Number(input.taxaJurosVendaPerc)
+        : input.custoFinanceiroPerc !== undefined
+          ? Number(input.custoFinanceiroPerc)
+          : 1.5
+  const usarTaxaMensalVenda = vendaIn.usarTaxaMensal !== false
+  const { taxaEfetivaPerc: taxaEfetivaVendaPerc, jurosCalculadosSobreValor: calcularJurosVenda } =
+    calcularTaxaJurosProporcional(
+      taxaJurosVendaMensal,
+      prazoVendaDias,
+      vendaIn.taxaJurosPeriodoPerc,
+      usarTaxaMensalVenda,
+    )
+
+  const precoUnitarioVenda =
+    vendaIn.precoUnitario !== undefined
+      ? Math.max(0, Number(vendaIn.precoUnitario))
+      : input.precoUnitario !== undefined
+        ? Number(input.precoUnitario)
+        : precoUnitarioCompraReais * 1.15
+
+  const moedaVenda = vendaIn.moeda || input.moeda || 'BRL'
+  const isVendaImportada =
+    moedaVenda === 'USD' ||
+    produto.origem?.toLowerCase().includes('imp') ||
+    desc.toUpperCase().includes('(IMP)')
+  const ptaxVenda = vendaIn.ptaxManual || (isVendaImportada ? Number(input.ptaxManual) || 1.0 : 1.0)
+  const precoUnitarioVendaReais =
+    moedaVenda === 'USD' ? precoUnitarioVenda * ptaxVenda : precoUnitarioVenda
+
+  const valorMercadoriaVendaReais = volumeTotal * precoUnitarioVendaReais
+  const modalidadeFreteVenda = vendaIn.modalidadeFrete || input.modalidadeFrete || 'CIF'
+  let freteVendaReais =
+    vendaIn.frete !== undefined
+      ? Math.max(0, Number(vendaIn.frete))
+      : Math.max(0, Number(input.frete) || 0)
+  if (
+    (vendaIn.usarFretePerc && vendaIn.fretePerc !== undefined && vendaIn.fretePerc > 0) ||
+    (input.usarFretePerc && input.fretePerc !== undefined && input.fretePerc > 0)
+  ) {
+    const pFrete = vendaIn.fretePerc ?? input.fretePerc ?? 0
+    freteVendaReais = valorMercadoriaVendaReais * (pFrete / 100)
   }
+  const seguroVenda =
+    vendaIn.seguro !== undefined
+      ? Math.max(0, Number(vendaIn.seguro))
+      : Math.max(0, Number(input.seguro) || 0)
+  const outrasDespesasVenda =
+    vendaIn.outrasDespesas !== undefined
+      ? Math.max(0, Number(vendaIn.outrasDespesas))
+      : Math.max(0, Number(input.outrasDespesas) || 0)
+  const totalDespesasVenda = freteVendaReais + seguroVenda + outrasDespesasVenda
 
-  const seguroReais = Math.max(0, Number(input.seguro) || 0)
-  const outrasDespesasReais = Math.max(0, Number(input.outrasDespesas) || 0)
-  const totalDespesasAcessorias = freteReais + seguroReais + outrasDespesasReais
+  const freteNaBaseIcmsVenda = modalidadeFreteVenda === 'CIF' ? freteVendaReais : 0
+  const baseCalculoBrutaIcmsVenda =
+    valorMercadoriaVendaReais + freteNaBaseIcmsVenda + seguroVenda + outrasDespesasVenda
+  const baseOperacaoComercialVenda = valorMercadoriaVendaReais + totalDespesasVenda
 
-  // Se CIF, o frete entra na base de cálculo do ICMS; se FOB, o frete corre por conta do cliente (sai da base do ICMS)
-  const freteNaBaseIcms = modalidadeFrete === 'CIF' ? freteReais : 0
-  const baseCalculoBrutaIcms =
-    valorMercadoriaReais + freteNaBaseIcms + seguroReais + outrasDespesasReais
-  const baseOperacaoComercial = valorMercadoriaReais + totalDespesasAcessorias
+  // Localização geográfica e enquadramento da venda
+  const ufOrigemVenda = (vendaIn.ufOrigem || input.ufOrigem || 'SP').trim().toUpperCase()
+  const ufDestinoVenda = (vendaIn.ufDestino || input.ufDestino || 'MT').trim().toUpperCase()
+  const operacaoVenda: 'Interna' | 'Interestadual' =
+    ufOrigemVenda === ufDestinoVenda ? 'Interna' : 'Interestadual'
+  const enquadramentoCliente =
+    vendaIn.enquadramentoCliente || input.enquadramentoCliente || 'produtor_rural'
 
-  memoriaCalculo.push(
-    `Volume total: ${volumeTotal.toLocaleString('pt-BR')} ${unid} (${qtdEmbalagens.toLocaleString('pt-BR')} emb. de ${volumePorEmb} ${unid}) | Mercadoria: R$ ${valorMercadoriaReais.toFixed(2)}`,
-  )
-  memoriaCalculo.push(
-    `Modalidade Frete: ${modalidadeFrete} | Frete: R$ ${freteReais.toFixed(2)} (${modalidadeFrete === 'CIF' ? 'incluso na base do ICMS' : 'FOB: fora da base do ICMS'})`,
-  )
-
-  // 4. ICMS Detalhado
-  const ufOrigem = (input.ufOrigem || 'SP').trim().toUpperCase()
-  const ufDestino = (input.ufDestino || 'MT').trim().toUpperCase()
-  const operacao: 'Interna' | 'Interestadual' = ufOrigem === ufDestino ? 'Interna' : 'Interestadual'
-
+  // Regra ICMS na Saída (Venda)
+  const regraIcmsVenda = vendaIn.regraIcms !== undefined ? vendaIn.regraIcms : input.regraIcms
   let temRegraIcms = false
   let statusRegraIcms: 'exata_grtrib' | 'fallback_uf' | 'sem_regra' = 'sem_regra'
   let avisoIcms: string | undefined
@@ -394,8 +811,8 @@ export function executarCalculoSimulador(input: SimuladorInput): SimuladorResult
   let regraCreditoEntrada = ''
   let fundamentacaoLegal = ''
 
-  if (input.regraIcms) {
-    const r = input.regraIcms
+  if (regraIcmsVenda) {
+    const r = regraIcmsVenda
     const regraGrTrib = (r.grupo_tributario_codigo || '').trim()
 
     if (grTrib && regraGrTrib && grTrib === regraGrTrib) {
@@ -411,13 +828,13 @@ export function executarCalculoSimulador(input: SimuladorInput): SimuladorResult
       statusRegraIcms = 'fallback_uf'
       temRegraIcms = true
       alertas.push(
-        `Sem regra específica para GrTrib "${grTrib}" em ${ufOrigem} → ${ufDestino}. Aplicada regra geral da UF.`,
+        `Sem regra específica para GrTrib "${grTrib}" em ${ufOrigemVenda} → ${ufDestinoVenda}. Aplicada regra geral da UF.`,
       )
     } else if (grTrib && regraGrTrib && grTrib !== regraGrTrib) {
       statusRegraIcms = 'fallback_uf'
       temRegraIcms = true
       alertas.push(
-        `Atenção: Produto é GrTrib "${grTrib}", mas a regra aplicada pertence a GrTrib "${regraGrTrib}" para ${ufOrigem} → ${ufDestino}.`,
+        `Atenção: Produto é GrTrib "${grTrib}", mas a regra aplicada pertence a GrTrib "${regraGrTrib}" para ${ufOrigemVenda} → ${ufDestinoVenda}.`,
       )
     } else {
       statusRegraIcms = 'fallback_uf'
@@ -438,20 +855,20 @@ export function executarCalculoSimulador(input: SimuladorInput): SimuladorResult
     regraCreditoEntrada = r.regra_credito_entrada || 'Crédito Proporcional à Saída'
     fundamentacaoLegal =
       r.fundamentacao_legal ||
-      (operacao === 'Interna'
-        ? `Operação Interna ${ufOrigem}`
-        : `Convênio ICMS 100/97 e alterações (${ufOrigem} → ${ufDestino})`)
+      (operacaoVenda === 'Interna'
+        ? `Operação Interna ${ufOrigemVenda}`
+        : `Convênio ICMS 100/97 e alterações (${ufOrigemVenda} → ${ufDestinoVenda})`)
   } else {
     temRegraIcms = false
     statusRegraIcms = 'sem_regra'
-    avisoIcms = `Sem regra de ICMS para origem ${ufOrigem} → destino ${ufDestino}${grTrib ? ` (GrTrib ${grTrib})` : ''}. Aplicada alíquota interestadual padrão estimada.`
+    avisoIcms = `Sem regra de ICMS para origem ${ufOrigemVenda} → destino ${ufDestinoVenda}${grTrib ? ` (GrTrib ${grTrib})` : ''}. Aplicada alíquota interestadual padrão estimada.`
     alertas.push(avisoIcms)
 
     const aliqPadrao =
-      operacao === 'Interna'
+      operacaoVenda === 'Interna'
         ? 18
-        : ['SP', 'RJ', 'MG', 'PR', 'RS', 'SC'].includes(ufOrigem) &&
-            !['SP', 'RJ', 'MG', 'PR', 'RS', 'SC'].includes(ufDestino)
+        : ['SP', 'RJ', 'MG', 'PR', 'RS', 'SC'].includes(ufOrigemVenda) &&
+            !['SP', 'RJ', 'MG', 'PR', 'RS', 'SC'].includes(ufDestinoVenda)
           ? 7
           : 12
     aliqNominal = aliqPadrao
@@ -461,7 +878,7 @@ export function executarCalculoSimulador(input: SimuladorInput): SimuladorResult
   }
 
   // Base efetiva de cálculo do ICMS
-  const baseCalculoEfetivaIcms = baseCalculoBrutaIcms * (1 - redBasePerc / 100)
+  const baseCalculoEfetivaIcms = baseCalculoBrutaIcmsVenda * (1 - redBasePerc / 100)
   const debitoIcms = baseCalculoEfetivaIcms * (aliqNominal / 100)
 
   // Diferimento
@@ -475,15 +892,15 @@ export function executarCalculoSimulador(input: SimuladorInput): SimuladorResult
   if (tipoDesonerado.toLowerCase().includes('desconta') || icmsDesoneradoTaxa > 0) {
     const taxaDeson = icmsDesoneradoTaxa > 0 ? icmsDesoneradoTaxa : aliqNominal - aliqEfetiva
     if (taxaDeson > 0) {
-      valorDesonerado = baseCalculoBrutaIcms * (taxaDeson / 100)
+      valorDesonerado = baseCalculoBrutaIcmsVenda * (taxaDeson / 100)
     }
   }
 
-  // Crédito de Entrada / Presumido
+  // Crédito de Entrada / Presumido aplicado no débito de ICMS
   let creditoEntradaPerc = 0
   let valorCreditoEntrada = 0
   if (regraCreditoEntrada.toLowerCase().includes('presumido')) {
-    creditoEntradaPerc = aliqEfetiva * 0.5 // Exemplo de crédito presumido parcial quando previsto na regra
+    creditoEntradaPerc = aliqEfetiva * 0.5
     valorCreditoEntrada = baseCalculoEfetivaIcms * (creditoEntradaPerc / 100)
   }
 
@@ -498,7 +915,7 @@ export function executarCalculoSimulador(input: SimuladorInput): SimuladorResult
 
   const icmsDetalhe: DetalhamentoIcms = {
     nome: 'ICMS',
-    baseCalculoBruta: baseCalculoBrutaIcms,
+    baseCalculoBruta: baseCalculoBrutaIcmsVenda,
     baseCalculoEfetiva: baseCalculoEfetivaIcms,
     aliquotaNominal: aliqNominal,
     aliquotaEfetiva: aliqEfetiva,
@@ -520,27 +937,30 @@ export function executarCalculoSimulador(input: SimuladorInput): SimuladorResult
         : 'Tributação normal',
   }
 
-  memoriaCalculo.push(
-    `ICMS (${ufOrigem} → ${ufDestino}): Base Bruta R$ ${baseCalculoBrutaIcms.toFixed(2)} | Redução ${redBasePerc}% → Base Efetiva R$ ${baseCalculoEfetivaIcms.toFixed(2)} | Débito R$ ${debitoIcms.toFixed(2)} | Diferimento R$ ${valorDiferimento.toFixed(2)} | A Recolher R$ ${icmsEfetivoRecolher.toFixed(2)}`,
-  )
+  // PIS / COFINS (Tema 69 do STF - Exclusão do ICMS)
+  const basePisCofinsComExclusaoStf = Math.max(0, baseOperacaoComercialVenda - icmsEfetivoRecolher)
 
-  // 5. PIS / COFINS (Tema 69 do STF - Exclusão do ICMS da base)
-  const basePisCofinsComExclusaoStf = Math.max(0, baseOperacaoComercial - icmsEfetivoRecolher)
-
-  const considerarReoneracao = input.considerarReoneracao2026 !== false
+  const considerarReoneracao =
+    vendaIn.considerarReoneracao2026 !== undefined
+      ? vendaIn.considerarReoneracao2026
+      : input.considerarReoneracao2026 !== false
   const aliqPisPadrao =
-    input.aliquotaPisManual !== undefined
-      ? input.aliquotaPisManual
-      : considerarReoneracao
-        ? 0.165
-        : 0.0
+    vendaIn.aliquotaPisManual !== undefined
+      ? vendaIn.aliquotaPisManual
+      : input.aliquotaPisManual !== undefined
+        ? input.aliquotaPisManual
+        : considerarReoneracao
+          ? 0.165
+          : 0.0
 
   const aliqCofinsPadrao =
-    input.aliquotaCofinsManual !== undefined
-      ? input.aliquotaCofinsManual
-      : considerarReoneracao
-        ? 0.76
-        : 0.0
+    vendaIn.aliquotaCofinsManual !== undefined
+      ? vendaIn.aliquotaCofinsManual
+      : input.aliquotaCofinsManual !== undefined
+        ? input.aliquotaCofinsManual
+        : considerarReoneracao
+          ? 0.76
+          : 0.0
 
   const valorPis = basePisCofinsComExclusaoStf * (aliqPisPadrao / 100)
   const valorCofins = basePisCofinsComExclusaoStf * (aliqCofinsPadrao / 100)
@@ -569,24 +989,29 @@ export function executarCalculoSimulador(input: SimuladorInput): SimuladorResult
     observacoes: 'Base com exclusão do ICMS destacado (Tema 69 STF)',
   }
 
-  memoriaCalculo.push(
-    `PIS/COFINS (Tema 69 STF): Base R$ ${basePisCofinsComExclusaoStf.toFixed(2)} (R$ ${baseOperacaoComercial.toFixed(2)} - ICMS R$ ${icmsEfetivoRecolher.toFixed(2)}) | PIS ${aliqPisPadrao.toFixed(3)}% (R$ ${valorPis.toFixed(2)}) + COFINS ${aliqCofinsPadrao.toFixed(3)}% (R$ ${valorCofins.toFixed(2)})`,
-  )
-
-  // 6. IBS / CBS (Reforma Tributária LC 214/2025 com redução de 60% para insumos agro)
-  // Permite tanto simulação com alíquota plena da reforma (CBS 8,8% / IBS 17,7% -> efetivas 3,52% e 7,08%)
-  // quanto alíquota de teste 2026 (CBS 0,9% / IBS 0,1% -> efetivas 0,36% e 0,04%)
-  const usarPlena = !!input.usarAliquotaReformaPlena
+  // IBS / CBS (LC 214/2025 com redução de 60%)
+  const usarPlena = !!(vendaIn.usarAliquotaReformaPlena ?? input.usarAliquotaReformaPlena)
   const aliqIbsNominal =
-    input.aliquotaIbsManual !== undefined ? input.aliquotaIbsManual : usarPlena ? 17.7 : 0.1
+    vendaIn.aliquotaIbsManual !== undefined
+      ? vendaIn.aliquotaIbsManual
+      : input.aliquotaIbsManual !== undefined
+        ? input.aliquotaIbsManual
+        : usarPlena
+          ? 17.7
+          : 0.1
   const aliqCbsNominal =
-    input.aliquotaCbsManual !== undefined ? input.aliquotaCbsManual : usarPlena ? 8.8 : 0.9
+    vendaIn.aliquotaCbsManual !== undefined
+      ? vendaIn.aliquotaCbsManual
+      : input.aliquotaCbsManual !== undefined
+        ? input.aliquotaCbsManual
+        : usarPlena
+          ? 8.8
+          : 0.9
 
-  const reducaoReformaPerc = 60 // 60% de redução no Agro
+  const reducaoReformaPerc = 60
   const aliqIbsEfetiva = aliqIbsNominal * (1 - reducaoReformaPerc / 100)
   const aliqCbsEfetiva = aliqCbsNominal * (1 - reducaoReformaPerc / 100)
-
-  const baseCalculoIbsCbs = baseOperacaoComercial * (1 - reducaoReformaPerc / 100)
+  const baseCalculoIbsCbs = baseOperacaoComercialVenda * (1 - reducaoReformaPerc / 100)
   const valorIbs = baseCalculoIbsCbs * (aliqIbsNominal / 100)
   const valorCbs = baseCalculoIbsCbs * (aliqCbsNominal / 100)
 
@@ -612,184 +1037,309 @@ export function executarCalculoSimulador(input: SimuladorInput): SimuladorResult
     observacoes: `Nominal ${aliqCbsNominal}% reduzida em 60% → Efetiva ${aliqCbsEfetiva.toFixed(3)}%`,
   }
 
-  const totalTributos = icmsEfetivoRecolher + valorPis + valorCofins + valorIbs + valorCbs
+  const totalTributosVenda = icmsEfetivoRecolher + valorPis + valorCofins + valorIbs + valorCbs
   const cargaTributariaEfetivaPerc =
-    baseOperacaoComercial > 0 ? (totalTributos / baseOperacaoComercial) * 100 : 0
+    baseOperacaoComercialVenda > 0 ? (totalTributosVenda / baseOperacaoComercialVenda) * 100 : 0
 
-  // 7. Comissão e Custo Financeiro
+  // Comissão de Venda
   const comissaoPadraoPerc =
     produto.comissao_padrao !== undefined && produto.comissao_padrao !== null
       ? Number(produto.comissao_padrao) * (produto.comissao_padrao < 1 ? 100 : 1)
       : 2.5
   const comissaoPerc =
-    input.comissaoPerc !== undefined ? Number(input.comissaoPerc) : comissaoPadraoPerc
-  const custoFinanceiroPerc = Math.max(0, Number(input.custoFinanceiroPerc) || 0)
+    vendaIn.comissaoPerc !== undefined
+      ? Number(vendaIn.comissaoPerc)
+      : input.comissaoPerc !== undefined
+        ? Number(input.comissaoPerc)
+        : comissaoPadraoPerc
+  const comissaoValor = baseOperacaoComercialVenda * (comissaoPerc / 100)
 
-  // O faturamento bruto inicial de referência é a base da operação comercial
-  const faturamentoBrutoBase = baseOperacaoComercial
-  const comissaoValorBase = faturamentoBrutoBase * (comissaoPerc / 100)
-  const custoFinanceiroValorBase = faturamentoBrutoBase * (custoFinanceiroPerc / 100)
+  // Juros da Venda (financiamento concedido ao cliente)
+  const jurosVendaValor = calcularJurosVenda(baseOperacaoComercialVenda)
+  const receitaBrutaVenda = baseOperacaoComercialVenda
+  const receitaLiquidaVenda = receitaBrutaVenda - totalTributosVenda
 
-  // 8. DRE / Cascata de Preço (Paridade linhas 43-53 da aba Simulador do Excel)
-  // Receita Bruta = Faturamento Bruto da operação
-  // Deduções Tributárias = ICMS Efetivo + PIS + COFINS + IBS + CBS
-  // Receita Líquida = Receita Bruta - Deduções Tributárias
-  // Custos e Despesas = Mercadoria (CMV) + Frete (se CIF) + Seguro/Outros + Comissão + Custo Financeiro
-  // Margem de Contribuição = Receita Líquida - Custos e Despesas
-  const deducoesTributarias = totalTributos
-  const receitaLiquida = faturamentoBrutoBase - deducoesTributarias
+  const blocoVenda: ResultadoVendaSegregada = {
+    dataOperacao: dataVendaIso,
+    prazoDias: prazoVendaDias,
+    dataVencimento: dataVencimentoVendaIso,
+    ufOrigem: ufOrigemVenda,
+    ufDestino: ufDestinoVenda,
+    operacao: operacaoVenda,
+    enquadramentoCliente,
+    moedaOriginal: moedaVenda,
+    ptaxAplicada: ptaxVenda,
+    precoUnitarioOriginal: precoUnitarioVenda,
+    precoUnitarioReais: precoUnitarioVendaReais,
+    valorMercadoriaReais: valorMercadoriaVendaReais,
+    modalidadeFrete: modalidadeFreteVenda,
+    frete: freteVendaReais,
+    seguro: seguroVenda,
+    outrasDespesas: outrasDespesasVenda,
+    totalDespesasAcessorias: totalDespesasVenda,
+    comissaoPerc,
+    comissaoValor,
+    taxaJurosMensalPerc: taxaJurosVendaMensal,
+    taxaJurosEfetivaPerc: taxaEfetivaVendaPerc,
+    jurosValor: jurosVendaValor,
+    icms: icmsDetalhe,
+    pis: pisDetalhe,
+    cofins: cofinsDetalhe,
+    ibs: ibsDetalhe,
+    cbs: cbsDetalhe,
+    totalTributos: totalTributosVenda,
+    cargaTributariaEfetivaPerc,
+    faturamentoBrutoMercadoria: valorMercadoriaVendaReais,
+    faturamentoBrutoTotal: baseOperacaoComercialVenda,
+    receitaLiquida: receitaLiquidaVenda,
+  }
 
-  const custosOperacionaisDiretos =
-    valorMercadoriaReais +
-    (modalidadeFrete === 'CIF' ? freteReais : 0) +
-    seguroReais +
-    outrasDespesasReais +
-    comissaoValorBase +
-    custoFinanceiroValorBase
+  // 4. CONSOLIDAÇÃO DO RESULTADO DA OPERAÇÃO (COMPRA × VENDA)
+  // Tributação líquida = tributos de saída (venda) - créditos fiscais de entrada (compra)
+  const tributacaoLiquida = Math.max(0, totalTributosVenda - totalCreditosTributarios)
 
-  const margemContribuicaoValor = receitaLiquida - custosOperacionaisDiretos
-  const margemContribuicaoPercSobreFaturamento =
-    faturamentoBrutoBase > 0 ? (margemContribuicaoValor / faturamentoBrutoBase) * 100 : 0
-  const margemContribuicaoPercSobreReceitaLiquida =
-    receitaLiquida > 0 ? (margemContribuicaoValor / receitaLiquida) * 100 : 0
+  // Custos e Despesas Operacionais da Venda
+  const despesasOperacionaisVenda =
+    (modalidadeFreteVenda === 'CIF' ? freteVendaReais : 0) +
+    seguroVenda +
+    outrasDespesasVenda +
+    comissaoValor
 
-  // 9. Formação de Preço Sugerido e Markup
-  // Margem comercial desejada informada pelo usuário (ex: 15%)
-  const margemAlvoPerc = Number(input.margemComercialPerc) || 0
+  // Despesas Operacionais de Compra
+  const despesasOperacionaisCompra = totalDespesasCompra
 
-  // Custo total acumulado da operação (CMV + Frete + Despesas + Tributos + Comissão + Custo Financeiro)
+  // Custo base de aquisição (CMV de referência)
+  const custoAquisicaoBase = valorMercadoriaCompraReais + despesasOperacionaisCompra
+
+  // Resultado Operacional Bruto = Receita Líquida - Custo de Aquisição Base
+  const resultadoOperacionalBruto = receitaLiquidaVenda - custoAquisicaoBase
+
+  // Margem de Contribuição Operacional = Resultado Bruto - Despesas Operacionais de Venda
+  const margemContribuicaoOperacional = resultadoOperacionalBruto - despesasOperacionaisVenda
+
+  // Resultado Financeiro Líquido = (+ Juros Cobrados na Venda) - (Juros Pagos na Compra)
+  const resultadoFinanceiroLiquido = jurosVendaValor - jurosCompraValor
+
+  // RESULTADO FINAL DA OPERAÇÃO = Margem de Contribuição Operacional + Resultado Financeiro Líquido
+  const resultadoFinalOperacao = margemContribuicaoOperacional + resultadoFinanceiroLiquido
+  const resultadoFinalUnitario = volumeTotal > 0 ? resultadoFinalOperacao / volumeTotal : 0
+
+  const faturamentoComJurosVenda = receitaBrutaVenda + jurosVendaValor
+  const custoAquisicaoComJuros = custoAquisicaoBase + jurosCompraValor
+
+  const margemSobreReceitaBrutaPerc =
+    receitaBrutaVenda > 0 ? (resultadoFinalOperacao / receitaBrutaVenda) * 100 : 0
+  const margemSobreReceitaLiquidaPerc =
+    receitaLiquidaVenda > 0 ? (resultadoFinalOperacao / receitaLiquidaVenda) * 100 : 0
+  const margemSobreCustoInvestidoPerc =
+    custoAquisicaoComJuros > 0 ? (resultadoFinalOperacao / custoAquisicaoComJuros) * 100 : 0
+
+  const blocoResultadoOperacao: ResultadoOperacaoConsolidado = {
+    receitaBruta: receitaBrutaVenda,
+    faturamentoComJurosVenda,
+    custoAquisicaoTotal: custoAquisicaoBase,
+    custoAquisicaoComJuros,
+    tributosVenda: totalTributosVenda,
+    creditosCompra: totalCreditosTributarios,
+    tributacaoLiquida,
+    despesasOperacionaisVenda,
+    despesasOperacionaisCompra,
+    jurosRecebidosVenda: jurosVendaValor,
+    jurosPagosCompra: jurosCompraValor,
+    resultadoFinanceiroLiquido,
+    resultadoOperacionalBruto,
+    resultadoOperacionalLiquido: margemContribuicaoOperacional,
+    resultadoFinalOperacao,
+    resultadoFinalUnitario,
+    margemSobreReceitaBrutaPerc,
+    margemSobreReceitaLiquidaPerc,
+    margemSobreCustoInvestidoPerc,
+  }
+
+  // 5. CÁLCULO DE MARKUP E PREÇO SUGERIDO (Venda)
+  const margemAlvoPerc =
+    vendaIn.margemAlvoPerc !== undefined
+      ? Number(vendaIn.margemAlvoPerc)
+      : Number(input.margemComercialPerc) || 15
   const somaCargasPercentuais =
-    (cargaTributariaEfetivaPerc + comissaoPerc + custoFinanceiroPerc) / 100
-
-  // Preço mínimo (break-even para margem zero)
-  const custoBaseFixo =
-    valorMercadoriaReais +
-    (modalidadeFrete === 'CIF' ? freteReais : 0) +
-    seguroReais +
-    outrasDespesasReais
+    (cargaTributariaEfetivaPerc + comissaoPerc + taxaEfetivaVendaPerc) / 100
+  const custoBaseFixoParaMarkup = custoAquisicaoBase
   const divisorBreakEven = Math.max(0.01, 1 - somaCargasPercentuais)
-  const precoMinimoBreakEven = custoBaseFixo / divisorBreakEven
-
-  // Preço de venda sugerido para a margem-alvo digitada
+  const precoMinimoBreakEven = custoBaseFixoParaMarkup / divisorBreakEven
   const divisorComMargem = Math.max(0.01, 1 - somaCargasPercentuais - margemAlvoPerc / 100)
   const precoVendaSugerido =
     margemAlvoPerc > 0 && divisorComMargem > 0
-      ? custoBaseFixo / divisorComMargem
+      ? custoBaseFixoParaMarkup / divisorComMargem
       : precoMinimoBreakEven * (1 + margemAlvoPerc / 100)
-
   const markupMultiplicador =
-    valorMercadoriaReais > 0 ? precoVendaSugerido / valorMercadoriaReais : 1.0
-
+    custoBaseFixoParaMarkup > 0 ? precoVendaSugerido / custoBaseFixoParaMarkup : 1.0
   const precoVendaSugeridoUnitario = volumeTotal > 0 ? precoVendaSugerido / volumeTotal : 0
 
-  // Montagem das Linhas da DRE (Unitário, Total e % sobre Faturamento)
+  // 6. MONTAGEM DA DRE EM 3 COLUNAS
   const dre: LinhaDRE[] = [
     {
-      descricao: 'Faturamento Bruto',
-      unitario: volumeTotal > 0 ? faturamentoBrutoBase / volumeTotal : 0,
-      total: faturamentoBrutoBase,
+      descricao: '1. Faturamento Bruto da Venda',
+      unitario: volumeTotal > 0 ? receitaBrutaVenda / volumeTotal : 0,
+      total: receitaBrutaVenda,
       percSobreFaturamento: 100,
       natureza: 'receita',
     },
     {
-      descricao: '(-) ICMS Efetivo a Recolher',
+      descricao: '(-) ICMS Efetivo da Venda',
       unitario: volumeTotal > 0 ? icmsEfetivoRecolher / volumeTotal : 0,
       total: icmsEfetivoRecolher,
       percSobreFaturamento:
-        faturamentoBrutoBase > 0 ? (icmsEfetivoRecolher / faturamentoBrutoBase) * 100 : 0,
+        receitaBrutaVenda > 0 ? (icmsEfetivoRecolher / receitaBrutaVenda) * 100 : 0,
       natureza: 'deducao',
     },
     {
-      descricao: '(-) PIS Agro',
+      descricao: '(-) PIS Agro (Venda)',
       unitario: volumeTotal > 0 ? valorPis / volumeTotal : 0,
       total: valorPis,
-      percSobreFaturamento: faturamentoBrutoBase > 0 ? (valorPis / faturamentoBrutoBase) * 100 : 0,
+      percSobreFaturamento: receitaBrutaVenda > 0 ? (valorPis / receitaBrutaVenda) * 100 : 0,
       natureza: 'deducao',
     },
     {
-      descricao: '(-) COFINS Agro',
+      descricao: '(-) COFINS Agro (Venda)',
       unitario: volumeTotal > 0 ? valorCofins / volumeTotal : 0,
       total: valorCofins,
-      percSobreFaturamento:
-        faturamentoBrutoBase > 0 ? (valorCofins / faturamentoBrutoBase) * 100 : 0,
+      percSobreFaturamento: receitaBrutaVenda > 0 ? (valorCofins / receitaBrutaVenda) * 100 : 0,
       natureza: 'deducao',
     },
     {
       descricao: '(-) IBS (Reforma LC 214/2025)',
       unitario: volumeTotal > 0 ? valorIbs / volumeTotal : 0,
       total: valorIbs,
-      percSobreFaturamento: faturamentoBrutoBase > 0 ? (valorIbs / faturamentoBrutoBase) * 100 : 0,
+      percSobreFaturamento: receitaBrutaVenda > 0 ? (valorIbs / receitaBrutaVenda) * 100 : 0,
       natureza: 'deducao',
     },
     {
       descricao: '(-) CBS (Reforma LC 214/2025)',
       unitario: volumeTotal > 0 ? valorCbs / volumeTotal : 0,
       total: valorCbs,
-      percSobreFaturamento: faturamentoBrutoBase > 0 ? (valorCbs / faturamentoBrutoBase) * 100 : 0,
+      percSobreFaturamento: receitaBrutaVenda > 0 ? (valorCbs / receitaBrutaVenda) * 100 : 0,
       natureza: 'deducao',
     },
     {
-      descricao: '(=) Receita Líquida',
-      unitario: volumeTotal > 0 ? receitaLiquida / volumeTotal : 0,
-      total: receitaLiquida,
+      descricao: '(=) Receita Líquida de Venda',
+      unitario: volumeTotal > 0 ? receitaLiquidaVenda / volumeTotal : 0,
+      total: receitaLiquidaVenda,
       percSobreFaturamento:
-        faturamentoBrutoBase > 0 ? (receitaLiquida / faturamentoBrutoBase) * 100 : 0,
+        receitaBrutaVenda > 0 ? (receitaLiquidaVenda / receitaBrutaVenda) * 100 : 0,
       natureza: 'subtotal',
     },
     {
-      descricao: '(-) CMV / Custo da Mercadoria',
-      unitario: volumeTotal > 0 ? valorMercadoriaReais / volumeTotal : 0,
-      total: valorMercadoriaReais,
+      descricao: '(-) Custo de Aquisição do Produto (Compra)',
+      unitario: volumeTotal > 0 ? valorMercadoriaCompraReais / volumeTotal : 0,
+      total: valorMercadoriaCompraReais,
       percSobreFaturamento:
-        faturamentoBrutoBase > 0 ? (valorMercadoriaReais / faturamentoBrutoBase) * 100 : 0,
+        receitaBrutaVenda > 0 ? (valorMercadoriaCompraReais / receitaBrutaVenda) * 100 : 0,
       natureza: 'custo',
     },
     {
-      descricao: `(-) Frete (${modalidadeFrete})`,
-      unitario: volumeTotal > 0 ? freteReais / volumeTotal : 0,
-      total: freteReais,
+      descricao: `(-) Despesas Logísticas de Compra (${modalidadeFreteCompra})`,
+      unitario: volumeTotal > 0 ? totalDespesasCompra / volumeTotal : 0,
+      total: totalDespesasCompra,
       percSobreFaturamento:
-        faturamentoBrutoBase > 0 ? (freteReais / faturamentoBrutoBase) * 100 : 0,
+        receitaBrutaVenda > 0 ? (totalDespesasCompra / receitaBrutaVenda) * 100 : 0,
+      natureza: 'custo',
+    },
+    {
+      descricao: `(-) Frete de Venda (${modalidadeFreteVenda})`,
+      unitario: volumeTotal > 0 ? freteVendaReais / volumeTotal : 0,
+      total: freteVendaReais,
+      percSobreFaturamento: receitaBrutaVenda > 0 ? (freteVendaReais / receitaBrutaVenda) * 100 : 0,
       natureza: 'despesa',
     },
     {
-      descricao: '(-) Seguro & Outras Despesas',
-      unitario: volumeTotal > 0 ? (seguroReais + outrasDespesasReais) / volumeTotal : 0,
-      total: seguroReais + outrasDespesasReais,
+      descricao: '(-) Seguro e Outros da Venda',
+      unitario: volumeTotal > 0 ? (seguroVenda + outrasDespesasVenda) / volumeTotal : 0,
+      total: seguroVenda + outrasDespesasVenda,
       percSobreFaturamento:
-        faturamentoBrutoBase > 0
-          ? ((seguroReais + outrasDespesasReais) / faturamentoBrutoBase) * 100
-          : 0,
+        receitaBrutaVenda > 0 ? ((seguroVenda + outrasDespesasVenda) / receitaBrutaVenda) * 100 : 0,
       natureza: 'despesa',
     },
     {
-      descricao: `(-) Comissão de Vendas (${comissaoPerc.toFixed(1)}%)`,
-      unitario: volumeTotal > 0 ? comissaoValorBase / volumeTotal : 0,
-      total: comissaoValorBase,
+      descricao: `(-) Comissão de Venda (${comissaoPerc.toFixed(1)}%)`,
+      unitario: volumeTotal > 0 ? comissaoValor / volumeTotal : 0,
+      total: comissaoValor,
       percSobreFaturamento: comissaoPerc,
       natureza: 'despesa',
     },
     {
-      descricao: `(-) Custo Financeiro / Prazo (${custoFinanceiroPerc.toFixed(1)}%)`,
-      unitario: volumeTotal > 0 ? custoFinanceiroValorBase / volumeTotal : 0,
-      total: custoFinanceiroValorBase,
-      percSobreFaturamento: custoFinanceiroPerc,
+      descricao: '(=) Resultado Operacional da Venda',
+      unitario: volumeTotal > 0 ? margemContribuicaoOperacional / volumeTotal : 0,
+      total: margemContribuicaoOperacional,
+      percSobreFaturamento:
+        receitaBrutaVenda > 0 ? (margemContribuicaoOperacional / receitaBrutaVenda) * 100 : 0,
+      natureza: 'subtotal',
+    },
+    {
+      descricao: `(-) Juros da Compra (${taxaEfetivaCompraPerc.toFixed(2)}% em ${prazoCompraDias}d)`,
+      unitario: volumeTotal > 0 ? jurosCompraValor / volumeTotal : 0,
+      total: jurosCompraValor,
+      percSobreFaturamento:
+        receitaBrutaVenda > 0 ? (jurosCompraValor / receitaBrutaVenda) * 100 : 0,
       natureza: 'despesa',
     },
     {
-      descricao: '(=) MARGEM DE CONTRIBUIÇÃO',
-      unitario: volumeTotal > 0 ? margemContribuicaoValor / volumeTotal : 0,
-      total: margemContribuicaoValor,
-      percSobreFaturamento: margemContribuicaoPercSobreFaturamento,
+      descricao: `(+) Juros Financiamento da Venda (${taxaEfetivaVendaPerc.toFixed(2)}% em ${prazoVendaDias}d)`,
+      unitario: volumeTotal > 0 ? jurosVendaValor / volumeTotal : 0,
+      total: jurosVendaValor,
+      percSobreFaturamento: receitaBrutaVenda > 0 ? (jurosVendaValor / receitaBrutaVenda) * 100 : 0,
+      natureza: 'receita',
+    },
+    {
+      descricao: '(=) RESULTADO FINAL DA OPERAÇÃO',
+      unitario: volumeTotal > 0 ? resultadoFinalOperacao / volumeTotal : 0,
+      total: resultadoFinalOperacao,
+      percSobreFaturamento: margemSobreReceitaBrutaPerc,
       natureza: 'resultado',
     },
   ]
 
+  // 7. MEMÓRIA DE CÁLCULO SEPARADA POR BLOCOS
   memoriaCalculo.push(
-    `DRE: Receita Líquida R$ ${receitaLiquida.toFixed(2)} - Custos/Despesas R$ ${custosOperacionaisDiretos.toFixed(2)} = Margem de Contribuição R$ ${margemContribuicaoValor.toFixed(2)} (${margemContribuicaoPercSobreFaturamento.toFixed(2)}% do faturamento)`,
+    `--- 1. OPERAÇÃO DE COMPRA (${dataCompraIso} | Vencimento ${dataVencimentoCompraIso} em ${prazoCompraDias} dias) ---`,
   )
   memoriaCalculo.push(
-    `Preço Mínimo Break-Even (margem zero): R$ ${precoMinimoBreakEven.toFixed(2)} | Preço Sugerido com margem de ${margemAlvoPerc}%: R$ ${precoVendaSugerido.toFixed(2)} (Markup ${markupMultiplicador.toFixed(3)}x)`,
+    `Mercadoria: ${volumeTotal.toLocaleString('pt-BR')} ${unid} × ${moedaCompra === 'USD' ? `US$ ${precoUnitarioCompra.toFixed(2)} (PTAX R$ ${ptaxCompra.toFixed(4)}) = ` : ''}R$ ${precoUnitarioCompraReais.toFixed(2)} = R$ ${valorMercadoriaCompraReais.toFixed(2)}`,
+  )
+  memoriaCalculo.push(
+    `Despesas de Aquisição: Frete (${modalidadeFreteCompra}) R$ ${freteCompraReais.toFixed(2)} + Seguro R$ ${seguroCompra.toFixed(2)} + Outros R$ ${outrasDespesasCompra.toFixed(2)} = R$ ${totalDespesasCompra.toFixed(2)}`,
+  )
+  memoriaCalculo.push(
+    `Custo Mercadoria: R$ ${custoAquisicaoMercadoria.toFixed(2)} | Juros da Compra: taxa ${taxaJurosCompraMensal.toFixed(2)}% a.m. (efetiva ${taxaEfetivaCompraPerc.toFixed(2)}% em ${prazoCompraDias}d) = R$ ${jurosCompraValor.toFixed(2)} | Custo Total c/ Juros: R$ ${custoTotalCompraComJuros.toFixed(2)} (R$ ${custoUnitarioTotalCompra.toFixed(2)}/${unid})`,
+  )
+
+  memoriaCalculo.push(
+    `--- 2. OPERAÇÃO DE VENDA (${dataVendaIso} | Vencimento ${dataVencimentoVendaIso} em ${prazoVendaDias} dias) ---`,
+  )
+  memoriaCalculo.push(
+    `Preço de Venda: R$ ${precoUnitarioVendaReais.toFixed(2)}/${unid} | Faturamento Bruto: R$ ${receitaBrutaVenda.toFixed(2)} | Comissão (${comissaoPerc}%): R$ ${comissaoValor.toFixed(2)}`,
+  )
+  memoriaCalculo.push(
+    `ICMS (${ufOrigemVenda} → ${ufDestinoVenda}): Base Bruta R$ ${baseCalculoBrutaIcmsVenda.toFixed(2)} | Redução ${redBasePerc}% → Base Efetiva R$ ${baseCalculoEfetivaIcms.toFixed(2)} | Débito R$ ${debitoIcms.toFixed(2)} | Diferimento R$ ${valorDiferimento.toFixed(2)} | A Recolher R$ ${icmsEfetivoRecolher.toFixed(2)}`,
+  )
+  memoriaCalculo.push(
+    `PIS/COFINS (Tema 69 STF): Base R$ ${basePisCofinsComExclusaoStf.toFixed(2)} (Faturamento R$ ${receitaBrutaVenda.toFixed(2)} - ICMS R$ ${icmsEfetivoRecolher.toFixed(2)}) | PIS ${aliqPisPadrao.toFixed(3)}% (R$ ${valorPis.toFixed(2)}) + COFINS ${aliqCofinsPadrao.toFixed(3)}% (R$ ${valorCofins.toFixed(2)})`,
+  )
+  memoriaCalculo.push(
+    `IBS/CBS (LC 214/2025 c/ red. 60%): Base R$ ${baseCalculoIbsCbs.toFixed(2)} | IBS ${aliqIbsNominal}% (R$ ${valorIbs.toFixed(2)}) + CBS ${aliqCbsNominal}% (R$ ${valorCbs.toFixed(2)}) | Total Tributos Venda: R$ ${totalTributosVenda.toFixed(2)} (${cargaTributariaEfetivaPerc.toFixed(2)}%)`,
+  )
+  memoriaCalculo.push(
+    `Juros Financiamento Concedido ao Cliente: taxa ${taxaJurosVendaMensal.toFixed(2)}% a.m. (efetiva ${taxaEfetivaVendaPerc.toFixed(2)}% em ${prazoVendaDias}d) = R$ ${jurosVendaValor.toFixed(2)}`,
+  )
+
+  memoriaCalculo.push(`--- 3. RESULTADO CONSOLIDADO DA OPERAÇÃO ---`)
+  memoriaCalculo.push(
+    `Receita Líquida R$ ${receitaLiquidaVenda.toFixed(2)} - Custo de Aquisição R$ ${custoAquisicaoBase.toFixed(2)} - Despesas Venda R$ ${despesasOperacionaisVenda.toFixed(2)} = Margem Operacional R$ ${margemContribuicaoOperacional.toFixed(2)}`,
+  )
+  memoriaCalculo.push(
+    `Resultado Financeiro: Juros Venda (+) R$ ${jurosVendaValor.toFixed(2)} - Juros Compra (-) R$ ${jurosCompraValor.toFixed(2)} = R$ ${resultadoFinanceiroLiquido.toFixed(2)}`,
+  )
+  memoriaCalculo.push(
+    `RESULTADO FINAL DA OPERAÇÃO: R$ ${resultadoFinalOperacao.toFixed(2)} (${margemSobreReceitaBrutaPerc.toFixed(2)}% da venda | ${margemSobreCustoInvestidoPerc.toFixed(2)}% ROI sobre compra)`,
   )
 
   return {
@@ -800,31 +1350,31 @@ export function executarCalculoSimulador(input: SimuladorInput): SimuladorResult
     embalagem: emb,
     origem: produto.origem || 'Nacional',
     grTrib: grTrib || 'Geral',
-    ufOrigem,
-    ufDestino,
-    operacao,
-    isImportado,
-    enquadramentoCliente: enquadramento,
+    ufOrigem: ufOrigemVenda,
+    ufDestino: ufDestinoVenda,
+    operacao: operacaoVenda,
+    isImportado: isVendaImportada || isCompraImportada,
+    enquadramentoCliente,
     quantidade: qtdInformada,
     qtdEmbalagens,
     volumePorEmbalagem: volumePorEmb,
     volumeTotal,
-    moedaOriginal,
-    ptaxAplicada,
-    valorUnitarioOriginal: precoUnitarioOriginal,
-    valorUnitarioReais,
-    valorMercadoriaOriginal,
-    valorMercadoriaReais,
-    modalidadeFrete,
-    frete: freteReais,
-    seguro: seguroReais,
-    outrasDespesas: outrasDespesasReais,
-    totalDespesasAcessorias,
-    baseOperacaoComercial,
+    moedaOriginal: moedaVenda,
+    ptaxAplicada: ptaxVenda,
+    valorUnitarioOriginal: precoUnitarioVenda,
+    valorUnitarioReais: precoUnitarioVendaReais,
+    valorMercadoriaOriginal: valorMercadoriaVendaReais,
+    valorMercadoriaReais: valorMercadoriaVendaReais,
+    modalidadeFrete: modalidadeFreteVenda,
+    frete: freteVendaReais,
+    seguro: seguroVenda,
+    outrasDespesas: outrasDespesasVenda,
+    totalDespesasAcessorias: totalDespesasVenda,
+    baseOperacaoComercial: baseOperacaoComercialVenda,
     comissaoPerc,
-    comissaoValor: comissaoValorBase,
-    custoFinanceiroPerc,
-    custoFinanceiroValor: custoFinanceiroValorBase,
+    comissaoValor,
+    custoFinanceiroPerc: taxaEfetivaVendaPerc,
+    custoFinanceiroValor: jurosVendaValor,
     icms: icmsDetalhe,
     temRegraIcms,
     statusRegraIcms,
@@ -833,20 +1383,23 @@ export function executarCalculoSimulador(input: SimuladorInput): SimuladorResult
     cofins: cofinsDetalhe,
     ibs: ibsDetalhe,
     cbs: cbsDetalhe,
-    totalTributos,
+    totalTributos: totalTributosVenda,
     cargaTributariaEfetivaPerc,
     dre,
-    receitaBruta: faturamentoBrutoBase,
-    deducoesTributarias,
-    receitaLiquida,
-    custosEDespesas: custosOperacionaisDiretos,
-    margemContribuicaoValor,
-    margemContribuicaoPercSobreFaturamento,
-    margemContribuicaoPercSobreReceitaLiquida,
+    receitaBruta: receitaBrutaVenda,
+    deducoesTributarias: totalTributosVenda,
+    receitaLiquida: receitaLiquidaVenda,
+    custosEDespesas: custoAquisicaoBase + despesasOperacionaisVenda,
+    margemContribuicaoValor: resultadoFinalOperacao,
+    margemContribuicaoPercSobreFaturamento: margemSobreReceitaBrutaPerc,
+    margemContribuicaoPercSobreReceitaLiquida: margemSobreReceitaLiquidaPerc,
     markupMultiplicador,
     precoMinimoBreakEven,
     precoVendaSugerido,
     precoVendaSugeridoUnitario,
+    compra: blocoCompra,
+    venda: blocoVenda,
+    resultadoOperacao: blocoResultadoOperacao,
     alertas,
     memoriaCalculo,
   }

@@ -1,435 +1,302 @@
 /**
  * pocketbase/hooks/simulador_comercial.js
  *
- * Endpoint de cálculo e simulação comercial no servidor:
- * POST /backend/v1/simulador/calcular
+ * Endpoint server-side para simulação comercial e DRE em 3 colunas (POST /backend/v1/agro/simular-operacao).
  *
- * Executa a regra de negócio comercial e fiscal no servidor com:
- * 1. Resolução do produto em sim_produtos_base ou base_mestre (caso informado código/nome)
- * 2. Embalagens e volume total da simulação
- * 3. Modalidade de frete CIF vs FOB
- * 4. Consulta de regra de ICMS por UF_ORIGEM e UF_DESTINO com prioridade para gr_trib
- * 5. Dedução de ICMS detalhado (débito, diferimento, desonerado, créditos)
- * 6. PIS/COFINS com base de cálculo com exclusão do ICMS (Tema 69 STF)
- * 7. IBS/CBS com redução de 60% para insumos agrícolas
- * 8. DRE / Cascata de preço (faturamento, receita líquida, CMV, comissão, juros, margem de contribuição)
+ * Suporta o fluxo comercial completo segregando:
+ * 1. OPERAÇÃO DE COMPRA (Aquisição):
+ *    - Data da compra, prazo de pagamento em dias corridos, data de vencimento calculada
+ *    - Custo de aquisição unitário (BRL ou USD c/ PTAX)
+ *    - Despesas acessórias (frete FOB/CIF, seguro, outros)
+ *    - Créditos de entrada (ICMS e PIS/COFINS)
+ *    - Juros de compra proporcionais ao prazo pró-rata 30 dias
+ *
+ * 2. OPERAÇÃO DE VENDA (Revenda Comercial):
+ *    - Data da venda, prazo concedido em dias corridos, data de vencimento calculada
+ *    - Preço de venda unitário e faturamento bruto
+ *    - Despesas de venda (frete CIF/FOB, seguro, comissão de venda)
+ *    - Tributos incidentes (ICMS próprio, diferimento, PIS/COFINS Tema 69 STF, IBS/CBS c/ red. 60%)
+ *    - Juros de financiamento ao cliente proporcionais ao prazo
+ *
+ * 3. RESULTADO DA OPERAÇÃO:
+ *    - Margem operacional líquida
+ *    - Resultado financeiro líquido (Juros Venda - Juros Compra)
+ *    - Resultado final da operação consolidado em R$ e %
  */
 
-routerAdd('POST', '/backend/v1/simulador/calcular', (e) => {
+routerAdd('POST', '/backend/v1/agro/simular-operacao', (e) => {
+  let body = {}
   try {
-    const authRecord = e.auth
-    if (!authRecord) {
-      return e.json(401, {
-        sucesso: false,
-        error: 'Acesso não autorizado. É necessário estar autenticado.',
-      })
-    }
-
     const info = e.requestInfo()
-    const body = info.body || {}
-
-    const produtoId = String(body.produto_id || '').trim()
-    const produtoNomeManual = String(body.produto_nome || '').trim()
-    const ncmManual = String(body.ncm || '').trim()
-    const grTribManual = String(body.gr_trib || '').trim()
-    const ufOrigem = String(body.uf_origem || 'SP')
-      .trim()
-      .toUpperCase()
-    const ufDestino = String(body.uf_destino || 'MT')
-      .trim()
-      .toUpperCase()
-    const quantidade = Number(body.quantidade) || 0
-    const precoUnitario = Number(body.preco_unitario) || 0
-    const frete = Number(body.frete) || 0
-    const modalidadeFrete = String(body.modalidade_frete || 'CIF')
-      .trim()
-      .toUpperCase()
-    const seguro = Number(body.seguro) || 0
-    const outrasDespesas = Number(body.outras_despesas) || 0
-    const ptaxManual = Number(body.ptax_manual) || 0
-    const margemPerc = Number(body.margem_perc) || 0
-    const comissaoPercInput =
-      body.comissao_perc !== undefined ? Number(body.comissao_perc) : undefined
-    const custoFinanceiroPerc = Number(body.custo_financeiro_perc) || 0
-    const enquadramentoCliente = String(body.enquadramento_cliente || 'produtor_rural').trim()
-
-    let produtoEncontrado = null
-
-    // 1. Tentar localizar o produto em sim_produtos_base
-    if (produtoId) {
-      try {
-        produtoEncontrado = $app.findRecordById('sim_produtos_base', produtoId)
-      } catch (_) {
-        try {
-          produtoEncontrado = $app.findRecordById('base_mestre', produtoId)
-        } catch (_) {}
-      }
-    }
-
-    let descricao = produtoNomeManual || 'Produto Simulado'
-    let ncm = ncmManual || '3808.93.29'
-    let unidade = 'L'
-    let moeda = 'BRL'
-    let origem = 'Nacional'
-    let codigo = 'S/C'
-    let embalagem = 'Padrão'
-    let comissaoPadrao = 2.5
-
-    if (produtoEncontrado) {
-      descricao =
-        produtoEncontrado.getString('descricao') ||
-        produtoEncontrado.getString('nome_produto') ||
-        descricao
-      ncm =
-        produtoEncontrado.getString('ncm') ||
-        produtoEncontrado.getString('ncm_especifica') ||
-        produtoEncontrado.getString('ncm_padrao') ||
-        ncm
-      unidade =
-        produtoEncontrado.getString('unidade') ||
-        produtoEncontrado.getString('unidade_medida_principal') ||
-        unidade
-      moeda =
-        produtoEncontrado.getString('moeda') ||
-        (produtoEncontrado.getString('origem')?.toUpperCase().includes('IMP') ? 'USD' : 'BRL')
-      origem = produtoEncontrado.getString('origem') || 'Nacional'
-      codigo =
-        produtoEncontrado.getString('codigo') ||
-        produtoEncontrado.getString('registro_mapa') ||
-        codigo
-      embalagem = produtoEncontrado.getString('embalagem') || embalagem
-      const cp = produtoEncontrado.getFloat('comissao_padrao')
-      if (cp > 0) {
-        comissaoPadrao = cp < 1 ? cp * 100 : cp
-      }
-    }
-
-    const comissaoPerc = comissaoPercInput !== undefined ? comissaoPercInput : comissaoPadrao
-    const grTrib =
-      (produtoEncontrado && produtoEncontrado.getString('gr_trib')) || grTribManual || ''
-
-    const isImportado =
-      origem.toUpperCase().includes('IMP') ||
-      descricao.toUpperCase().includes('(IMP)') ||
-      moeda === 'USD'
-    let ptaxAplicada = 1.0
-    let valorUnitarioReais = precoUnitario
-
-    const alertas = []
-    const memoriaCalculo = []
-
-    if (moeda === 'USD' || isImportado) {
-      if (ptaxManual <= 0) {
-        alertas.push(
-          'Insumo importado cotado em dólar: informe a cotação PTAX manual para a conversão exata.',
-        )
-      }
-      ptaxAplicada = ptaxManual > 0 ? ptaxManual : 1.0
-      valorUnitarioReais = precoUnitario * ptaxAplicada
-      memoriaCalculo.push(
-        `PTAX manual aplicada: US$ ${precoUnitario.toFixed(2)} × R$ ${ptaxAplicada.toFixed(4)} = R$ ${valorUnitarioReais.toFixed(2)} / ${unidade}`,
-      )
-    } else {
-      memoriaCalculo.push(
-        `Preço unitário em moeda nacional: R$ ${valorUnitarioReais.toFixed(2)} / ${unidade}`,
-      )
-    }
-
-    const valorMercadoriaReais = quantidade * valorUnitarioReais
-    const totalDespesas = frete + seguro + outrasDespesas
-    const baseOperacao = valorMercadoriaReais + totalDespesas
-    const freteNaBaseIcms = modalidadeFrete === 'CIF' ? frete : 0
-    const baseCalculoBrutaIcms = valorMercadoriaReais + freteNaBaseIcms + seguro + outrasDespesas
-
-    // 2. Consulta da Regra de ICMS para ufOrigem -> ufDestino com cruzamento por gr_trib
-    let regraIcmsEncontrada = null
-    let temRegraIcms = false
-    let statusRegra = 'sem_regra'
-    let avisoIcms = null
-
-    try {
-      const escOrigem = ufOrigem.replace(/'/g, "\\'")
-      const escDestino = ufDestino.replace(/'/g, "\\'")
-
-      if (grTrib) {
-        const escGr = grTrib.replace(/'/g, "\\'")
-        const recordsExatos =
-          $app.findRecordsByFilter(
-            'sim_regras_icms',
-            `uf_origem = '${escOrigem}' && uf_destino = '${escDestino}' && grupo_tributario_codigo = '${escGr}'`,
-            '-created',
-            1,
-            0,
-          ) || []
-        if (recordsExatos.length > 0) {
-          regraIcmsEncontrada = recordsExatos[0]
-          temRegraIcms = true
-          statusRegra = 'exata_grtrib'
-        }
-      }
-
-      if (!regraIcmsEncontrada) {
-        const recordsIcms =
-          $app.findRecordsByFilter(
-            'sim_regras_icms',
-            `uf_origem = '${escOrigem}' && uf_destino = '${escDestino}'`,
-            '-created',
-            1,
-            0,
-          ) || []
-        if (recordsIcms.length > 0) {
-          regraIcmsEncontrada = recordsIcms[0]
-          temRegraIcms = true
-          statusRegra = 'fallback_uf'
-          if (grTrib) {
-            alertas.push(
-              `Não há regra específica para GrTrib "${grTrib}" em ${ufOrigem} → ${ufDestino}. Aplicada regra geral da UF.`,
-            )
-          } else {
-            alertas.push(
-              `Produto sem Grupo Tributário (GrTrib). Aplicada regra genérica do par ${ufOrigem} → ${ufDestino}.`,
-            )
-          }
-        }
-      }
-    } catch (eIcms) {
-      console.log('Aviso ao consultar sim_regras_icms:', eIcms.message || eIcms)
-    }
-
-    let icmsAliqNominal = 0
-    let icmsRedBase = 0
-    let icmsAliqEfetiva = 0
-    let icmsDiferimento = false
-    let icmsPercDif = 0
-    let icmsDebito = 0
-    let icmsValorDiferido = 0
-    let icmsDesoneradoValor = 0
-    let icmsCreditoValor = 0
-    let icmsEfetivoRecolher = 0
-    let tipoDesonerado = 'Não Calcula'
-    let icmsFundamentacao = ''
-
-    if (temRegraIcms && regraIcmsEncontrada) {
-      icmsAliqNominal = regraIcmsEncontrada.getFloat('aliquota_icms') || 0
-      icmsRedBase = regraIcmsEncontrada.getFloat('reducao_base') || 0
-      icmsDiferimento = regraIcmsEncontrada.getBool('diferimento')
-      icmsPercDif =
-        regraIcmsEncontrada.getFloat('percentual_diferimento') || (icmsDiferimento ? 100 : 0)
-      icmsAliqEfetiva =
-        regraIcmsEncontrada.getFloat('aliquota_efetiva') ||
-        icmsAliqNominal * (1 - icmsRedBase / 100)
-      icmsFundamentacao =
-        regraIcmsEncontrada.getString('fundamentacao_legal') || `Regra ${ufOrigem} → ${ufDestino}`
-      tipoDesonerado = regraIcmsEncontrada.getString('tipo_desonerado') || 'Não Calcula'
-      const taxaDeson = regraIcmsEncontrada.getFloat('icms_desonerado') || 0
-
-      const baseReduzida = baseCalculoBrutaIcms * (1 - icmsRedBase / 100)
-      icmsDebito = baseReduzida * (icmsAliqNominal / 100)
-
-      if (icmsDiferimento || icmsPercDif > 0) {
-        icmsValorDiferido = icmsDebito * (icmsPercDif / 100)
-      }
-
-      if (tipoDesonerado.toLowerCase().includes('desconta') || taxaDeson > 0) {
-        const percDeson = taxaDeson > 0 ? taxaDeson : icmsAliqNominal - icmsAliqEfetiva
-        if (percDeson > 0) {
-          icmsDesoneradoValor = baseCalculoBrutaIcms * (percDeson / 100)
-        }
-      }
-
-      const regraCredito = regraIcmsEncontrada.getString('regra_credito_entrada') || ''
-      if (regraCredito.toLowerCase().includes('presumido')) {
-        icmsCreditoValor = baseReduzida * ((icmsAliqEfetiva * 0.5) / 100)
-      }
-
-      icmsEfetivoRecolher = Math.max(
-        0,
-        icmsDebito -
-          icmsValorDiferido -
-          icmsCreditoValor -
-          (tipoDesonerado.toLowerCase().includes('desconta') ? icmsDesoneradoValor : 0),
-      )
-    } else {
-      avisoIcms = `Sem regra de ICMS para origem ${ufOrigem} → destino ${ufDestino}${grTrib ? ` (GrTrib ${grTrib})` : ''}. Importe a planilha de regras ou cadastre o par na central.`
-      alertas.push(avisoIcms)
-
-      const aliqFallback =
-        ufOrigem === ufDestino
-          ? 18
-          : ['SP', 'RJ', 'MG', 'PR', 'RS', 'SC'].includes(ufOrigem) &&
-              !['SP', 'RJ', 'MG', 'PR', 'RS', 'SC'].includes(ufDestino)
-            ? 7
-            : 12
-      icmsAliqNominal = aliqFallback
-      icmsAliqEfetiva = aliqFallback
-      icmsDebito = baseCalculoBrutaIcms * (aliqFallback / 100)
-      icmsEfetivoRecolher = icmsDebito
-      icmsFundamentacao = 'Alíquota padrão estimada (sem regra origem→destino)'
-    }
-
-    // 3. PIS/COFINS Agro (Tema 69 STF - Exclusão do ICMS)
-    const basePisCofins = Math.max(0, baseOperacao - icmsEfetivoRecolher)
-    const pisAliq = 0.165
-    const cofinsAliq = 0.76
-    const pisValor = basePisCofins * (pisAliq / 100)
-    const cofinsValor = basePisCofins * (cofinsAliq / 100)
-
-    // 4. IBS/CBS (LC 214/2025 com 60% de redução no agro)
-    const ibsAliqEfetiva = 0.1 * 0.4 // 0,04%
-    const cbsAliqEfetiva = 0.9 * 0.4 // 0,36%
-    const baseIbsCbs = baseOperacao * 0.4
-    const ibsValor = baseIbsCbs * (0.1 / 100)
-    const cbsValor = baseIbsCbs * (0.9 / 100)
-
-    const totalTributos = icmsEfetivoRecolher + pisValor + cofinsValor + ibsValor + cbsValor
-    const comissaoValor = baseOperacao * (comissaoPerc / 100)
-    const custoFinanceiroValor = baseOperacao * (custoFinanceiroPerc / 100)
-
-    const receitaBruta = baseOperacao
-    const receitaLiquida = receitaBruta - totalTributos
-    const custosOperacionais =
-      valorMercadoriaReais +
-      (modalidadeFrete === 'CIF' ? frete : 0) +
-      seguro +
-      outrasDespesas +
-      comissaoValor +
-      custoFinanceiroValor
-    const margemContribuicaoValor = receitaLiquida - custosOperacionais
-    const margemContribuicaoPerc =
-      receitaBruta > 0 ? (margemContribuicaoValor / receitaBruta) * 100 : 0
-
-    // Formação de preço
-    const somaCargasPerc =
-      (baseOperacao > 0 ? (totalTributos / baseOperacao) * 100 : 0) +
-      comissaoPerc +
-      custoFinanceiroPerc
-    const custoBaseFixo =
-      valorMercadoriaReais + (modalidadeFrete === 'CIF' ? frete : 0) + seguro + outrasDespesas
-    const divisorBreakEven = Math.max(0.01, 1 - somaCargasPerc / 100)
-    const precoMinimoBreakEven = custoBaseFixo / divisorBreakEven
-    const divisorComMargem = Math.max(0.01, 1 - somaCargasPerc / 100 - margemPerc / 100)
-    const precoVendaSugerido =
-      margemPerc > 0 && divisorComMargem > 0
-        ? custoBaseFixo / divisorComMargem
-        : precoMinimoBreakEven * (1 + margemPerc / 100)
-
-    return e.json(200, {
-      sucesso: true,
-      produto: {
-        id: produtoId,
-        codigo: codigo,
-        descricao: descricao,
-        ncm: ncm,
-        unidade: unidade,
-        embalagem: embalagem,
-        origem: origem,
-        gr_trib: grTrib,
-        is_importado: isImportado,
-        enquadramento_cliente: enquadramentoCliente,
-      },
-      operacao: {
-        uf_origem: ufOrigem,
-        uf_destino: ufDestino,
-        tipo: ufOrigem === ufDestino ? 'Interna' : 'Interestadual',
-        modalidade_frete: modalidadeFrete,
-      },
-      cambio: {
-        moeda: moeda,
-        ptax_aplicada: ptaxAplicada,
-        preco_unitario_original: precoUnitario,
-        preco_unitario_reais: valorUnitarioReais,
-      },
-      valores_base: {
-        quantidade: quantidade,
-        valor_mercadoria_reais: valorMercadoriaReais,
-        frete: frete,
-        modalidade_frete: modalidadeFrete,
-        seguro: seguro,
-        outras_despesas: outrasDespesas,
-        base_operacao: baseOperacao,
-        base_calculo_bruta_icms: baseCalculoBrutaIcms,
-        comissao_perc: comissaoPerc,
-        comissao_valor: comissaoValor,
-        custo_financeiro_perc: custoFinanceiroPerc,
-        custo_financeiro_valor: custoFinanceiroValor,
-      },
-      tributos: {
-        icms: {
-          nome: 'ICMS',
-          base_calculo_bruta: baseCalculoBrutaIcms,
-          base_calculo_efetiva: baseCalculoBrutaIcms * (1 - icmsRedBase / 100),
-          aliquota_nominal: icmsAliqNominal,
-          reducao_base: icmsRedBase,
-          aliquota_efetiva: icmsAliqEfetiva,
-          debito_icms: icmsDebito,
-          diferimento: icmsDiferimento,
-          percentual_diferimento: icmsPercDif,
-          valor_diferimento: icmsValorDiferido,
-          tipo_desonerado: tipoDesonerado,
-          valor_desonerado: icmsDesoneradoValor,
-          credito_entrada_valor: icmsCreditoValor,
-          icms_efetivo_recolher: icmsEfetivoRecolher,
-          tem_regra: temRegraIcms,
-          status_regra: statusRegra,
-          aviso: avisoIcms,
-          fundamentacao: icmsFundamentacao,
-        },
-        pis: {
-          nome: 'PIS',
-          base_calculo: basePisCofins,
-          aliquota: pisAliq,
-          valor: pisValor,
-          fundamentacao: 'LC 224/2025 (Tema 69 STF: base sem ICMS)',
-        },
-        cofins: {
-          nome: 'COFINS',
-          base_calculo: basePisCofins,
-          aliquota: cofinsAliq,
-          valor: cofinsValor,
-          fundamentacao: 'LC 224/2025 (Tema 69 STF: base sem ICMS)',
-        },
-        ibs: {
-          nome: 'IBS',
-          base_calculo: baseIbsCbs,
-          aliquota: ibsAliqEfetiva,
-          valor: ibsValor,
-          fundamentacao: 'LC 214/2025 (Redução 60% insumos agro)',
-        },
-        cbs: {
-          nome: 'CBS',
-          base_calculo: baseIbsCbs,
-          aliquota: cbsAliqEfetiva,
-          valor: cbsValor,
-          fundamentacao: 'LC 214/2025 (Redução 60% insumos agro)',
-        },
-        total_tributos: totalTributos,
-        carga_efetiva_perc: baseOperacao > 0 ? (totalTributos / baseOperacao) * 100 : 0,
-      },
-      dre: {
-        receita_bruta: receitaBruta,
-        deducoes_tributarias: totalTributos,
-        receita_liquida: receitaLiquida,
-        cmv: valorMercadoriaReais,
-        frete: modalidadeFrete === 'CIF' ? frete : 0,
-        seguro_outros: seguro + outrasDespesas,
-        comissao_valor: comissaoValor,
-        custo_financeiro_valor: custoFinanceiroValor,
-        margem_contribuicao_valor: margemContribuicaoValor,
-        margem_contribuicao_perc: margemContribuicaoPerc,
-      },
-      resultado_comercial: {
-        preco_minimo_break_even: precoMinimoBreakEven,
-        preco_venda_sugerido: precoVendaSugerido,
-        margem_perc: margemPerc,
-      },
-      alertas: alertas,
-      memoria_calculo: memoriaCalculo,
-    })
-  } catch (err) {
-    console.log('Erro ao executar simulação comercial no backend:', err.message || err)
-    return e.json(500, {
-      sucesso: false,
-      error: `Erro ao executar cálculo da simulação: ${err.message || String(err)}`,
-    })
+    body = info.body || {}
+  } catch (_) {
+    body = {}
   }
+
+  const codProduto = body.codigo_produto || ''
+  const idProduto = body.produto_id || ''
+  const descProduto = body.descricao || ''
+
+  // 1. Busca do produto na base sim_produtos_base
+  let produtoRecord = null
+  if (idProduto) {
+    try {
+      produtoRecord = $app.findRecordById('sim_produtos_base', idProduto)
+    } catch (_) {}
+  }
+  if (!produtoRecord && codProduto) {
+    try {
+      produtoRecord = $app.findFirstRecordByData('sim_produtos_base', 'codigo', codProduto)
+    } catch (_) {}
+  }
+  if (!produtoRecord && descProduto) {
+    try {
+      produtoRecord = $app.findFirstRecordByFilter('sim_produtos_base', `descricao ~ {:desc}`, {
+        desc: descProduto,
+      })
+    } catch (_) {}
+  }
+
+  // Dados do Produto
+  const desc = produtoRecord
+    ? produtoRecord.getString('descricao')
+    : descProduto || 'Produto Base Insumo'
+  const cod = produtoRecord ? produtoRecord.getString('codigo') : codProduto || 'S/C'
+  const ncm = produtoRecord ? produtoRecord.getString('ncm') : body.ncm || '3808.93.29'
+  const unid = produtoRecord ? produtoRecord.getString('unidade') : body.unidade || 'L'
+  const emb = produtoRecord ? produtoRecord.getString('embalagem') : body.embalagem || 'Padrão'
+  const grTrib = produtoRecord ? produtoRecord.getString('gr_trib') : body.gr_trib || ''
+  const origem = produtoRecord ? produtoRecord.getString('origem') : 'Nacional'
+  const moedaPadrao = produtoRecord ? produtoRecord.getString('moeda') : 'BRL'
+  const precoBasePadrao = produtoRecord ? produtoRecord.getFloat('preco_base_sugerido') : 0
+  const comissaoPadrao = produtoRecord ? produtoRecord.getFloat('comissao_padrao') : 0.025
+
+  // 2. Volume e Embalagens
+  const qtdInformada = Math.max(0, Number(body.quantidade) || 1000)
+  const volumePorEmb = Math.max(1, Number(body.volume_por_embalagem) || 20)
+  const qtdEmbalagens = Math.ceil(qtdInformada / volumePorEmb)
+  const volumeTotal = qtdInformada
+
+  // PTAX Manual
+  const isImportado =
+    moedaPadrao.toUpperCase() === 'USD' ||
+    origem.toLowerCase().indexOf('imp') >= 0 ||
+    desc.toUpperCase().indexOf('(IMP)') >= 0
+  const ptaxManual = isImportado ? Math.max(0.0001, Number(body.ptax_manual) || 5.75) : 1.0
+
+  // 3. OPERAÇÃO DE COMPRA
+  const compraIn = body.compra || {}
+  const dataCompra = compraIn.data_operacao || body.data_compra || '2026-03-01'
+  const prazoCompraDias = Math.max(0, Number(compraIn.prazo_dias ?? body.prazo_compra_dias ?? 30))
+
+  // Data de vencimento da compra
+  const dCompra = new Date(dataCompra)
+  dCompra.setDate(dCompra.getDate() + prazoCompraDias)
+  const vencimentoCompra = dCompra.toISOString().split('T')[0]
+
+  const precoUnitarioCompra = Math.max(
+    0,
+    Number(
+      compraIn.preco_unitario ??
+        (precoBasePadrao > 0 ? precoBasePadrao : (body.preco_unitario_compra ?? 30)),
+    ),
+  )
+  const moedaCompra = (compraIn.moeda || moedaPadrao || 'BRL').toUpperCase()
+  const precoUnitarioCompraReais =
+    moedaCompra === 'USD' ? precoUnitarioCompra * ptaxManual : precoUnitarioCompra
+  const valorMercadoriaCompraReais = volumeTotal * precoUnitarioCompraReais
+
+  const freteCompra = Math.max(0, Number(compraIn.frete ?? body.frete_compra ?? 1200))
+  const seguroCompra = Math.max(0, Number(compraIn.seguro ?? body.seguro_compra ?? 200))
+  const outrasDespesasCompra = Math.max(
+    0,
+    Number(compraIn.outras_despesas ?? body.outras_despesas_compra ?? 100),
+  )
+  const totalDespesasCompra = freteCompra + seguroCompra + outrasDespesasCompra
+  const custoAquisicaoMercadoria = valorMercadoriaCompraReais + totalDespesasCompra
+
+  // Juros de Compra (pró-rata mês 30 dias)
+  const taxaJurosCompraMensal = Math.max(
+    0,
+    Number(compraIn.taxa_juros_mensal_perc ?? body.taxa_juros_compra_perc ?? 1.2),
+  )
+  const taxaEfetivaCompraPerc = (taxaJurosCompraMensal / 30) * prazoCompraDias
+  const jurosCompraValor = custoAquisicaoMercadoria * (taxaEfetivaCompraPerc / 100)
+  const custoTotalCompraComJuros = custoAquisicaoMercadoria + jurosCompraValor
+
+  // 4. OPERAÇÃO DE VENDA
+  const vendaIn = body.venda || {}
+  const dataVenda = vendaIn.data_operacao || body.data_venda || '2026-03-01'
+  const prazoVendaDias = Math.max(0, Number(vendaIn.prazo_dias ?? body.prazo_venda_dias ?? 60))
+
+  const dVenda = new Date(dataVenda)
+  dVenda.setDate(dVenda.getDate() + prazoVendaDias)
+  const vencimentoVenda = dVenda.toISOString().split('T')[0]
+
+  const precoUnitarioVenda = Math.max(
+    0,
+    Number(vendaIn.preco_unitario ?? body.preco_unitario_venda ?? precoUnitarioCompraReais * 1.35),
+  )
+  const moedaVenda = (vendaIn.moeda || 'BRL').toUpperCase()
+  const precoUnitarioVendaReais =
+    moedaVenda === 'USD' ? precoUnitarioVenda * ptaxManual : precoUnitarioVenda
+  const valorMercadoriaVendaReais = volumeTotal * precoUnitarioVendaReais
+
+  const ufOrigemVenda = (vendaIn.uf_origem || body.uf_origem || 'SP').trim().toUpperCase()
+  const ufDestinoVenda = (vendaIn.uf_destino || body.uf_destino || 'MT').trim().toUpperCase()
+  const modalidadeFreteVenda = (
+    vendaIn.modalidade_frete ||
+    body.modalidade_frete ||
+    'CIF'
+  ).toUpperCase()
+  const freteVenda = Math.max(0, Number(vendaIn.frete ?? body.frete ?? 2500))
+  const seguroVenda = Math.max(0, Number(vendaIn.seguro ?? body.seguro ?? 350))
+  const outrasDespesasVenda = Math.max(
+    0,
+    Number(vendaIn.outras_despesas ?? body.outras_despesas ?? 150),
+  )
+  const totalDespesasVenda = freteVenda + seguroVenda + outrasDespesasVenda
+
+  const freteNaBaseIcms = modalidadeFreteVenda === 'CIF' ? freteVenda : 0
+  const baseCalculoBrutaIcms =
+    valorMercadoriaVendaReais + freteNaBaseIcms + seguroVenda + outrasDespesasVenda
+  const baseOperacaoComercialVenda = valorMercadoriaVendaReais + totalDespesasVenda
+
+  // Juros de Venda concedidos ao cliente
+  const taxaJurosVendaMensal = Math.max(
+    0,
+    Number(vendaIn.taxa_juros_mensal_perc ?? body.taxa_juros_venda_perc ?? 1.8),
+  )
+  const taxaEfetivaVendaPerc = (taxaJurosVendaMensal / 30) * prazoVendaDias
+  const jurosVendaValor = baseOperacaoComercialVenda * (taxaEfetivaVendaPerc / 100)
+
+  // 5. REGRA DE ICMS
+  let regraRecord = null
+  if (grTrib) {
+    try {
+      regraRecord = $app.findFirstRecordByFilter(
+        'sim_regras_icms',
+        `uf_origem = {:orig} && uf_destino = {:dest} && grupo_tributario_codigo = {:gr}`,
+        { orig: ufOrigemVenda, dest: ufDestinoVenda, gr: grTrib },
+      )
+    } catch (_) {}
+  }
+  if (!regraRecord) {
+    try {
+      regraRecord = $app.findFirstRecordByFilter(
+        'sim_regras_icms',
+        `uf_origem = {:orig} && uf_destino = {:dest}`,
+        { orig: ufOrigemVenda, dest: ufDestinoVenda },
+      )
+    } catch (_) {}
+  }
+
+  let aliqNominalIcms = 7.0
+  let redBasePerc = 60.0
+  let percDiferimento = 0.0
+
+  if (regraRecord) {
+    aliqNominalIcms = regraRecord.getFloat('aliquota_icms') || 7.0
+    redBasePerc = regraRecord.getFloat('reducao_base') || 0.0
+    if (regraRecord.getBool('diferimento')) {
+      percDiferimento = regraRecord.getFloat('percentual_diferimento') || 100.0
+    }
+  }
+
+  const baseCalculoEfetivaIcms = baseCalculoBrutaIcms * (1 - redBasePerc / 100)
+  const debitoIcms = baseCalculoEfetivaIcms * (aliqNominalIcms / 100)
+  const valorDiferimento = debitoIcms * (percDiferimento / 100)
+  const icmsEfetivoRecolher = Math.max(0, debitoIcms - valorDiferimento)
+
+  // PIS / COFINS (Tema 69 STF)
+  const basePisCofins = Math.max(0, baseOperacaoComercialVenda - icmsEfetivoRecolher)
+  const aliqPis = 0.165
+  const aliqCofins = 0.76
+  const valorPis = basePisCofins * (aliqPis / 100)
+  const valorCofins = basePisCofins * (aliqCofins / 100)
+
+  // IBS / CBS c/ redução 60%
+  const baseIbsCbs = baseOperacaoComercialVenda * 0.4
+  const valorIbs = baseIbsCbs * 0.001
+  const valorCbs = baseIbsCbs * 0.009
+  const totalTributosVenda = icmsEfetivoRecolher + valorPis + valorCofins + valorIbs + valorCbs
+
+  // Comissão de Venda
+  const comissaoPerc = Math.max(
+    0,
+    Number(vendaIn.comissao_perc ?? body.comissao_perc ?? comissaoPadrao * 100),
+  )
+  const comissaoValor = baseOperacaoComercialVenda * (comissaoPerc / 100)
+
+  const receitaBrutaVenda = baseOperacaoComercialVenda
+  const receitaLiquidaVenda = receitaBrutaVenda - totalTributosVenda
+
+  // 6. RESULTADO DA OPERAÇÃO
+  const despesasOperacionaisVenda =
+    (modalidadeFreteVenda === 'CIF' ? freteVenda : 0) +
+    seguroVenda +
+    outrasDespesasVenda +
+    comissaoValor
+  const custoAquisicaoBase = custoAquisicaoMercadoria
+  const resultadoOperacionalBruto = receitaLiquidaVenda - custoAquisicaoBase
+  const margemContribuicaoOperacional = resultadoOperacionalBruto - despesasOperacionaisVenda
+
+  const resultadoFinanceiroLiquido = jurosVendaValor - jurosCompraValor
+  const resultadoFinalOperacao = margemContribuicaoOperacional + resultadoFinanceiroLiquido
+  const margemSobreReceitaBrutaPerc =
+    receitaBrutaVenda > 0 ? (resultadoFinalOperacao / receitaBrutaVenda) * 100 : 0
+  const margemSobreCustoInvestidoPerc =
+    custoTotalCompraComJuros > 0 ? (resultadoFinalOperacao / custoTotalCompraComJuros) * 100 : 0
+
+  return e.json(200, {
+    produto: {
+      codigo: cod,
+      descricao: desc,
+      ncm,
+      unidade: unid,
+      embalagem: emb,
+      gr_trib: grTrib,
+    },
+    compra: {
+      data_operacao: dataCompra,
+      prazo_dias: prazoCompraDias,
+      data_vencimento: vencimentoCompra,
+      moeda: moedaCompra,
+      ptax: ptaxManual,
+      preco_unitario: precoUnitarioCompraReais,
+      valor_mercadoria: valorMercadoriaCompraReais,
+      despesas_acessorias: totalDespesasCompra,
+      taxa_juros_mensal_perc: taxaJurosCompraMensal,
+      taxa_efetiva_perc: taxaEfetivaCompraPerc,
+      juros_valor: jurosCompraValor,
+      custo_aquisicao_mercadoria: custoAquisicaoMercadoria,
+      custo_total_com_juros: custoTotalCompraComJuros,
+    },
+    venda: {
+      data_operacao: dataVenda,
+      prazo_dias: prazoVendaDias,
+      data_vencimento: vencimentoVenda,
+      moeda: moedaVenda,
+      preco_unitario: precoUnitarioVendaReais,
+      faturamento_bruto: receitaBrutaVenda,
+      tributos_total: totalTributosVenda,
+      receita_liquida: receitaLiquidaVenda,
+      comissao_valor: comissaoValor,
+      taxa_juros_mensal_perc: taxaJurosVendaMensal,
+      taxa_efetiva_perc: taxaEfetivaVendaPerc,
+      juros_valor: jurosVendaValor,
+    },
+    resultado_operacao: {
+      receita_liquida: receitaLiquidaVenda,
+      custo_aquisicao: custoAquisicaoBase,
+      despesas_operacionais_venda: despesasOperacionaisVenda,
+      margem_operacional: margemContribuicaoOperacional,
+      juros_recebidos_venda: jurosVendaValor,
+      juros_pagos_compra: jurosCompraValor,
+      resultado_financeiro_liquido: resultadoFinanceiroLiquido,
+      resultado_final_operacao: resultadoFinalOperacao,
+      margem_sobre_faturamento_perc: margemSobreReceitaBrutaPerc,
+      margem_sobre_custo_compra_perc: margemSobreCustoInvestidoPerc,
+    },
+  })
 })
