@@ -3,15 +3,21 @@ import {
   Search,
   RefreshCw,
   Package,
-  Layers,
   ChevronLeft,
   ChevronRight,
   ExternalLink,
   Loader2,
+  Pencil,
+  Trash2,
+  AlertTriangle,
+  Building2,
+  DollarSign,
+  Tag,
 } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
 import { Badge } from '@/components/ui/badge'
 import { Card } from '@/components/ui/card'
 import {
@@ -21,14 +27,58 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog'
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog'
 import { ScrollableTable } from '@/components/ScrollableTable'
-import { listarProdutosBaseSimulador, SimProdutoBaseItem } from '@/services/agroService'
+import { useAuth } from '@/contexts/AuthContext'
+import { useToast } from '@/hooks/use-toast'
+import {
+  listarProdutosBaseSimulador,
+  atualizarProdutoBaseSimulador,
+  excluirProdutoBaseSimulador,
+  SimProdutoBaseItem,
+} from '@/services/agroService'
 
 interface AbaBaseProdutosProps {
   ativa: boolean
 }
 
+interface FormEdicaoProduto {
+  id: string
+  codigo: string
+  descricao: string
+  ncm: string
+  embalagem: string
+  unidade: string
+  tipo_produto: string
+  origem: string
+  moeda: string
+  preco_base_sugerido: string // manipulado como string para permitir vírgula pt-BR
+  gr_trib: string
+  fabricante: string
+  principio_ativo: string
+}
+
 export function AbaBaseProdutos({ ativa }: AbaBaseProdutosProps) {
+  const { isAdmin } = useAuth()
+  const { toast } = useToast()
+
   const [items, setItems] = useState<SimProdutoBaseItem[]>([])
   const [totalCount, setTotalCount] = useState<number>(0)
   const [totalPages, setTotalPages] = useState<number>(1)
@@ -38,6 +88,21 @@ export function AbaBaseProdutos({ ativa }: AbaBaseProdutosProps) {
   const [loading, setLoading] = useState<boolean>(false)
   const [hasLoadedOnce, setHasLoadedOnce] = useState<boolean>(false)
   const [, startTransition] = useTransition()
+
+  // Estados de Edição
+  const [itemEditando, setItemEditando] = useState<FormEdicaoProduto | null>(null)
+  const [modalEditarAberto, setModalEditarAberto] = useState<boolean>(false)
+  const [salvandoEdicao, setSalvandoEdicao] = useState<boolean>(false)
+  const [errosEdicao, setErrosEdicao] = useState<{
+    descricao?: string
+    ncm?: string
+    preco?: string
+  }>({})
+
+  // Estados de Exclusão
+  const [itemExcluindo, setItemExcluindo] = useState<SimProdutoBaseItem | null>(null)
+  const [modalExcluirAberto, setModalExcluirAberto] = useState<boolean>(false)
+  const [executandoExclusao, setExecutandoExclusao] = useState<boolean>(false)
 
   // Constrói filtro PocketBase seguro
   const buildFilter = useCallback(() => {
@@ -100,6 +165,179 @@ export function AbaBaseProdutos({ ativa }: AbaBaseProdutosProps) {
       })
     } catch {
       return `R$ ${valor.toFixed(2).replace('.', ',')}`
+    }
+  }
+
+  // Abre modal de edição preenchendo o formulário
+  const handleAbrirEdicao = (prod: SimProdutoBaseItem) => {
+    if (!isAdmin) {
+      toast({
+        variant: 'destructive',
+        title: 'Acesso restrito',
+        description: 'Apenas administradores podem editar registros da base de produtos.',
+      })
+      return
+    }
+
+    const precoFormatado =
+      prod.preco_base_sugerido !== undefined && prod.preco_base_sugerido !== null
+        ? String(prod.preco_base_sugerido).replace('.', ',')
+        : '0,00'
+
+    setItemEditando({
+      id: prod.id,
+      codigo: prod.codigo || '',
+      descricao: prod.descricao || '',
+      ncm: prod.ncm || '',
+      embalagem: prod.embalagem || '',
+      unidade: prod.unidade || 'L',
+      tipo_produto: prod.tipo_produto || 'Produto Formulado Comercial',
+      origem: prod.origem || 'Nacional',
+      moeda: prod.moeda || 'BRL',
+      preco_base_sugerido: precoFormatado,
+      gr_trib: prod.gr_trib || '',
+      fabricante: prod.fabricante || '',
+      principio_ativo: prod.principio_ativo || '',
+    })
+    setErrosEdicao({})
+    setModalEditarAberto(true)
+  }
+
+  // Validação e submissão do formulário de edição
+  const handleSalvarEdicao = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!itemEditando) return
+
+    if (!isAdmin) {
+      toast({
+        variant: 'destructive',
+        title: 'Acesso restrito',
+        description: 'Apenas administradores podem salvar alterações.',
+      })
+      return
+    }
+
+    const novosErros: { descricao?: string; ncm?: string; preco?: string } = {}
+
+    // 1. Descrição obrigatória
+    if (!itemEditando.descricao.trim()) {
+      novosErros.descricao = 'A descrição do produto é obrigatória.'
+    }
+
+    // 2. Validação de NCM se preenchida: formato 0000.00.00 (8 dígitos)
+    const ncmDigits = itemEditando.ncm.replace(/\D/g, '')
+    let ncmFormatado = itemEditando.ncm.trim()
+    if (itemEditando.ncm.trim()) {
+      if (ncmDigits.length !== 8) {
+        novosErros.ncm = 'O NCM deve conter 8 dígitos numéricos (formato 0000.00.00).'
+      } else {
+        ncmFormatado = `${ncmDigits.slice(0, 4)}.${ncmDigits.slice(4, 6)}.${ncmDigits.slice(6, 8)}`
+      }
+    }
+
+    // 3. Validação do preço (aceitando vírgula pt-BR)
+    const precoLimpo = itemEditando.preco_base_sugerido.trim().replace(/\./g, '').replace(',', '.')
+    const precoNum = precoLimpo === '' ? 0 : parseFloat(precoLimpo)
+    if (isNaN(precoNum) || precoNum < 0) {
+      novosErros.preco = 'Informe um preço numérico válido maior ou igual a zero.'
+    }
+
+    if (Object.keys(novosErros).length > 0) {
+      setErrosEdicao(novosErros)
+      return
+    }
+
+    try {
+      setSalvandoEdicao(true)
+      const atualizado = await atualizarProdutoBaseSimulador(itemEditando.id, {
+        descricao: itemEditando.descricao,
+        ncm: ncmFormatado,
+        embalagem: itemEditando.embalagem,
+        unidade: itemEditando.unidade,
+        tipo_produto: itemEditando.tipo_produto,
+        origem: itemEditando.origem,
+        moeda: itemEditando.moeda,
+        preco_base_sugerido: precoNum,
+        gr_trib: itemEditando.gr_trib,
+        fabricante: itemEditando.fabricante,
+        principio_ativo: itemEditando.principio_ativo,
+      })
+
+      // Atualiza a linha na tabela localmente com os dados salvos
+      setItems((prev) =>
+        prev.map((item) => (item.id === atualizado.id ? { ...item, ...atualizado } : item)),
+      )
+
+      toast({
+        title: 'Produto atualizado com sucesso',
+        description: `O produto "${itemEditando.descricao}" foi atualizado na base.`,
+      })
+
+      setModalEditarAberto(false)
+      setItemEditando(null)
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'Falha ao atualizar o produto.'
+      toast({
+        variant: 'destructive',
+        title: 'Erro ao atualizar produto',
+        description: msg,
+      })
+    } finally {
+      setSalvandoEdicao(false)
+    }
+  }
+
+  // Abre diálogo de exclusão
+  const handleAbrirExclusao = (prod: SimProdutoBaseItem) => {
+    if (!isAdmin) {
+      toast({
+        variant: 'destructive',
+        title: 'Acesso restrito',
+        description: 'Apenas administradores podem excluir registros da base de produtos.',
+      })
+      return
+    }
+    setItemExcluindo(prod)
+    setModalExcluirAberto(true)
+  }
+
+  // Executa exclusão no PocketBase
+  const handleConfirmarExclusao = async () => {
+    if (!itemExcluindo) return
+
+    if (!isAdmin) {
+      toast({
+        variant: 'destructive',
+        title: 'Acesso restrito',
+        description: 'Apenas administradores podem excluir registros.',
+      })
+      return
+    }
+
+    try {
+      setExecutandoExclusao(true)
+      await excluirProdutoBaseSimulador(itemExcluindo.id)
+
+      // Remove da tabela e atualiza contagem
+      setItems((prev) => prev.filter((item) => item.id !== itemExcluindo.id))
+      setTotalCount((prev) => Math.max(0, prev - 1))
+
+      toast({
+        title: 'Produto excluído',
+        description: `O produto [${itemExcluindo.codigo || itemExcluindo.id}] foi removido permanentemente da base.`,
+      })
+
+      setModalExcluirAberto(false)
+      setItemExcluindo(null)
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'Falha ao excluir o produto.'
+      toast({
+        variant: 'destructive',
+        title: 'Erro ao excluir produto',
+        description: msg,
+      })
+    } finally {
+      setExecutandoExclusao(false)
     }
   }
 
@@ -167,19 +405,22 @@ export function AbaBaseProdutos({ ativa }: AbaBaseProdutosProps) {
                 <th className="py-3 px-3 font-semibold w-28 text-right whitespace-nowrap">
                   Preço Base
                 </th>
+                <th className="py-3 px-3 font-semibold w-20 text-center whitespace-nowrap">
+                  Ações
+                </th>
               </tr>
             </thead>
             <tbody className="divide-y divide-[#F0F4F0]">
               {loading ? (
                 <tr>
-                  <td colSpan={8} className="py-12 text-center text-xs text-[#5A6D5A]">
+                  <td colSpan={9} className="py-12 text-center text-xs text-[#5A6D5A]">
                     <Loader2 className="w-6 h-6 animate-spin mx-auto text-[#1B5E20] mb-2" />
                     Carregando base de produtos...
                   </td>
                 </tr>
               ) : items.length === 0 ? (
                 <tr>
-                  <td colSpan={8} className="py-12 text-center text-xs text-[#5A6D5A]">
+                  <td colSpan={9} className="py-12 text-center text-xs text-[#5A6D5A]">
                     <div className="max-w-md mx-auto space-y-2">
                       <p className="font-semibold text-gray-800">Nenhum produto encontrado</p>
                       <p className="text-gray-500">
@@ -275,6 +516,41 @@ export function AbaBaseProdutos({ ativa }: AbaBaseProdutosProps) {
                       <td className="py-2.5 px-3 text-right font-mono font-bold text-gray-900 whitespace-nowrap">
                         {formatarMoeda(prod.preco_base_sugerido, prod.moeda)}
                       </td>
+
+                      <td className="py-2.5 px-3 text-center whitespace-nowrap">
+                        <div className="flex items-center justify-center gap-1">
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            onClick={() => handleAbrirEdicao(prod)}
+                            disabled={!isAdmin}
+                            className={`h-7 w-7 ${
+                              isAdmin
+                                ? 'text-[#5A6D5A] hover:text-[#1B5E20] hover:bg-emerald-50'
+                                : 'text-gray-300 cursor-not-allowed'
+                            }`}
+                            title={isAdmin ? 'Editar produto' : 'Edição restrita a administradores'}
+                          >
+                            <Pencil className="w-3.5 h-3.5" />
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            onClick={() => handleAbrirExclusao(prod)}
+                            disabled={!isAdmin}
+                            className={`h-7 w-7 ${
+                              isAdmin
+                                ? 'text-[#5A6D5A] hover:text-red-700 hover:bg-red-50'
+                                : 'text-gray-300 cursor-not-allowed'
+                            }`}
+                            title={
+                              isAdmin ? 'Excluir produto' : 'Exclusão restrita a administradores'
+                            }
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </Button>
+                        </div>
+                      </td>
                     </tr>
                   )
                 })
@@ -282,6 +558,353 @@ export function AbaBaseProdutos({ ativa }: AbaBaseProdutosProps) {
             </tbody>
           </table>
         </ScrollableTable>
+
+        {/* Modal de Edição (shadcn Dialog) */}
+        <Dialog open={modalEditarAberto} onOpenChange={setModalEditarAberto}>
+          <DialogContent className="max-w-2xl rounded-2xl max-h-[90vh] overflow-y-auto">
+            <DialogHeader>
+              <DialogTitle className="text-base font-bold text-[#1C2B1C] flex items-center gap-2">
+                <Tag className="w-5 h-5 text-[#1B5E20]" />
+                <span>Editar Produto da Base do Simulador</span>
+              </DialogTitle>
+              <DialogDescription className="text-xs text-[#5A6D5A]">
+                Atualize os atributos do produto. O código é a chave de identidade e não pode ser
+                alterado.
+              </DialogDescription>
+            </DialogHeader>
+
+            {itemEditando && (
+              <form onSubmit={handleSalvarEdicao} className="space-y-4 py-2 text-xs">
+                {/* Código (somente leitura) e Grupo Tributário */}
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                  <div className="space-y-1">
+                    <Label className="text-xs font-semibold text-[#1C2B1C]">
+                      Código (Chave Identificadora)
+                    </Label>
+                    <Input
+                      disabled
+                      value={itemEditando.codigo || '—'}
+                      className="h-9 text-xs font-mono font-bold bg-gray-100 text-gray-700 border-[#DCE5DC]"
+                    />
+                    <p className="text-[10px] text-gray-400">Chave imutável do registro</p>
+                  </div>
+
+                  <div className="space-y-1">
+                    <Label className="text-xs font-semibold text-[#1C2B1C]">NCM (0000.00.00)</Label>
+                    <Input
+                      value={itemEditando.ncm}
+                      onChange={(e) => {
+                        const val = e.target.value
+                        setItemEditando({ ...itemEditando, ncm: val })
+                        if (errosEdicao.ncm) {
+                          setErrosEdicao({ ...errosEdicao, ncm: undefined })
+                        }
+                      }}
+                      placeholder="Ex: 3808.92.99"
+                      className={`h-9 text-xs font-mono font-bold border-[#DCE5DC] ${
+                        errosEdicao.ncm ? 'border-red-500 focus-visible:ring-red-400' : ''
+                      }`}
+                    />
+                    {errosEdicao.ncm && (
+                      <p className="text-[10px] text-red-600 font-medium">{errosEdicao.ncm}</p>
+                    )}
+                  </div>
+
+                  <div className="space-y-1">
+                    <Label className="text-xs font-semibold text-[#1C2B1C]">
+                      Grupo Tributário (GrTrib)
+                    </Label>
+                    <Input
+                      value={itemEditando.gr_trib}
+                      onChange={(e) =>
+                        setItemEditando({ ...itemEditando, gr_trib: e.target.value })
+                      }
+                      placeholder="Ex: 001, 002, 004"
+                      className="h-9 text-xs font-mono font-semibold border-[#DCE5DC]"
+                    />
+                  </div>
+                </div>
+
+                {/* Descrição */}
+                <div className="space-y-1">
+                  <Label className="text-xs font-semibold text-[#1C2B1C]">
+                    Descrição do Produto *
+                  </Label>
+                  <Input
+                    required
+                    value={itemEditando.descricao}
+                    onChange={(e) => {
+                      setItemEditando({ ...itemEditando, descricao: e.target.value })
+                      if (errosEdicao.descricao) {
+                        setErrosEdicao({ ...errosEdicao, descricao: undefined })
+                      }
+                    }}
+                    placeholder="Descrição completa do produto"
+                    className={`h-9 text-xs border-[#DCE5DC] ${
+                      errosEdicao.descricao ? 'border-red-500 focus-visible:ring-red-400' : ''
+                    }`}
+                  />
+                  {errosEdicao.descricao && (
+                    <p className="text-[10px] text-red-600 font-medium">{errosEdicao.descricao}</p>
+                  )}
+                </div>
+
+                {/* Embalagem, Unidade e Tipo de Produto */}
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                  <div className="space-y-1">
+                    <Label className="text-xs font-semibold text-[#1C2B1C]">Embalagem</Label>
+                    <Input
+                      value={itemEditando.embalagem}
+                      onChange={(e) =>
+                        setItemEditando({ ...itemEditando, embalagem: e.target.value })
+                      }
+                      placeholder="Ex: 1X20L, 20KG, 200L"
+                      className="h-9 text-xs border-[#DCE5DC]"
+                    />
+                  </div>
+
+                  <div className="space-y-1">
+                    <Label className="text-xs font-semibold text-[#1C2B1C]">Unidade</Label>
+                    <Select
+                      value={itemEditando.unidade || 'L'}
+                      onValueChange={(val) => setItemEditando({ ...itemEditando, unidade: val })}
+                    >
+                      <SelectTrigger className="h-9 text-xs border-[#DCE5DC] bg-white font-semibold">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="L">L (Litros)</SelectItem>
+                        <SelectItem value="KG">KG (Quilos)</SelectItem>
+                        <SelectItem value="SC">SC (Sacas)</SelectItem>
+                        <SelectItem value="UN">UN (Unidade)</SelectItem>
+                        <SelectItem value="DOSES">DOSES</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  <div className="space-y-1">
+                    <Label className="text-xs font-semibold text-[#1C2B1C]">Tipo de Produto</Label>
+                    <Select
+                      value={itemEditando.tipo_produto || 'Produto Formulado Comercial'}
+                      onValueChange={(val) =>
+                        setItemEditando({ ...itemEditando, tipo_produto: val })
+                      }
+                    >
+                      <SelectTrigger className="h-9 text-xs border-[#DCE5DC] bg-white">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="Produto Formulado Comercial">
+                          Produto Formulado Comercial
+                        </SelectItem>
+                        <SelectItem value="Fertilizante Mineral / Organomineral">
+                          Fertilizante Mineral / Organomineral
+                        </SelectItem>
+                        <SelectItem value="Adjuvante / Espalhante Adesivo">
+                          Adjuvante / Espalhante Adesivo
+                        </SelectItem>
+                        <SelectItem value="Inoculante / Biológico">
+                          Inoculante / Biológico
+                        </SelectItem>
+                        <SelectItem value="Corretivo / Condicionador de Solo">
+                          Corretivo / Condicionador de Solo
+                        </SelectItem>
+                        <SelectItem value="Semente Certificada">Semente Certificada</SelectItem>
+                        <SelectItem value="Produto Técnico Industrial">
+                          Produto Técnico Industrial
+                        </SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+
+                {/* Origem, Moeda e Preço Base Sugerido */}
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 p-3 bg-[#F5F7F1]/80 rounded-xl border border-[#DCE5DC]">
+                  <div className="space-y-1">
+                    <Label className="text-xs font-semibold text-[#1C2B1C]">Origem</Label>
+                    <Select
+                      value={itemEditando.origem || 'Nacional'}
+                      onValueChange={(val) =>
+                        setItemEditando({
+                          ...itemEditando,
+                          origem: val,
+                          moeda: val === 'Importado' ? 'USD' : itemEditando.moeda,
+                        })
+                      }
+                    >
+                      <SelectTrigger className="h-9 text-xs border-[#DCE5DC] bg-white font-semibold">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="Nacional">Nacional</SelectItem>
+                        <SelectItem value="Importado">Importado</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  <div className="space-y-1">
+                    <Label className="text-xs font-semibold text-[#1C2B1C]">Moeda</Label>
+                    <Select
+                      value={itemEditando.moeda || 'BRL'}
+                      onValueChange={(val) => setItemEditando({ ...itemEditando, moeda: val })}
+                    >
+                      <SelectTrigger className="h-9 text-xs border-[#DCE5DC] bg-white font-mono font-bold">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="BRL">BRL (R$)</SelectItem>
+                        <SelectItem value="USD">USD (US$)</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  <div className="space-y-1">
+                    <Label className="text-xs font-semibold text-[#1C2B1C] flex items-center gap-1">
+                      <DollarSign className="w-3.5 h-3.5 text-[#1B5E20]" />
+                      <span>Preço Base Sugerido</span>
+                    </Label>
+                    <Input
+                      value={itemEditando.preco_base_sugerido}
+                      onChange={(e) => {
+                        setItemEditando({
+                          ...itemEditando,
+                          preco_base_sugerido: e.target.value,
+                        })
+                        if (errosEdicao.preco) {
+                          setErrosEdicao({ ...errosEdicao, preco: undefined })
+                        }
+                      }}
+                      placeholder="0,00"
+                      className={`h-9 text-xs font-mono font-bold border-[#DCE5DC] bg-white ${
+                        errosEdicao.preco ? 'border-red-500 focus-visible:ring-red-400' : ''
+                      }`}
+                    />
+                    {errosEdicao.preco && (
+                      <p className="text-[10px] text-red-600 font-medium">{errosEdicao.preco}</p>
+                    )}
+                  </div>
+                </div>
+
+                {/* Fabricante e Princípio Ativo */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div className="space-y-1">
+                    <Label className="text-xs font-semibold text-[#1C2B1C] flex items-center gap-1">
+                      <Building2 className="w-3.5 h-3.5 text-gray-500" />
+                      <span>Fabricante</span>
+                    </Label>
+                    <Input
+                      value={itemEditando.fabricante}
+                      onChange={(e) =>
+                        setItemEditando({ ...itemEditando, fabricante: e.target.value })
+                      }
+                      placeholder="Ex: MOSAIC, BAYER, SYNGENTA"
+                      className="h-9 text-xs border-[#DCE5DC]"
+                    />
+                  </div>
+
+                  <div className="space-y-1">
+                    <Label className="text-xs font-semibold text-[#1C2B1C]">Princípio Ativo</Label>
+                    <Input
+                      value={itemEditando.principio_ativo}
+                      onChange={(e) =>
+                        setItemEditando({ ...itemEditando, principio_ativo: e.target.value })
+                      }
+                      placeholder="Ex: GLIFOSATO, ATRAZINA"
+                      className="h-9 text-xs border-[#DCE5DC]"
+                    />
+                  </div>
+                </div>
+
+                <DialogFooter className="pt-3 border-t border-[#DCE5DC]">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() => {
+                      setModalEditarAberto(false)
+                      setItemEditando(null)
+                    }}
+                    disabled={salvandoEdicao}
+                    className="text-xs h-9 border-[#DCE5DC]"
+                  >
+                    Cancelar
+                  </Button>
+                  <Button
+                    type="submit"
+                    disabled={salvandoEdicao}
+                    className="text-xs h-9 bg-[#1B5E20] hover:bg-[#2E7D32] text-white font-semibold"
+                  >
+                    {salvandoEdicao ? (
+                      <>
+                        <Loader2 className="w-3.5 h-3.5 animate-spin mr-1.5" />
+                        Salvando alterações...
+                      </>
+                    ) : (
+                      'Salvar Alterações'
+                    )}
+                  </Button>
+                </DialogFooter>
+              </form>
+            )}
+          </DialogContent>
+        </Dialog>
+
+        {/* Diálogo de Confirmação de Exclusão (shadcn AlertDialog) */}
+        <AlertDialog open={modalExcluirAberto} onOpenChange={setModalExcluirAberto}>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle className="text-red-700 flex items-center gap-2">
+                <AlertTriangle className="w-5 h-5 text-red-600" />
+                <span>Confirmar Exclusão de Produto</span>
+              </AlertDialogTitle>
+              <AlertDialogDescription className="space-y-2 text-xs text-[#5A6D5A]">
+                <p>Você tem certeza que deseja excluir este produto da base do simulador?</p>
+                {itemExcluindo && (
+                  <div className="p-3 bg-red-50 border border-red-200 rounded-lg text-red-950 font-medium space-y-1">
+                    <div className="flex items-center gap-2">
+                      <span className="font-bold text-gray-700">Código:</span>
+                      <span className="font-mono bg-white px-1.5 py-0.5 rounded border border-red-200 text-xs">
+                        {itemExcluindo.codigo || '—'}
+                      </span>
+                    </div>
+                    <div>
+                      <span className="font-bold text-gray-700">Descrição:</span>{' '}
+                      <span>{itemExcluindo.descricao}</span>
+                    </div>
+                  </div>
+                )}
+                <p className="text-red-700 font-semibold pt-1">
+                  Atenção: esta ação é definitiva e removerá o registro permanentemente do banco de
+                  dados.
+                </p>
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel
+                disabled={executandoExclusao}
+                onClick={() => {
+                  setModalExcluirAberto(false)
+                  setItemExcluindo(null)
+                }}
+              >
+                Cancelar
+              </AlertDialogCancel>
+              <AlertDialogAction
+                disabled={executandoExclusao}
+                onClick={handleConfirmarExclusao}
+                className="bg-red-600 hover:bg-red-700 text-white font-semibold"
+              >
+                {executandoExclusao ? (
+                  <>
+                    <Loader2 className="w-3.5 h-3.5 animate-spin mr-1.5" />
+                    Excluindo...
+                  </>
+                ) : (
+                  'Excluir Definitivamente'
+                )}
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
 
         {/* Rodapé com Paginação */}
         <div className="flex flex-col sm:flex-row items-center justify-between gap-3 p-3.5 border-t border-[#DCE5DC] bg-[#FAFBF9] text-xs text-[#5A6D5A]">

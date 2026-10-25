@@ -951,6 +951,50 @@ export async function listarProdutosBaseSimulador(params?: {
   })
 }
 
+export type AtualizarSimProdutoBaseInput = {
+  descricao: string
+  ncm?: string
+  embalagem?: string
+  unidade?: string
+  tipo_produto?: string
+  origem?: string
+  moeda?: string
+  preco_base_sugerido?: number
+  gr_trib?: string
+  fabricante?: string
+  principio_ativo?: string
+}
+
+export async function atualizarProdutoBaseSimulador(
+  id: string,
+  data: AtualizarSimProdutoBaseInput,
+) {
+  // Preserva intencionalmente dados_extras sem sobrescrever nem remover
+  const payload: Record<string, unknown> = {
+    descricao: data.descricao.trim(),
+    origem: data.origem || 'Nacional',
+    moeda: data.moeda || 'BRL',
+    preco_base_sugerido:
+      typeof data.preco_base_sugerido === 'number' && !isNaN(data.preco_base_sugerido)
+        ? data.preco_base_sugerido
+        : 0,
+  }
+
+  if (data.ncm !== undefined) payload.ncm = data.ncm.trim()
+  if (data.embalagem !== undefined) payload.embalagem = data.embalagem.trim()
+  if (data.unidade !== undefined) payload.unidade = data.unidade.trim()
+  if (data.tipo_produto !== undefined) payload.tipo_produto = data.tipo_produto.trim()
+  if (data.gr_trib !== undefined) payload.gr_trib = data.gr_trib.trim()
+  if (data.fabricante !== undefined) payload.fabricante = data.fabricante.trim()
+  if (data.principio_ativo !== undefined) payload.principio_ativo = data.principio_ativo.trim()
+
+  return pb.collection('sim_produtos_base').update<SimProdutoBaseItem>(id, payload)
+}
+
+export async function excluirProdutoBaseSimulador(id: string) {
+  return pb.collection('sim_produtos_base').delete(id)
+}
+
 export async function listarRegrasIcmsSimulador(params?: {
   page?: number
   perPage?: number
