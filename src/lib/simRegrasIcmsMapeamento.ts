@@ -27,6 +27,15 @@ export interface RegraIcmsEstruturada {
   fundamentacao_legal: string
   tipo_operacao: string
   chave_origem_destino: string
+  id_regra?: string
+  tipo_uf_origem?: string
+  tipo_uf_destino?: string
+  grupo_tributario_codigo?: string
+  grupo_tributario_descricao?: string
+  prod_importado?: string
+  tipo_desonerado?: string
+  icms_desonerado?: number
+  regra_credito_entrada?: string
   dados_extras?: Record<string, unknown>
 }
 
@@ -276,8 +285,11 @@ export const ALIASES_UF_ORIGEM = [
   'de',
 ]
 
-// Aliases para UF Destino
+// Aliases para UF Destino (inclui "UF Contrapartida" da planilha real)
 export const ALIASES_UF_DESTINO = [
+  'uf_contrapartida',
+  'ufcontrapartida',
+  'contrapartida',
   'uf_destino',
   'ufdestino',
   'destino',
@@ -292,8 +304,15 @@ export const ALIASES_UF_DESTINO = [
   'para',
 ]
 
-// Aliases para Alíquota ICMS
+// Aliases para Alíquota ICMS (inclui "Carga Trib. ICMS" da planilha real)
 export const ALIASES_ALIQUOTA_ICMS = [
+  'carga_trib_icms',
+  'cargatribicms',
+  'cargatrib_icms',
+  'carga_tributaria_icms',
+  'cargatributariaicms',
+  'carga_icms',
+  'cargatrib',
   'aliquota_icms',
   'aliquotaicms',
   'aliq_icms',
@@ -320,8 +339,12 @@ export const ALIASES_REDUCAO_BASE = [
   'perc_red',
 ]
 
-// Aliases para Alíquota Efetiva
+// Aliases para Alíquota Efetiva (inclui "Carga ICMS Final" da planilha real)
 export const ALIASES_ALIQUOTA_EFETIVA = [
+  'carga_icms_final',
+  'cargaicmsfinal',
+  'cargafinal',
+  'carga_final',
   'aliquota_efetiva',
   'aliquotaefetiva',
   'aliq_efetiva',
@@ -379,6 +402,96 @@ export const ALIASES_TIPO_OPERACAO = [
   'tipo',
   'natureza_operacao',
   'escopo_operacao',
+]
+
+// Aliases para ID da Regra (coluna "ID" da planilha real)
+export const ALIASES_ID_REGRA = [
+  'id_regra',
+  'idregra',
+  'id',
+  'codigo_regra',
+  'cod_regra',
+  'identificador',
+]
+
+// Aliases para Tipo UF Origem
+export const ALIASES_TIPO_UF_ORIGEM = [
+  'tipo_uf_origem',
+  'tipouforigem',
+  'tipo_origem',
+  'tipoorigem',
+  'classificacao_origem',
+  'classe_uf_origem',
+]
+
+// Aliases para Tipo UF Destino
+export const ALIASES_TIPO_UF_DESTINO = [
+  'tipo_uf_destino',
+  'tipoufdestino',
+  'tipo_destino',
+  'tipodestino',
+  'classificacao_destino',
+  'classe_uf_destino',
+]
+
+// Aliases para Grupo Tributário Código ("GrTrib" na planilha real)
+export const ALIASES_GRUPO_TRIBUTARIO_CODIGO = [
+  'grtrib',
+  'gr_trib',
+  'grupo_tributario',
+  'grupotributario',
+  'grupo_tributario_codigo',
+  'cod_grtrib',
+  'codigo_grupo_tributario',
+  'grupo_trib',
+]
+
+// Aliases para Grupo Tributário Descrição ("Descrição Grupo Tributario" na planilha real)
+export const ALIASES_GRUPO_TRIBUTARIO_DESCRICAO = [
+  'descricao_grupo_tributario',
+  'descricaogrupotributario',
+  'descricao_grupo',
+  'desc_grupo_tributario',
+  'desc_grtrib',
+  'grupo_tributario_descricao',
+  'nome_grupo_tributario',
+]
+
+// Aliases para Produto Importado ("Prod. importado" na planilha real)
+export const ALIASES_PROD_IMPORTADO = [
+  'prod_importado',
+  'prodimportado',
+  'produto_importado',
+  'produtoimportado',
+  'importado',
+  'flag_importado',
+]
+
+// Aliases para Tipo Desonerado ("Tipo Desonerado" na planilha real)
+export const ALIASES_TIPO_DESONERADO = [
+  'tipo_desonerado',
+  'tipodesonerado',
+  'desonerado_tipo',
+  'desoneracao_tipo',
+  'tipo_desoneracao',
+]
+
+// Aliases para ICMS Desonerado ("ICMS Desonerado" na planilha real)
+export const ALIASES_ICMS_DESONERADO = [
+  'icms_desonerado',
+  'icmsdesonerado',
+  'perc_icms_desonerado',
+  'aliquota_desonerada',
+  'desonerado_perc',
+]
+
+// Aliases para Regra Crédito Entrada ("Regra Crédito Entrada" na planilha real)
+export const ALIASES_REGRA_CREDITO_ENTRADA = [
+  'regra_credito_entrada',
+  'regracreditoentrada',
+  'credito_entrada',
+  'regra_credito',
+  'credito_proporcional',
 ]
 
 /**
@@ -442,12 +555,48 @@ export function mapearLinhaSimRegraIcms(
   // 6. Fundamentação Legal
   const fundLegal = extrairValorPorAliases(row, ALIASES_FUNDAMENTACAO_LEGAL)
 
-  // 7. Tipo de Operação
+  // 7. Tipo de Operação (deduzir da coluna Operação ou por comparação de UFs)
   const rawTipoOp = extrairValorPorAliases(row, ALIASES_TIPO_OPERACAO)
-  const tipoOp = rawTipoOp || (ufOrigem === ufDestino ? 'Interna' : 'Interestadual')
+  let tipoOp = rawTipoOp
+  if (!tipoOp) {
+    tipoOp = ufOrigem === ufDestino ? 'Interna' : 'Interestadual'
+  } else {
+    // Normalização semântica do tipo de operação
+    const normOp = normalizarChave(tipoOp)
+    if (normOp.includes('interna')) {
+      tipoOp = 'Interna'
+    } else if (normOp.includes('interestadual') || normOp.includes('inter')) {
+      tipoOp = 'Interestadual'
+    }
+  }
 
-  // 8. Chave Composta Origem_Destino
-  const chaveOrigemDestino = `${ufOrigem}_${ufDestino}`
+  // 8. Colunas adicionais da estrutura real da planilha
+  const idRegra = extrairValorPorAliases(row, ALIASES_ID_REGRA)
+  const tipoUfOrigem = extrairValorPorAliases(row, ALIASES_TIPO_UF_ORIGEM)
+  const tipoUfDestino = extrairValorPorAliases(row, ALIASES_TIPO_UF_DESTINO)
+  const grTribCod = extrairValorPorAliases(row, ALIASES_GRUPO_TRIBUTARIO_CODIGO)
+  const grTribDesc = extrairValorPorAliases(row, ALIASES_GRUPO_TRIBUTARIO_DESCRICAO)
+  const prodImportado = extrairValorPorAliases(row, ALIASES_PROD_IMPORTADO)
+  const tipoDesonerado = extrairValorPorAliases(row, ALIASES_TIPO_DESONERADO)
+  const rawIcmsDesonerado = extrairValorPorAliases(row, ALIASES_ICMS_DESONERADO)
+  const icmsDesonerado = rawIcmsDesonerado ? normalizarNumeroPercentual(rawIcmsDesonerado, true) : 0
+  const regraCreditoEntrada = extrairValorPorAliases(row, ALIASES_REGRA_CREDITO_ENTRADA)
+
+  // 9. Chave idempotente de upsert:
+  // Se houver Grupo Tributário (GrTrib) ou ID de Regra, incorpora na chave composta
+  // para permitir que o mesmo par de UFs tenha regras distintas por grupo/id sem colidir.
+  // Formato: UF_ORIGEM_UF_DESTINO[_GRTRIB][_ID]
+  let chaveOrigemDestino = `${ufOrigem}_${ufDestino}`
+  if (grTribCod) {
+    chaveOrigemDestino += `_${grTribCod}`
+  }
+  if (idRegra) {
+    // Adiciona id_regra se não redundante
+    const idLimpo = idRegra.replace(/[^A-Za-z0-9_-]/g, '')
+    if (idLimpo && !chaveOrigemDestino.endsWith(`_${idLimpo}`)) {
+      chaveOrigemDestino += `_${idLimpo}`
+    }
+  }
 
   return {
     sucesso: true,
@@ -462,6 +611,15 @@ export function mapearLinhaSimRegraIcms(
       fundamentacao_legal: fundLegal,
       tipo_operacao: tipoOp,
       chave_origem_destino: chaveOrigemDestino,
+      id_regra: idRegra || undefined,
+      tipo_uf_origem: tipoUfOrigem || undefined,
+      tipo_uf_destino: tipoUfDestino || undefined,
+      grupo_tributario_codigo: grTribCod || undefined,
+      grupo_tributario_descricao: grTribDesc || undefined,
+      prod_importado: prodImportado || undefined,
+      tipo_desonerado: tipoDesonerado || undefined,
+      icms_desonerado: icmsDesonerado || undefined,
+      regra_credito_entrada: regraCreditoEntrada || undefined,
       dados_extras: row,
     },
   }

@@ -293,7 +293,14 @@ const DROP_ZONES: ZoneConfig[] = [
     subtitle:
       'Matriz interestadual de alíquotas e benefícios de ICMS origem → destino (≈7.291 regras).',
     targetCollection: 'sim_regras_icms',
-    expectedHeaders: ['ORIGEM', 'DESTINO', 'ALIQUOTA ICMS', 'REDUCAO BASE', 'DIFERIMENTO'],
+    expectedHeaders: [
+      'UF ORIGEM',
+      'UF CONTRAPARTIDA / DESTINO',
+      'OPERAÇÃO',
+      'GRTRIB',
+      'CARGA TRIB. ICMS',
+      'CARGA ICMS FINAL',
+    ],
     sampleDescription: 'Popula a matriz interestadual de ICMS do Simulador Comercial',
   },
 ]

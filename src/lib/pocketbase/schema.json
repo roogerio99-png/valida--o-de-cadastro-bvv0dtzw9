@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-10-24T22:41:23.446Z",
+  "generatedAt": "2026-10-25T00:28:46.092Z",
   "collections": [
     {
       "name": "users",
@@ -1969,6 +1969,60 @@
           "required": false,
           "system": false,
           "autodateTriggers": ["onCreate", "onUpdate"]
+        },
+        {
+          "name": "id_regra",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "tipo_uf_origem",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "tipo_uf_destino",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "grupo_tributario_codigo",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "grupo_tributario_descricao",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "prod_importado",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "tipo_desonerado",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "icms_desonerado",
+          "type": "number",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "regra_credito_entrada",
+          "type": "text",
+          "required": false,
+          "system": false
         }
       ],
       "indexes": [

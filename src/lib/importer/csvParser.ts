@@ -177,6 +177,10 @@ function findHeaderRowIndex(grid: (string | number | undefined)[][]): number {
       'diferimento',
       'fundamentacao',
       'operacao',
+      'contrapartida',
+      'grtrib',
+      'desonerado',
+      'credito',
     ]
 
     // Pontuar palavras-chave identificadas como nomes de colunas
@@ -191,10 +195,22 @@ function findHeaderRowIndex(grid: (string | number | undefined)[][]): number {
       score += 15
     }
 
-    // Se contiver pares típicos de regra fiscal interestadual ("origem" e "destino" ou "origem" e "aliquota")
+    // Se contiver pares típicos de regra fiscal interestadual ("origem" e "destino" / "contrapartida" / "aliquota" / "carga")
     if (
       rowText.includes('origem') &&
-      (rowText.includes('destino') || rowText.includes('aliquota') || rowText.includes('icms'))
+      (rowText.includes('destino') ||
+        rowText.includes('contrapartida') ||
+        rowText.includes('aliquota') ||
+        rowText.includes('icms') ||
+        (rowText.includes('carga') && (rowText.includes('trib') || rowText.includes('icms'))))
+    ) {
+      score += 25
+    }
+
+    // Se contiver "contrapartida" e "grtrib" ou "operacao" (característica da aba Regra ICMS)
+    if (
+      rowText.includes('contrapartida') &&
+      (rowText.includes('origem') || rowText.includes('grtrib') || rowText.includes('operacao'))
     ) {
       score += 20
     }

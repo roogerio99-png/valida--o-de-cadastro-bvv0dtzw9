@@ -2664,6 +2664,9 @@ routerAdd('POST', '/backend/v1/importar-lote', (e) => {
           'de',
         ]
         const ALIASES_HOOK_UF_DESTINO = [
+          'uf_contrapartida',
+          'ufcontrapartida',
+          'contrapartida',
           'uf_destino',
           'ufdestino',
           'destino',
@@ -2678,6 +2681,13 @@ routerAdd('POST', '/backend/v1/importar-lote', (e) => {
           'para',
         ]
         const ALIASES_HOOK_ALIQUOTA = [
+          'carga_trib_icms',
+          'cargatribicms',
+          'cargatrib_icms',
+          'carga_tributaria_icms',
+          'cargatributariaicms',
+          'carga_icms',
+          'cargatrib',
           'aliquota_icms',
           'aliquotaicms',
           'aliq_icms',
@@ -2702,6 +2712,10 @@ routerAdd('POST', '/backend/v1/importar-lote', (e) => {
           'perc_red',
         ]
         const ALIASES_HOOK_EFETIVA = [
+          'carga_icms_final',
+          'cargaicmsfinal',
+          'cargafinal',
+          'carga_final',
           'aliquota_efetiva',
           'aliquotaefetiva',
           'aliq_efetiva',
@@ -2752,6 +2766,78 @@ routerAdd('POST', '/backend/v1/importar-lote', (e) => {
           'natureza_operacao',
           'escopo_operacao',
         ]
+        const ALIASES_HOOK_ID_REGRA = [
+          'id_regra',
+          'idregra',
+          'id',
+          'codigo_regra',
+          'cod_regra',
+          'identificador',
+        ]
+        const ALIASES_HOOK_TIPO_UF_ORIGEM = [
+          'tipo_uf_origem',
+          'tipouforigem',
+          'tipo_origem',
+          'tipoorigem',
+          'classificacao_origem',
+          'classe_uf_origem',
+        ]
+        const ALIASES_HOOK_TIPO_UF_DESTINO = [
+          'tipo_uf_destino',
+          'tipoufdestino',
+          'tipo_destino',
+          'tipodestino',
+          'classificacao_destino',
+          'classe_uf_destino',
+        ]
+        const ALIASES_HOOK_GRTRIB_COD = [
+          'grtrib',
+          'gr_trib',
+          'grupo_tributario',
+          'grupotributario',
+          'grupo_tributario_codigo',
+          'cod_grtrib',
+          'codigo_grupo_tributario',
+          'grupo_trib',
+        ]
+        const ALIASES_HOOK_GRTRIB_DESC = [
+          'descricao_grupo_tributario',
+          'descricaogrupotributario',
+          'descricao_grupo',
+          'desc_grupo_tributario',
+          'desc_grtrib',
+          'grupo_tributario_descricao',
+          'nome_grupo_tributario',
+        ]
+        const ALIASES_HOOK_PROD_IMP = [
+          'prod_importado',
+          'prodimportado',
+          'produto_importado',
+          'produtoimportado',
+          'importado',
+          'flag_importado',
+        ]
+        const ALIASES_HOOK_TIPO_DESONERADO = [
+          'tipo_desonerado',
+          'tipodesonerado',
+          'desonerado_tipo',
+          'desoneracao_tipo',
+          'tipo_desoneracao',
+        ]
+        const ALIASES_HOOK_ICMS_DESONERADO = [
+          'icms_desonerado',
+          'icmsdesonerado',
+          'perc_icms_desonerado',
+          'aliquota_desonerada',
+          'desonerado_perc',
+        ]
+        const ALIASES_HOOK_REGRA_CREDITO = [
+          'regra_credito_entrada',
+          'regracreditoentrada',
+          'credito_entrada',
+          'regra_credito',
+          'credito_proporcional',
+        ]
 
         for (let i = 0; i < records.length; i++) {
           const itemWrapper = records[i]
@@ -2793,8 +2879,6 @@ routerAdd('POST', '/backend/v1/importar-lote', (e) => {
             continue
           }
 
-          const chaveOrigemDestino = `${ufOrigem}_${ufDestino}`
-
           // 3. Extração de Alíquotas e Benefícios
           const rawAliqIcms = extrairValorPorAliasesHook(objetoUnificado, ALIASES_HOOK_ALIQUOTA)
           const aliqIcms = normalizarNumeroPercentualHook(rawAliqIcms)
@@ -2828,9 +2912,60 @@ routerAdd('POST', '/backend/v1/importar-lote', (e) => {
           if (fundamentacao.length > 2000) fundamentacao = fundamentacao.slice(0, 2000)
 
           const rawTipoOp = extrairValorPorAliasesHook(objetoUnificado, ALIASES_HOOK_TIPO_OP)
-          const tipoOperacao = rawTipoOp || (ufOrigem === ufDestino ? 'Interna' : 'Interestadual')
+          let tipoOperacao = rawTipoOp
+          if (!tipoOperacao) {
+            tipoOperacao = ufOrigem === ufDestino ? 'Interna' : 'Interestadual'
+          } else {
+            const normOp = normTxt(tipoOperacao)
+            if (normOp.indexOf('interna') !== -1) {
+              tipoOperacao = 'Interna'
+            } else if (normOp.indexOf('interestadual') !== -1 || normOp.indexOf('inter') !== -1) {
+              tipoOperacao = 'Interestadual'
+            }
+          }
 
-          // 6. Upsert por chave_origem_destino
+          // 6. Campos adicionais da estrutura real da planilha
+          const idRegra = extrairValorPorAliasesHook(objetoUnificado, ALIASES_HOOK_ID_REGRA)
+          const tipoUfOrigem = extrairValorPorAliasesHook(
+            objetoUnificado,
+            ALIASES_HOOK_TIPO_UF_ORIGEM,
+          )
+          const tipoUfDestino = extrairValorPorAliasesHook(
+            objetoUnificado,
+            ALIASES_HOOK_TIPO_UF_DESTINO,
+          )
+          const grTribCod = extrairValorPorAliasesHook(objetoUnificado, ALIASES_HOOK_GRTRIB_COD)
+          const grTribDesc = extrairValorPorAliasesHook(objetoUnificado, ALIASES_HOOK_GRTRIB_DESC)
+          const prodImportado = extrairValorPorAliasesHook(objetoUnificado, ALIASES_HOOK_PROD_IMP)
+          const tipoDesonerado = extrairValorPorAliasesHook(
+            objetoUnificado,
+            ALIASES_HOOK_TIPO_DESONERADO,
+          )
+          const rawIcmsDesonerado = extrairValorPorAliasesHook(
+            objetoUnificado,
+            ALIASES_HOOK_ICMS_DESONERADO,
+          )
+          const icmsDesonerado = rawIcmsDesonerado
+            ? normalizarNumeroPercentualHook(rawIcmsDesonerado)
+            : 0
+          const regraCreditoEntrada = extrairValorPorAliasesHook(
+            objetoUnificado,
+            ALIASES_HOOK_REGRA_CREDITO,
+          )
+
+          // 7. Chave composta de idempotência incorporando GrTrib e ID da regra
+          let chaveOrigemDestino = `${ufOrigem}_${ufDestino}`
+          if (grTribCod) {
+            chaveOrigemDestino += `_${grTribCod}`
+          }
+          if (idRegra) {
+            const idLimpo = idRegra.replace(/[^A-Za-z0-9_-]/g, '')
+            if (idLimpo && chaveOrigemDestino.indexOf(idLimpo) === -1) {
+              chaveOrigemDestino += `_${idLimpo}`
+            }
+          }
+
+          // 8. Upsert por chave_origem_destino
           const escChave = chaveOrigemDestino.replace(/'/g, "\\'")
           const achados =
             txApp.findRecordsByFilter(
@@ -2861,12 +2996,23 @@ routerAdd('POST', '/backend/v1/importar-lote', (e) => {
           record.set('fundamentacao_legal', fundamentacao)
           record.set('tipo_operacao', tipoOperacao)
           record.set('chave_origem_destino', chaveOrigemDestino)
-          if (data.dados_extras) {
+
+          // Novos campos opcionais
+          if (idRegra) record.set('id_regra', idRegra)
+          if (tipoUfOrigem) record.set('tipo_uf_origem', tipoUfOrigem)
+          if (tipoUfDestino) record.set('tipo_uf_destino', tipoUfDestino)
+          if (grTribCod) record.set('grupo_tributario_codigo', grTribCod)
+          if (grTribDesc) record.set('grupo_tributario_descricao', grTribDesc)
+          if (prodImportado) record.set('prod_importado', prodImportado)
+          if (tipoDesonerado) record.set('tipo_desonerado', tipoDesonerado)
+          if (icmsDesonerado !== undefined) record.set('icms_desonerado', icmsDesonerado)
+          if (regraCreditoEntrada) record.set('regra_credito_entrada', regraCreditoEntrada)
+
+          if (data.dados_extras || rawObj) {
+            const finalExtras = Object.assign({}, rawObj, data.dados_extras || {})
             record.set(
               'dados_extras',
-              typeof data.dados_extras === 'string'
-                ? data.dados_extras
-                : JSON.stringify(data.dados_extras),
+              typeof finalExtras === 'string' ? finalExtras : JSON.stringify(finalExtras),
             )
           }
 

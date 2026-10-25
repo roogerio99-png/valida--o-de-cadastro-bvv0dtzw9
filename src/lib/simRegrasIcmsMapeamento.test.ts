@@ -106,4 +106,81 @@ describe('Mapeamento Canônico de Regras de ICMS (sim_regras_icms)', () => {
       expect(res.motivo).toContain('Siglas de UF inválidas')
     }
   })
+
+  it('mapeia a estrutura REAL da aba "Regra ICMS" com UF Contrapartida, GrTrib e cargas fracionárias', () => {
+    // Exemplo sintético com nomes de colunas EXATOS da planilha real do usuário
+    // Sem valores reais confidenciais de clientes (apenas valores de teste inventados)
+    const row = {
+      ID: 'BAALInterestadual001',
+      'UF Origem': 'BA',
+      'Tipo UF Origem': 'Estado Pobre',
+      'UF Contrapartida': 'AL',
+      'Tipo UF Destino': 'Estado Pobre',
+      Operação: 'Interestadual',
+      GrTrib: '001',
+      'Descrição Grupo Tributario': 'DEFENSIVO - ORIGEM NACIONAL',
+      'Prod. importado': 'Não',
+      'Carga Trib. ICMS': '0,048', // 0,048 decimal = 4,8%
+      'Tipo Desonerado': 'Não Calcula',
+      'ICMS Desonerado': '',
+      'Carga ICMS Final': 0.048, // número decimal 0.048 = 4.8%
+      'Regra Crédito Entrada': 'Crédito Proporcional à Saída',
+      Coluna_15: '',
+    }
+
+    const res = mapearLinhaSimRegraIcms(row)
+    expect(res.sucesso).toBe(true)
+    if (!res.sucesso) return
+
+    expect(res.regra.uf_origem).toBe('BA')
+    expect(res.regra.uf_destino).toBe('AL') // Mapeado de "UF Contrapartida"
+    expect(res.regra.aliquota_icms).toBe(4.8) // Convertido de 0,048 decimal fracionário para 4.8%
+    expect(res.regra.aliquota_efetiva).toBe(4.8) // Convertido de 0.048 para 4.8%
+    expect(res.regra.tipo_operacao).toBe('Interestadual')
+    expect(res.regra.id_regra).toBe('BAALInterestadual001')
+    expect(res.regra.tipo_uf_origem).toBe('Estado Pobre')
+    expect(res.regra.tipo_uf_destino).toBe('Estado Pobre')
+    expect(res.regra.grupo_tributario_codigo).toBe('001')
+    expect(res.regra.grupo_tributario_descricao).toBe('DEFENSIVO - ORIGEM NACIONAL')
+    expect(res.regra.prod_importado).toBe('Não')
+    expect(res.regra.tipo_desonerado).toBe('Não Calcula')
+    expect(res.regra.regra_credito_entrada).toBe('Crédito Proporcional à Saída')
+
+    // Chave composta deve incorporar o par de UFs, o GrTrib e o ID para não colidir
+    expect(res.regra.chave_origem_destino).toContain('BA_AL')
+    expect(res.regra.chave_origem_destino).toContain('001')
+  })
+
+  it('gera chaves distintas para regras do mesmo par de UFs com GrTrib diferentes', () => {
+    const rowA = {
+      'UF Origem': 'SP',
+      'UF Contrapartida': 'MT',
+      GrTrib: '001',
+      'Carga Trib. ICMS': '0,04',
+      'Carga ICMS Final': '0,04',
+      Operação: 'Interestadual',
+    }
+
+    const rowB = {
+      'UF Origem': 'SP',
+      'UF Contrapartida': 'MT',
+      GrTrib: '002',
+      'Carga Trib. ICMS': '0,07',
+      'Carga ICMS Final': '0,07',
+      Operação: 'Interestadual',
+    }
+
+    const resA = mapearLinhaSimRegraIcms(rowA)
+    const resB = mapearLinhaSimRegraIcms(rowB)
+
+    expect(resA.sucesso).toBe(true)
+    expect(resB.sucesso).toBe(true)
+    if (!resA.sucesso || !resB.sucesso) return
+
+    expect(resA.regra.aliquota_icms).toBe(4)
+    expect(resB.regra.aliquota_icms).toBe(7)
+    expect(resA.regra.chave_origem_destino).not.toBe(resB.regra.chave_origem_destino)
+    expect(resA.regra.chave_origem_destino).toBe('SP_MT_001')
+    expect(resB.regra.chave_origem_destino).toBe('SP_MT_002')
+  })
 })
