@@ -26,6 +26,7 @@ import {
   Download,
   FileSpreadsheet,
   FileCode,
+  Scale,
 } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import { ScrollableTable } from '@/components/ScrollableTable'
@@ -35,6 +36,7 @@ import { Label } from '@/components/ui/label'
 import { Badge } from '@/components/ui/badge'
 import { Switch } from '@/components/ui/switch'
 import { toast } from '@/hooks/use-toast'
+import { PainelEnquadramentoTributario } from '@/components/PainelEnquadramentoTributario'
 import {
   validarCadastroProduto,
   listarBaseMestre,
@@ -345,6 +347,43 @@ export function Validar() {
       setSavingBaseMestre(false)
     }
   }
+
+  // Produto derivado para a Fundamentação Tributária
+  const produtoParaFundamentacao = (() => {
+    if (!resultado) return null
+    const canon = resultado.produto_canonico || {}
+    const ncmFinal =
+      ncmResolvidaMestre?.ncmEspecifica ||
+      canon.ncm_especifica ||
+      canon.ncm_padrao ||
+      canon.ncm ||
+      ''
+    return {
+      marca_padronizada: canon.marca_padronizada || nomeComercial,
+      nome_produto: canon.nome_produto || nomeComercial,
+      nome_completo: canon.nome_completo || nomeComercial,
+      ncm: ncmFinal,
+      ncm_padrao: canon.ncm_padrao || ncmFinal,
+      ncm_especifica: ncmFinal,
+      tipo_produto: canon.tipo_produto,
+      principio_ativo:
+        canon.principio_ativo || principioAtivo || resultado.bula_extraida?.principio_ativo,
+      macro_grupo: canon.macro_grupo,
+      sub_grupo: canon.sub_grupo,
+      registro_mapa: canon.registro_mapa || registroMapa || resultado.bula_extraida?.registro_mapa,
+      titular_fabricante:
+        canon.titular_fabricante || fabricante || resultado.bula_extraida?.fabricante,
+      fabricante: canon.titular_fabricante || fabricante || resultado.bula_extraida?.fabricante,
+      embalagem: canon.embalagem || embalagem,
+      status_pis_cofins: canon.status_pis_cofins,
+      aliquota_ate_mar2026: canon.aliquota_ate_mar2026,
+      aliquota_pos_abr2026_real: canon.aliquota_pos_abr2026_real,
+      aliquota_pos_abr2026_presumido: canon.aliquota_pos_abr2026_presumido,
+      cst_saida: canon.cst_saida,
+      cst_entrada: canon.cst_entrada,
+      ibs_cbs_2027: canon.ibs_cbs_2027,
+    }
+  })()
 
   // Exportação CSV do Parecer Unificado de Validação
   const handleExportarCsv = () => {
@@ -1471,7 +1510,37 @@ export function Validar() {
               </Card>
 
               {/* ------------------------------------------------------------------ */}
-              {/* 6. FONTES CONSULTADAS */}
+              {/* 6. FUNDAMENTAÇÃO LEGAL TRIBUTÁRIA (5 TRIBUTOS) */}
+              {/* ------------------------------------------------------------------ */}
+              {produtoParaFundamentacao && (
+                <Card className="rounded-2xl border-[#DCE5DC] bg-white shadow-sm p-4 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <Scale className="w-4 h-4 text-[#1B5E20]" />
+                      <div>
+                        <h4 className="text-xs font-bold text-[#1C2B1C] uppercase tracking-wider">
+                          Fundamentação Legal Tributária
+                        </h4>
+                        <p className="text-[11px] text-[#5A6D5A]">
+                          Citações normativas canônicas (ICMS Convênio 100/97, PIS/COFINS Lei
+                          10.925/04 e LC 224/25, IBS/CBS LC 214/25)
+                        </p>
+                      </div>
+                    </div>
+                    <Badge
+                      variant="outline"
+                      className="text-[10px] text-[#1B5E20] border-emerald-300 bg-emerald-50"
+                    >
+                      5 Tributos Auditados
+                    </Badge>
+                  </div>
+
+                  <PainelEnquadramentoTributario produto={produtoParaFundamentacao} />
+                </Card>
+              )}
+
+              {/* ------------------------------------------------------------------ */}
+              {/* 7. FONTES CONSULTADAS */}
               {/* ------------------------------------------------------------------ */}
               <Card className="rounded-2xl border-[#DCE5DC] bg-white shadow-sm p-4">
                 <div className="flex items-center justify-between mb-3">
