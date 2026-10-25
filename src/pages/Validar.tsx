@@ -16,17 +16,16 @@ import {
   ShieldCheck,
   Database,
   Building,
-  Layers,
   Search,
   Package,
   Layers2,
   ArrowRight,
   RefreshCw,
-  HelpCircle,
-  Download,
   FileSpreadsheet,
   FileCode,
   Scale,
+  ChevronDown,
+  ChevronUp,
 } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import { ScrollableTable } from '@/components/ScrollableTable'
@@ -39,100 +38,103 @@ import { toast } from '@/hooks/use-toast'
 import { PainelEnquadramentoTributario } from '@/components/PainelEnquadramentoTributario'
 import {
   validarCadastroProduto,
-  listarBaseMestre,
   criarProdutoBaseMestre,
   atualizarProdutoBaseMestre,
   resolverNcmBaseMestre,
+  buscarDadosOficiaisProduto,
+  type CandidatoOficialProduto,
 } from '@/services/agroService'
 import { parsearEmbalagemComercial } from '@/lib/motorCanonico'
 import type {
   ValidarCadastroInput,
   RespostaValidacaoCadastro,
-  BaseMestreProduto,
   CampoValidadoResultado,
   LinhaNcmEmbalagem,
 } from '@/types/agro'
 
 const ETAPAS_PROGRESSO = [
-  { etapa: 1, texto: 'Iniciando validação de cadastro...' },
-  { etapa: 2, texto: 'Buscando bula oficial no AGROFIT / Anvisa pelo Nome Comercial...' },
-  { etapa: 3, texto: 'Extraindo princípios ativos, concentrações, fabricante e embalagens...' },
-  { etapa: 4, texto: 'Auditando NCM no motor químico-aduaneiro e catálogo Siscomex / TIPI...' },
-  { etapa: 5, texto: 'Calculando enquadramento de NCM por faixa de embalagem (TIPI)...' },
-  { etapa: 6, texto: 'Confrontando travas regulatórias e consolidando parecer...' },
+  { etapa: 1, texto: 'Iniciando validação cadastral com dados oficiais confirmados...' },
+  { etapa: 2, texto: 'Auditando Registro MAPA e vinculação com a Bula Oficial...' },
+  { etapa: 3, texto: 'Confrontando NCM e Princípio Ativo com a TIPI e Base Mestre...' },
+  { etapa: 4, texto: 'Aplicando as 6 Travas de Auditoria Regulatória...' },
+  {
+    etapa: 5,
+    texto: 'Calculando enquadramento tributário completo (ICMS, PIS, COFINS, IBS, CBS)...',
+  },
+  { etapa: 6, texto: 'Consolidando parecer fiscal e fundamentação legal...' },
 ]
 
 export function Validar() {
-  // Modo de validação: "novo" (Validar Produto) ou "existente" (Validar Existente)
-  const [modo, setModo] = useState<'novo' | 'existente'>('novo')
-
-  // Campos de entrada do escopo (NCM removida da digitação — resolvida exclusivamente na Base Mestre)
+  // ---------------------------------------------------------------------------
+  // 1. FORMULÁRIO DE CONSULTA: 4 CAMPOS BÁSICOS E FUNDAMENTAIS
+  // ---------------------------------------------------------------------------
   const [nomeComercial, setNomeComercial] = useState('')
-  const [registroMapa, setRegistroMapa] = useState('')
+  const [ncm, setNcm] = useState('')
   const [embalagem, setEmbalagem] = useState('')
-  const [principioAtivo, setPrincipioAtivo] = useState('')
-  const [fabricante, setFabricante] = useState('')
-  const [concentracao, setConcentracao] = useState('')
+  const [codigoMapa, setCodigoMapa] = useState('')
+
+  // Campos complementares opcionais (colapsados)
+  const [exibirCamposOpcionais, setExibirCamposOpcionais] = useState(false)
+  const [fabricanteOpcional, setFabricanteOpcional] = useState('')
+  const [concentracaoOpcional, setConcentracaoOpcional] = useState('')
+
+  // ---------------------------------------------------------------------------
+  // 2. BUSCA EM DADOS OFICIAIS & RESOLUÇÃO DO PRINCÍPIO ATIVO
+  // ---------------------------------------------------------------------------
+  const [buscandoOficiais, setBuscandoOficiais] = useState(false)
+  const [produtoOficialConfirmado, setProdutoOficialConfirmado] =
+    useState<CandidatoOficialProduto | null>(null)
+  const [candidatosOficiais, setCandidatosOficiais] = useState<CandidatoOficialProduto[]>([])
+  const [buscaOficialRealizada, setBuscaOficialRealizada] = useState(false)
+
+  // Resolução da NCM canônica na Base Mestre via embalagem
   const [ncmResolvidaMestre, setNcmResolvidaMestre] = useState<{
     ncmEspecifica: string
     quantidade: number
     unidade: string
     acondicionamento: string
   } | null>(null)
-  const [buscandoNcmMestre, setBuscandoNcmMestre] = useState(false)
 
-  // Para o modo "Validar Existente": busca rápida de produto na Base Mestre
-  const [buscaExistenteTexto, setBuscaExistenteTexto] = useState('')
-  const [produtosBaseMestre, setProdutosBaseMestre] = useState<BaseMestreProduto[]>([])
-  const [produtoExistenteSelecionado, setProdutoExistenteSelecionado] =
-    useState<BaseMestreProduto | null>(null)
-  const [buscandoExistentes, setBuscandoExistentes] = useState(false)
-
+  // ---------------------------------------------------------------------------
+  // 3. VALIDAÇÃO DO CADASTRO (Travas + Parecer + Fundamentação)
+  // ---------------------------------------------------------------------------
   const { isAdmin } = useAuth()
-  // Interruptor de auto-cadastro na Base Mestre (apenas para Admin)
   const [autoCadastrar, setAutoCadastrar] = useState(false)
 
-  // Atualiza default baseado em isAdmin
   useEffect(() => {
-    if (isAdmin) {
-      setAutoCadastrar(true)
-    } else {
-      setAutoCadastrar(false)
-    }
+    setAutoCadastrar(Boolean(isAdmin))
   }, [isAdmin])
 
-  // Estados de execução e retorno
-  const [loading, setLoading] = useState(false)
+  const [validando, setValidando] = useState(false)
   const [progressoIndice, setProgressoIndice] = useState(0)
   const [erroValidacao, setErroValidacao] = useState<string | null>(null)
-  const [savingBaseMestre, setSavingBaseMestre] = useState(false)
   const [resultado, setResultado] = useState<RespostaValidacaoCadastro | null>(null)
   const [salvoComSucesso, setSalvoComSucesso] = useState(false)
+  const [savingBaseMestre, setSavingBaseMestre] = useState(false)
 
-  // Efeito do timer de etapas dinâmicas durante a validação
+  // Timer de progresso visual das etapas
   useEffect(() => {
     let timer: ReturnType<typeof setInterval> | undefined
-    if (loading) {
+    if (validando) {
       setProgressoIndice(0)
       timer = setInterval(() => {
         setProgressoIndice((prev) => (prev < ETAPAS_PROGRESSO.length - 1 ? prev + 1 : prev))
-      }, 1100)
+      }, 1000)
     }
     return () => {
       if (timer) clearInterval(timer)
     }
-  }, [loading])
+  }, [validando])
 
-  // Consulta automática de NCM na Base Mestre quando registro_mapa ou embalagem mudam
-  const consultarNcmMestre = async (mapa: string, emb: string) => {
-    const mapaLimpo = mapa.trim()
+  // Quando o código MAPA ou a Embalagem mudam, resolve NCM na Base Mestre
+  const atualizarResolucaoNcmMestre = async (mapaValor: string, embValor: string) => {
+    const mapaLimpo = mapaValor.trim()
     if (!mapaLimpo) {
       setNcmResolvidaMestre(null)
       return
     }
-    setBuscandoNcmMestre(true)
     try {
-      const parseada = parsearEmbalagemComercial(emb)
+      const parseada = parsearEmbalagemComercial(embValor)
       const res = await resolverNcmBaseMestre(
         mapaLimpo,
         parseada.quantidade,
@@ -142,98 +144,153 @@ export function Validar() {
       setNcmResolvidaMestre(res)
     } catch {
       setNcmResolvidaMestre(null)
-    } finally {
-      setBuscandoNcmMestre(false)
     }
   }
 
-  // Busca rápida de produtos na Base Mestre para o modo existente
-  const handleBuscarBaseMestre = async () => {
-    const termo = buscaExistenteTexto.trim()
-    if (!termo) {
+  // ---------------------------------------------------------------------------
+  // PASSO 2: EXECUTAR BUSCA EM DADOS OFICIAIS (Bula + Base Mestre)
+  // ---------------------------------------------------------------------------
+  const handleBuscarDadosOficiais = async (e?: React.FormEvent) => {
+    if (e) e.preventDefault()
+
+    const nomeLimpo = nomeComercial.trim()
+    const mapaLimpo = codigoMapa.trim()
+    const ncmLimpa = ncm.replace(/\D/g, '')
+
+    if (!nomeLimpo && !mapaLimpo && !ncmLimpa) {
       toast({
-        title: 'Informe um termo',
-        description: 'Digite o nome do produto ou marca para pesquisar na Base Mestre.',
+        variant: 'destructive',
+        title: 'Informe os dados da consulta',
+        description:
+          'Preencha ao menos o Nome Comercial ou o Código MAPA para localizar o registro oficial.',
       })
       return
     }
-    setBuscandoExistentes(true)
+
+    setBuscandoOficiais(true)
+    setErroValidacao(null)
+    setResultado(null)
+    setSalvoComSucesso(false)
+
     try {
-      const esc = termo.replace(/'/g, "\\'")
-      const resp = await listarBaseMestre({
-        page: 1,
-        perPage: 8,
-        filter: `nome_completo ~ '${esc}' || marca_padronizada ~ '${esc}' || nome_produto ~ '${esc}' || registro_mapa ~ '${esc}'`,
+      // 1. Resolver NCM na Base Mestre
+      await atualizarResolucaoNcmMestre(mapaLimpo, embalagem)
+
+      // 2. Buscar nos dados oficiais do app (bula_produtos + base_mestre + bula_composicao)
+      const resp = await buscarDadosOficiaisProduto({
+        nomeComercial: nomeLimpo,
+        ncm: ncmLimpa,
+        embalagem: embalagem.trim(),
+        codigoMapa: mapaLimpo,
       })
-      setProdutosBaseMestre(resp.items)
-      if (resp.items.length === 0) {
+
+      setBuscaOficialRealizada(true)
+
+      if (resp.candidatoPrincipal) {
+        setProdutoOficialConfirmado(resp.candidatoPrincipal)
+        setCandidatosOficiais(resp.outrosCandidatos)
+
+        // Se NCM não estava preenchida ou era parcial, enriquece
+        if (!ncm.trim() && resp.candidatoPrincipal.ncmOficial) {
+          setNcm(resp.candidatoPrincipal.ncmOficial)
+        }
+        // Se Código MAPA não estava preenchido, enriquece
+        if (!codigoMapa.trim() && resp.candidatoPrincipal.registroMapa) {
+          setCodigoMapa(resp.candidatoPrincipal.registroMapa)
+        }
+
         toast({
-          title: 'Nenhum produto localizado',
-          description: `Não encontramos cadastros na Base Mestre com o termo "${termo}".`,
+          title: 'Registro Oficial Localizado!',
+          description: `Identificado na ${resp.candidatoPrincipal.origemRotulo}: ${resp.candidatoPrincipal.principioAtivo}`,
+        })
+      } else {
+        setProdutoOficialConfirmado(null)
+        setCandidatosOficiais([])
+        toast({
+          title: 'Nenhum registro oficial idêntico',
+          description:
+            'Não encontramos bula nem cadastro oficial correspondente a estes dados. Você ainda pode forçar a validação.',
         })
       }
     } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : 'Erro ao consultar Base Mestre.'
-      toast({ variant: 'destructive', title: 'Erro de Busca', description: msg })
+      const msg = err instanceof Error ? err.message : 'Falha ao buscar dados oficiais.'
+      setErroValidacao(msg)
+      toast({
+        variant: 'destructive',
+        title: 'Erro na busca oficial',
+        description: msg,
+      })
     } finally {
-      setBuscandoExistentes(false)
+      setBuscandoOficiais(false)
     }
   }
 
-  const handleSelecionarProdutoExistente = (prod: BaseMestreProduto) => {
-    setProdutoExistenteSelecionado(prod)
-    setNomeComercial(prod.marca_padronizada || prod.nome_completo || prod.nome_produto || '')
-    setRegistroMapa(prod.registro_mapa || '')
-    setEmbalagem(prod.embalagem || '')
-    setPrincipioAtivo(prod.principio_ativo || '')
-    setFabricante(prod.titular_fabricante || prod.fabricante || '')
-    setConcentracao(prod.concentracao ? String(prod.concentracao) : '')
-    setProdutosBaseMestre([])
-    consultarNcmMestre(prod.registro_mapa || '', prod.embalagem || '')
+  // Confirmar um candidato oficial específico (quando há candidatos próximos)
+  const handleSelecionarCandidato = (candidato: CandidatoOficialProduto) => {
+    setProdutoOficialConfirmado(candidato)
+    if (candidato.registroMapa) {
+      setCodigoMapa(candidato.registroMapa)
+    }
+    if (candidato.ncmOficial && !ncm.trim()) {
+      setNcm(candidato.ncmOficial)
+    }
+    if (candidato.marcaPadronizada && !nomeComercial.trim()) {
+      setNomeComercial(candidato.marcaPadronizada)
+    }
+    atualizarResolucaoNcmMestre(candidato.registroMapa || codigoMapa, embalagem)
+
     toast({
-      title: 'Produto Selecionado',
-      description: `Dados de "${prod.marca_padronizada || prod.nome_produto}" carregados no formulário para validação cruzada.`,
+      title: 'Produto Oficial Confirmado!',
+      description: `Vinculado: ${candidato.nomeComercial} (Princípio Ativo: ${candidato.principioAtivo})`,
     })
   }
 
-  // Submissão do formulário
-  const handleValidar = async (e: React.FormEvent) => {
-    e.preventDefault()
+  // ---------------------------------------------------------------------------
+  // PASSO 4: EXECUTAR VALIDAÇÃO DO CADASTRO (Travas + Parecer + Fundamentação)
+  // ---------------------------------------------------------------------------
+  const handleExecutarValidacao = async () => {
+    const nomeEfetivo =
+      nomeComercial.trim() ||
+      produtoOficialConfirmado?.marcaPadronizada ||
+      produtoOficialConfirmado?.nomeComercial ||
+      ''
 
-    if (!nomeComercial.trim()) {
+    if (!nomeEfetivo) {
       toast({
         variant: 'destructive',
-        title: 'Nome Comercial Obrigatório',
-        description: 'Por favor, informe o Nome Comercial do produto.',
+        title: 'Nome Comercial obrigatório',
+        description: 'Informe o Nome Comercial do produto para validar o cadastro.',
       })
       return
     }
 
-    setLoading(true)
-    setSalvoComSucesso(false)
+    setValidando(true)
     setErroValidacao(null)
+    setSalvoComSucesso(false)
 
     try {
-      // Pré-resolver a NCM da Base Mestre para exibição imediata
-      const parseada = parsearEmbalagemComercial(embalagem)
-      const resNcm = await resolverNcmBaseMestre(
-        registroMapa.trim(),
-        parseada.quantidade,
-        parseada.unidade,
-        parseada.acondicionamento,
-      )
-      setNcmResolvidaMestre(resNcm)
+      const mapaEfetivo = codigoMapa.trim() || produtoOficialConfirmado?.registroMapa || undefined
+      const paEfetivo = produtoOficialConfirmado?.principioAtivo || undefined
+      const fabEfetivo =
+        fabricanteOpcional.trim() || produtoOficialConfirmado?.fabricante || undefined
+      const ncmEfetiva =
+        ncm.replace(/\D/g, '') ||
+        ncmResolvidaMestre?.ncmEspecifica?.replace(/\D/g, '') ||
+        produtoOficialConfirmado?.ncmOficial?.replace(/\D/g, '') ||
+        undefined
 
       const payload: ValidarCadastroInput = {
-        nome_comercial: nomeComercial.trim(),
-        codigo_mapa: registroMapa.trim() || undefined,
-        registro_mapa: registroMapa.trim() || undefined,
-        embalagem: embalagem.trim() || undefined,
-        principio_ativo: principioAtivo.trim() || undefined,
-        fabricante: fabricante.trim() || undefined,
-        concentracao: concentracao.trim() ? Number(concentracao.replace(',', '.')) : undefined,
-        modo: modo,
-        id_produto_existente: produtoExistenteSelecionado?.id,
+        nome_comercial: nomeEfetivo,
+        ncm: ncmEfetiva,
+        codigo_mapa: mapaEfetivo,
+        registro_mapa: mapaEfetivo,
+        embalagem: embalagem.trim() || produtoOficialConfirmado?.embalagem || undefined,
+        principio_ativo: paEfetivo,
+        fabricante: fabEfetivo,
+        concentracao: concentracaoOpcional.trim()
+          ? Number(concentracaoOpcional.replace(',', '.'))
+          : undefined,
+        modo: 'novo',
         auto_cadastrar: autoCadastrar,
       }
 
@@ -244,14 +301,13 @@ export function Validar() {
         if (resp.gravacao_base_mestre?.executada) {
           setSalvoComSucesso(true)
           toast({
-            title: 'Cadastro Aprovado e Salvo!',
+            title: 'Cadastro Validado e Gravado!',
             description: resp.gravacao_base_mestre.mensagem,
           })
         } else {
           toast({
             title: 'Cadastro Aprovado!',
-            description:
-              'Todas as informações conferem com a bula oficial e as regras tributárias.',
+            description: 'Todas as travas regulatórias e enquadramentos fiscais conferem.',
           })
         }
       } else if (resp.veredito_geral === 'APROVADO COM RESSALVAS') {
@@ -267,7 +323,7 @@ export function Validar() {
         })
       }
     } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : 'Falha ao executar validação de cadastro.'
+      const msg = err instanceof Error ? err.message : 'Falha ao validar cadastro do produto.'
       setErroValidacao(msg)
       toast({
         variant: 'destructive',
@@ -275,30 +331,35 @@ export function Validar() {
         description: msg,
       })
     } finally {
-      setLoading(false)
+      setValidando(false)
     }
   }
 
-  // Ação manual de salvar ou atualizar na Base Mestre
+  // Gravação manual na Base Mestre (para Admin)
   const handleGravarBaseMestre = async () => {
     if (!resultado || resultado.veredito_geral === 'REPROVADO') return
     setSavingBaseMestre(true)
 
     try {
       const canon = resultado.produto_canonico || {}
-      const ncmCalculado = canon.ncm_padrao || ncmResolvidaMestre?.ncmEspecifica || ''
+      const ncmCalculada =
+        ncmResolvidaMestre?.ncmEspecifica || canon.ncm_especifica || canon.ncm_padrao || ncm || ''
+
       const payload = {
         nome_completo: canon.nome_completo || nomeComercial,
         marca_padronizada: canon.marca_padronizada || nomeComercial,
-        ncm_padrao: ncmCalculado,
-        ncm_especifica: ncmResolvidaMestre?.ncmEspecifica || ncmCalculado,
-        ncm: ncmCalculado.replace(/\D/g, ''),
-        principio_ativo: canon.principio_ativo || principioAtivo || nomeComercial,
-        registro_mapa: canon.registro_mapa || registroMapa,
-        titular_fabricante: canon.titular_fabricante || fabricante,
-        fabricante: canon.titular_fabricante || fabricante,
+        ncm_padrao: ncmCalculada,
+        ncm_especifica: ncmResolvidaMestre?.ncmEspecifica || ncmCalculada,
+        ncm: ncmCalculada.replace(/\D/g, ''),
+        principio_ativo:
+          canon.principio_ativo || produtoOficialConfirmado?.principioAtivo || nomeComercial,
+        registro_mapa: canon.registro_mapa || codigoMapa || produtoOficialConfirmado?.registroMapa,
+        titular_fabricante:
+          canon.titular_fabricante || fabricanteOpcional || produtoOficialConfirmado?.fabricante,
+        fabricante:
+          canon.titular_fabricante || fabricanteOpcional || produtoOficialConfirmado?.fabricante,
         embalagem: canon.embalagem || embalagem || '1X20L (20 L)',
-        concentracao: concentracao ? Number(concentracao.replace(',', '.')) : 0,
+        concentracao: concentracaoOpcional ? Number(concentracaoOpcional.replace(',', '.')) : 0,
         tipo_produto: canon.tipo_produto,
         unidade: canon.unidade,
         macro_grupo: canon.macro_grupo,
@@ -321,25 +382,12 @@ export function Validar() {
         status_validacao: 'aprovado' as const,
       }
 
-      if (
-        modo === 'existente' &&
-        (produtoExistenteSelecionado?.id || resultado.comparacao_existente?.id_registro)
-      ) {
-        const idAlvo =
-          produtoExistenteSelecionado?.id || resultado.comparacao_existente?.id_registro || ''
-        await atualizarProdutoBaseMestre(idAlvo, payload)
-        toast({
-          title: 'Base Mestre Atualizada!',
-          description: `O produto "${payload.marca_padronizada}" foi atualizado com as correções da bula.`,
-        })
-      } else {
-        await criarProdutoBaseMestre(payload)
-        toast({
-          title: 'Produto Gravado na Base Mestre!',
-          description: `Novo produto "${payload.marca_padronizada}" cadastrado no Padrão Canônico de 28 Campos.`,
-        })
-      }
+      await criarProdutoBaseMestre(payload)
       setSalvoComSucesso(true)
+      toast({
+        title: 'Produto Gravado na Base Mestre!',
+        description: `Cadastro oficial de "${payload.marca_padronizada}" adicionado com sucesso.`,
+      })
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : 'Erro ao gravar na Base Mestre.'
       toast({ variant: 'destructive', title: 'Falha ao Gravar', description: msg })
@@ -348,7 +396,52 @@ export function Validar() {
     }
   }
 
-  // Produto derivado para a Fundamentação Tributária
+  // Limpeza geral do formulário
+  const handleLimpar = () => {
+    setNomeComercial('')
+    setNcm('')
+    setEmbalagem('')
+    setCodigoMapa('')
+    setFabricanteOpcional('')
+    setConcentracaoOpcional('')
+    setProdutoOficialConfirmado(null)
+    setCandidatosOficiais([])
+    setBuscaOficialRealizada(false)
+    setNcmResolvidaMestre(null)
+    setResultado(null)
+    setErroValidacao(null)
+    setSalvoComSucesso(false)
+  }
+
+  // Exemplos rápidos de produtos oficiais
+  const handleCarregarExemplo = (tipo: 'roundup_wg' | 'roundup_original' | 'standak') => {
+    if (tipo === 'roundup_wg') {
+      setNomeComercial('ROUNDUP WG')
+      setNcm('38089324')
+      setEmbalagem('20KG')
+      setCodigoMapa('002094')
+      atualizarResolucaoNcmMestre('002094', '20KG')
+    } else if (tipo === 'roundup_original') {
+      setNomeComercial('ROUNDUP ORIGINAL')
+      setNcm('38089329')
+      setEmbalagem('20 L')
+      setCodigoMapa('01119')
+      atualizarResolucaoNcmMestre('01119', '20 L')
+    } else {
+      setNomeComercial('STANDAK TOP')
+      setNcm('38089299')
+      setEmbalagem('4x5L')
+      setCodigoMapa('001209')
+      atualizarResolucaoNcmMestre('001209', '4x5L')
+    }
+    setProdutoOficialConfirmado(null)
+    setCandidatosOficiais([])
+    setBuscaOficialRealizada(false)
+    setResultado(null)
+    setErroValidacao(null)
+  }
+
+  // Produto derivado para a Fundamentação Tributária dos 5 Tributos
   const produtoParaFundamentacao = (() => {
     if (!resultado) return null
     const canon = resultado.produto_canonico || {}
@@ -356,6 +449,7 @@ export function Validar() {
       ncmResolvidaMestre?.ncmEspecifica ||
       canon.ncm_especifica ||
       canon.ncm_padrao ||
+      ncm ||
       canon.ncm ||
       ''
     return {
@@ -367,13 +461,26 @@ export function Validar() {
       ncm_especifica: ncmFinal,
       tipo_produto: canon.tipo_produto,
       principio_ativo:
-        canon.principio_ativo || principioAtivo || resultado.bula_extraida?.principio_ativo,
+        canon.principio_ativo ||
+        produtoOficialConfirmado?.principioAtivo ||
+        resultado.bula_extraida?.principio_ativo,
       macro_grupo: canon.macro_grupo,
       sub_grupo: canon.sub_grupo,
-      registro_mapa: canon.registro_mapa || registroMapa || resultado.bula_extraida?.registro_mapa,
+      registro_mapa:
+        canon.registro_mapa ||
+        codigoMapa ||
+        produtoOficialConfirmado?.registroMapa ||
+        resultado.bula_extraida?.registro_mapa,
       titular_fabricante:
-        canon.titular_fabricante || fabricante || resultado.bula_extraida?.fabricante,
-      fabricante: canon.titular_fabricante || fabricante || resultado.bula_extraida?.fabricante,
+        canon.titular_fabricante ||
+        fabricanteOpcional ||
+        produtoOficialConfirmado?.fabricante ||
+        resultado.bula_extraida?.fabricante,
+      fabricante:
+        canon.titular_fabricante ||
+        fabricanteOpcional ||
+        produtoOficialConfirmado?.fabricante ||
+        resultado.bula_extraida?.fabricante,
       embalagem: canon.embalagem || embalagem,
       status_pis_cofins: canon.status_pis_cofins,
       aliquota_ate_mar2026: canon.aliquota_ate_mar2026,
@@ -385,10 +492,9 @@ export function Validar() {
     }
   })()
 
-  // Exportação CSV do Parecer Unificado de Validação
+  // Exportação CSV do Parecer
   const handleExportarCsv = () => {
     if (!resultado) return
-
     const linhas: string[] = []
     const dataHoraIso = resultado.timestamp || resultado.data_validacao || new Date().toISOString()
     linhas.push('RELATÓRIO DE AUDITORIA E VALIDAÇÃO FISCAL CADASTRAL')
@@ -397,37 +503,38 @@ export function Validar() {
     linhas.push(`Score de Conformidade;${resultado.score}%`)
     linhas.push(`Motivo do Veredito;"${(resultado.veredito_motivo || '').replace(/"/g, '""')}"`)
     linhas.push('')
-    linhas.push('VALIDAÇÃO CRUZADA CAMPO A CAMPO (INFORMADO VS BULA OFICIAL)')
+    linhas.push('REGISTRO OFICIAL IDENTIFICADO')
     linhas.push(
-      'Campo;Obrigatório;Valor Informado;Encontrado na Bula / Base;Status Validação;Análise e Explicação Técnica',
+      `Produto/Marca;"${(produtoOficialConfirmado?.nomeComercial || nomeComercial).replace(/"/g, '""')}"`,
     )
-
+    linhas.push(
+      `Princípio Ativo;"${(produtoOficialConfirmado?.principioAtivo || 'N/D').replace(/"/g, '""')}"`,
+    )
+    linhas.push(
+      `Origem do P.A.;"${(produtoOficialConfirmado?.principioAtivoFonte || 'N/D').replace(/"/g, '""')}"`,
+    )
+    linhas.push(
+      `Registro MAPA;"${(produtoOficialConfirmado?.registroMapa || codigoMapa).replace(/"/g, '""')}"`,
+    )
+    linhas.push(
+      `Fabricante Oficial;"${(produtoOficialConfirmado?.fabricante || 'N/D').replace(/"/g, '""')}"`,
+    )
+    linhas.push('')
+    linhas.push('VALIDAÇÃO CRUZADA CAMPO A CAMPO')
+    linhas.push('Campo;Obrigatório;Valor Informado;Encontrado na Bula / Base;Status;Explicação')
     resultado.campos_validacao.forEach((c) => {
       linhas.push(
         `"${c.campo}";"${c.obrigatorio ? 'SIM' : 'NÃO'}";"${(c.informado || '').replace(/"/g, '""')}";"${(c.encontrado_bula || '').replace(/"/g, '""')}";"${c.status}";"${(c.explicacao || '').replace(/"/g, '""')}"`,
       )
     })
-
     linhas.push('')
-    linhas.push('TRAVAS DE AUDITORIA E CONFORMIDADE ADUANEIRA / REGULATÓRIA')
-    linhas.push('ID Trava;Nome da Trava;Status;Mensagem da Auditoria')
+    linhas.push('TRAVAS DE AUDITORIA')
+    linhas.push('ID Trava;Nome;Status;Diagnóstico')
     resultado.travas.forEach((t) => {
       linhas.push(
-        `"${t.id_trava}";"${t.trava_nome}";"${t.aprovado ? 'CONFORME' : 'NÃO CONFORME'}";"${(t.mensagem || '').replace(/"/g, '""')}"`,
+        `"${t.id_trava}";"${t.trava_nome}";"${t.aprovado ? 'CONFORME' : 'BLOQUEADO'}";"${(t.mensagem || '').replace(/"/g, '""')}"`,
       )
     })
-
-    if (resultado.linhas_ncm_embalagem && resultado.linhas_ncm_embalagem.length > 0) {
-      linhas.push('')
-      linhas.push('ENQUADRAMENTO TIPI POR FAIXA DE EMBALAGEM')
-      linhas.push('Faixa;Rótulo;Exemplo / Capacidade;NCM Correta TIPI;NCM Base Mestre')
-      const ncmMestreStr = ncmResolvidaMestre?.ncmEspecifica || '(Base Mestre)'
-      resultado.linhas_ncm_embalagem.forEach((l) => {
-        linhas.push(
-          `"${l.faixa_nome}";"${l.faixa_rotulo}";"${l.exemplo_embalagem}";"${l.ncm_correta}";"${ncmMestreStr}"`,
-        )
-      })
-    }
 
     const csvContent = '\uFEFF' + linhas.join('\r\n')
     const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' })
@@ -446,23 +553,19 @@ export function Validar() {
     })
   }
 
-  // Exportação JSON completo do Parecer Unificado
+  // Exportação JSON
   const handleExportarJson = () => {
     if (!resultado) return
-
     const exportData = {
       tipo_relatorio: 'PARECER_UNIFICADO_VALIDACAO_FISCAL',
       gerado_em: new Date().toISOString(),
-      produto_consultado: {
+      consulta_entrada_4_campos: {
         nome_comercial: nomeComercial,
-        registro_mapa: registroMapa,
-        embalagem_informada: embalagem,
-        principio_ativo_informado: principioAtivo,
-        fabricante: fabricante,
-        concentracao: concentracao,
-        ncm_resolvida_base_mestre: ncmResolvidaMestre,
-        modo_validacao: modo,
+        ncm: ncm,
+        embalagem: embalagem,
+        codigo_mapa: codigoMapa,
       },
+      registro_oficial_resolvido: produtoOficialConfirmado,
       parecer_unificado: {
         veredito_geral: resultado.veredito_geral,
         score_conformidade: resultado.score,
@@ -494,50 +597,6 @@ export function Validar() {
     })
   }
 
-  const handleLimpar = () => {
-    setNomeComercial('')
-    setRegistroMapa('')
-    setEmbalagem('')
-    setPrincipioAtivo('')
-    setFabricante('')
-    setConcentracao('')
-    setNcmResolvidaMestre(null)
-    setBuscaExistenteTexto('')
-    setProdutosBaseMestre([])
-    setProdutoExistenteSelecionado(null)
-    setResultado(null)
-    setErroValidacao(null)
-    setSalvoComSucesso(false)
-  }
-
-  const handleCarregarExemplo = (tipo: 'roundup_wg' | 'roundup_original' | 'standak') => {
-    if (tipo === 'roundup_wg') {
-      setNomeComercial('ROUNDUP WG')
-      setRegistroMapa('002094')
-      setEmbalagem('20KG saco')
-      setPrincipioAtivo('Glifosato')
-      setFabricante('BAYER S/A')
-      setConcentracao('720')
-      consultarNcmMestre('002094', '20KG saco')
-    } else if (tipo === 'roundup_original') {
-      setNomeComercial('ROUNDUP ORIGINAL')
-      setRegistroMapa('01119')
-      setEmbalagem('20 L Bombona')
-      setPrincipioAtivo('Glifosato')
-      setFabricante('MONSANTO DO BRASIL LTDA')
-      setConcentracao('480')
-      consultarNcmMestre('01119', '20 L Bombona')
-    } else {
-      setNomeComercial('STANDAK TOP')
-      setRegistroMapa('001209')
-      setEmbalagem('4x5L')
-      setPrincipioAtivo('Fipronil + Piraclostrobina + Tiofanato-metílico')
-      setFabricante('BASF S.A.')
-      setConcentracao('250')
-      consultarNcmMestre('001209', '4x5L')
-    }
-  }
-
   return (
     <div className="space-y-6 animate-in fade-in-up duration-300">
       {/* ------------------------------------------------------------------ */}
@@ -548,48 +607,23 @@ export function Validar() {
           <h2 className="text-xl font-bold text-[#1C2B1C] flex items-center gap-2">
             <span>Validar Produto</span>
             <Badge className="bg-emerald-100 text-emerald-800 border-0 text-xs font-semibold">
-              Motor Bula Oficial & AGROFIT
+              Consulta por 4 Campos Básicos & Dados Oficiais
             </Badge>
           </h2>
           <p className="text-xs text-[#5A6D5A] mt-0.5">
-            Validação de novos cadastros e auditoria de cadastros existentes cruzando dados da Bula
-            Oficial (MAPA / Anvisa).
+            Consulte a partir de <strong>Nome Comercial</strong>, <strong>NCM</strong>,{' '}
+            <strong>Quantidade da Embalagem</strong> e <strong>Código MAPA</strong>. O sistema busca
+            na Bula Oficial e na Base Mestre, resolve o Princípio Ativo e valida o cadastro com as 6
+            travas regulatórias e o enquadramento fiscal.
           </p>
         </div>
         <div className="flex items-center gap-2 flex-wrap">
-          <div className="flex items-center bg-white border border-[#DCE5DC] rounded-xl p-0.5 shadow-sm">
-            <button
-              type="button"
-              onClick={() => {
-                setModo('novo')
-                setProdutoExistenteSelecionado(null)
-              }}
-              className={`px-3 py-1.5 text-xs font-semibold rounded-lg transition-all ${
-                modo === 'novo'
-                  ? 'bg-[#1B5E20] text-white shadow-sm'
-                  : 'text-[#5A6D5A] hover:text-[#1C2B1C]'
-              }`}
-            >
-              Novo Cadastro
-            </button>
-            <button
-              type="button"
-              onClick={() => setModo('existente')}
-              className={`px-3 py-1.5 text-xs font-semibold rounded-lg transition-all ${
-                modo === 'existente'
-                  ? 'bg-[#1B5E20] text-white shadow-sm'
-                  : 'text-[#5A6D5A] hover:text-[#1C2B1C]'
-              }`}
-            >
-              Validar Existente
-            </button>
-          </div>
           <Button
             variant="outline"
             size="sm"
             onClick={() => handleCarregarExemplo('roundup_wg')}
             className="text-xs h-8 text-[#1B5E20] border-emerald-300 hover:bg-emerald-50"
-            title="Exemplo: ROUNDUP WG (MAPA 002094, NCM 38089324)"
+            title="Exemplo: ROUNDUP WG (MAPA 002094, NCM 38089324, 20KG)"
           >
             <Sparkles className="w-3.5 h-3.5 mr-1 text-[#F57F17]" />
             Roundup WG
@@ -599,10 +633,20 @@ export function Validar() {
             size="sm"
             onClick={() => handleCarregarExemplo('roundup_original')}
             className="text-xs h-8 text-[#1B5E20] border-emerald-300 hover:bg-emerald-50"
-            title="Exemplo: ROUNDUP ORIGINAL (MAPA 01119, NCM 38089329)"
+            title="Exemplo: ROUNDUP ORIGINAL (MAPA 01119, 20 L)"
           >
             <Sparkles className="w-3.5 h-3.5 mr-1 text-emerald-700" />
             Roundup Original
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => handleCarregarExemplo('standak')}
+            className="text-xs h-8 text-[#1B5E20] border-emerald-300 hover:bg-emerald-50"
+            title="Exemplo: STANDAK TOP (MAPA 001209, 4x5L)"
+          >
+            <Sparkles className="w-3.5 h-3.5 mr-1 text-[#F57F17]" />
+            Standak Top
           </Button>
           <Button
             variant="ghost"
@@ -617,134 +661,43 @@ export function Validar() {
       </div>
 
       {/* ------------------------------------------------------------------ */}
-      {/* GRID PRINCIPAL: FORMULÁRIO (5 COLUNAS) vs RESULTADO (7 COLUNAS) */}
+      {/* GRID PRINCIPAL: FORMULÁRIO (5 COLUNAS) vs RESOLUÇÃO & VALIDAÇÃO (7 COLUNAS) */}
       {/* ------------------------------------------------------------------ */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-        {/* COLUNA ESQUERDA: FORMULÁRIO COM EXATOS 5 CAMPOS */}
+        {/* COLUNA ESQUERDA: FORMULÁRIO DE CONSULTA (4 CAMPOS FUNDAMENTAIS) */}
         <div className="lg:col-span-5">
           <Card className="rounded-2xl border-[#DCE5DC] bg-white shadow-sm sticky top-6">
             <CardHeader className="pb-3">
               <div className="flex items-center justify-between">
                 <CardTitle className="text-sm font-bold text-[#1C2B1C] flex items-center gap-1.5">
-                  <Package className="w-4 h-4 text-[#1B5E20]" />
-                  <span>
-                    {modo === 'novo' ? 'Dados do Novo Produto' : 'Auditar Cadastro Existente'}
-                  </span>
+                  <Search className="w-4 h-4 text-[#1B5E20]" />
+                  <span>Passo 1: Formulário de Consulta</span>
                 </CardTitle>
                 <Badge
                   variant="outline"
-                  className={`text-[10px] font-semibold border-0 ${
-                    modo === 'novo' ? 'bg-blue-50 text-blue-700' : 'bg-purple-50 text-purple-700'
-                  }`}
+                  className="text-[10px] font-semibold border-emerald-200 bg-emerald-50 text-emerald-800"
                 >
-                  {modo === 'novo' ? 'Modo: Novo Cadastro' : 'Modo: Base Mestre'}
+                  4 Campos Fundamentais
                 </Badge>
               </div>
               <CardDescription className="text-xs text-[#5A6D5A]">
-                {modo === 'novo'
-                  ? 'Informe o Nome Comercial e a Embalagem. A NCM é resolvida exclusivamente na Base Mestre (a bula não carrega NCM).'
-                  : 'Selecione ou informe um cadastro já gravado para auditar as 6 travas e conferir a classificação na Base Mestre.'}
+                Informe os 4 dados básicos do produto para disparar a busca nos registros oficiais
+                do aplicativo (Bula Oficial AGROFIT e Base Mestre).
               </CardDescription>
             </CardHeader>
             <CardContent>
-              {/* Seletor / Pesquisa no modo Validar Existente */}
-              {modo === 'existente' && (
-                <div className="mb-4 p-3 rounded-xl bg-purple-50/50 border border-purple-200/60 space-y-2">
-                  <div className="flex items-center justify-between">
-                    <Label className="text-xs font-bold text-purple-900 flex items-center gap-1">
-                      <Search className="w-3.5 h-3.5 text-purple-700" />
-                      <span>Localizar na Base Mestre</span>
-                    </Label>
-                    {produtoExistenteSelecionado && (
-                      <span className="text-[10px] text-purple-700 font-medium">Vinculado</span>
-                    )}
-                  </div>
-                  <div className="flex gap-2">
-                    <Input
-                      placeholder="Buscar por marca, nome ou registro MAPA..."
-                      value={buscaExistenteTexto}
-                      onChange={(e) => setBuscaExistenteTexto(e.target.value)}
-                      onKeyDown={(e) => e.key === 'Enter' && handleBuscarBaseMestre()}
-                      className="h-8 text-xs border-purple-200 bg-white"
-                    />
-                    <Button
-                      type="button"
-                      size="sm"
-                      onClick={handleBuscarBaseMestre}
-                      disabled={buscandoExistentes}
-                      className="h-8 text-xs bg-purple-700 hover:bg-purple-800 text-white font-medium"
-                    >
-                      {buscandoExistentes ? (
-                        <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                      ) : (
-                        'Buscar'
-                      )}
-                    </Button>
-                  </div>
-                  {/* Lista de resultados encontrados */}
-                  {produtosBaseMestre.length > 0 && (
-                    <div className="mt-2 space-y-1.5 max-h-44 overflow-y-auto pr-1">
-                      {produtosBaseMestre.map((p) => (
-                        <button
-                          key={p.id}
-                          type="button"
-                          onClick={() => handleSelecionarProdutoExistente(p)}
-                          className="w-full text-left p-2 rounded-lg bg-white hover:bg-purple-100/70 border border-purple-200/80 transition-colors text-xs flex items-center justify-between"
-                        >
-                          <div>
-                            <strong className="text-[#1C2B1C] block">
-                              {p.marca_padronizada || p.nome_completo || p.nome_produto}
-                            </strong>
-                            <span className="text-[10px] text-[#5A6D5A]">
-                              NCM: {p.ncm_padrao || p.ncm || 'N/D'} | MAPA:{' '}
-                              {p.registro_mapa || 'N/D'}
-                            </span>
-                          </div>
-                          <Badge className="bg-purple-100 text-purple-800 border-0 text-[10px]">
-                            Carregar
-                          </Badge>
-                        </button>
-                      ))}
-                    </div>
-                  )}
-                  {produtoExistenteSelecionado && (
-                    <div className="p-2 bg-white rounded-lg border border-purple-200 text-xs flex items-center justify-between">
-                      <div className="truncate pr-2">
-                        <span className="text-[10px] text-purple-700 font-bold block">
-                          Cadastro Carregado:
-                        </span>
-                        <strong className="text-[#1C2B1C] truncate block">
-                          {produtoExistenteSelecionado.marca_padronizada ||
-                            produtoExistenteSelecionado.nome_produto}
-                        </strong>
-                      </div>
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => setProdutoExistenteSelecionado(null)}
-                        className="h-6 px-2 text-[10px] text-red-600 hover:bg-red-50"
-                      >
-                        Desvincular
-                      </Button>
-                    </div>
-                  )}
-                </div>
-              )}
-
-              {/* FORMULÁRIO DE VALIDAÇÃO (NCM NÃO É DIGITADA — É RESOLVIDA NA BASE MESTRE) */}
-              <form onSubmit={handleValidar} className="space-y-3.5">
-                {/* CAMPO 1: NOME DO PRODUTO (Obrigatório) */}
+              <form onSubmit={handleBuscarDadosOficiais} className="space-y-3.5">
+                {/* CAMPO 1: NOME COMERCIAL */}
                 <div className="space-y-1">
                   <div className="flex items-center justify-between">
                     <Label
                       htmlFor="nome_comercial"
                       className="text-xs font-semibold text-[#1C2B1C]"
                     >
-                      Nome do Produto *
+                      1. Nome Comercial *
                     </Label>
-                    <span className="text-[10px] text-[#1B5E20] font-medium bg-emerald-50 px-1.5 py-0.2 rounded">
-                      Identificação Comercial
+                    <span className="text-[10px] text-[#1B5E20] font-medium bg-emerald-50 px-1.5 py-0.5 rounded">
+                      Marca / Produto
                     </span>
                   </div>
                   <Input
@@ -752,45 +705,41 @@ export function Validar() {
                     required
                     value={nomeComercial}
                     onChange={(e) => setNomeComercial(e.target.value)}
-                    placeholder="Ex.: ROUNDUP WG, ROUNDUP ORIGINAL, STANDAK TOP..."
+                    placeholder="Ex.: ROUNDUP WG, STANDAK TOP, 2-4 D..."
                     className="h-9 text-xs border-[#DCE5DC] focus-visible:ring-[#1B5E20]"
                   />
                 </div>
 
-                {/* CAMPO 2: REGISTRO MAPA (Chave da Base Mestre) */}
+                {/* CAMPO 2: NCM */}
                 <div className="space-y-1">
                   <div className="flex items-center justify-between">
-                    <Label htmlFor="registro_mapa" className="text-xs font-semibold text-[#1C2B1C]">
-                      Registro MAPA *
+                    <Label htmlFor="ncm" className="text-xs font-semibold text-[#1C2B1C]">
+                      2. NCM (Nomenclatura Comum do Mercosul) *
                     </Label>
-                    <span className="text-[10px] text-[#1B5E20] font-medium bg-emerald-50 px-1.5 py-0.2 rounded">
-                      Chave Base Mestre
+                    <span className="text-[10px] text-[#5A6D5A] font-mono">
+                      8 dígitos (ex.: 3808.93.24)
                     </span>
                   </div>
                   <Input
-                    id="registro_mapa"
-                    value={registroMapa}
-                    onChange={(e) => {
-                      const val = e.target.value
-                      setRegistroMapa(val)
-                      consultarNcmMestre(val, embalagem)
-                    }}
-                    placeholder="Ex.: 002094, 01119, 008907..."
+                    id="ncm"
+                    value={ncm}
+                    onChange={(e) => setNcm(e.target.value)}
+                    placeholder="Ex.: 38089324, 38089329, 38089299..."
                     className="h-9 text-xs font-mono font-bold border-[#DCE5DC] text-[#1B5E20] focus-visible:ring-[#1B5E20]"
                   />
                   <span className="text-[10px] text-[#5A6D5A] block leading-tight">
-                    Usado para resolver a NCM tributária canônica na Base Mestre por embalagem.
+                    Confrontada com a subposição química e faixas de embalagem da TIPI.
                   </span>
                 </div>
 
-                {/* CAMPO 3: EMBALAGEM (Quantidade + Unidade + Acondicionamento) */}
+                {/* CAMPO 3: QUANTIDADE DA EMBALAGEM */}
                 <div className="space-y-1">
                   <div className="flex items-center justify-between">
                     <Label htmlFor="embalagem" className="text-xs font-semibold text-[#1C2B1C]">
-                      Embalagem Comercial (Qtd + Unidade + Acondicionamento) *
+                      3. Quantidade da Embalagem *
                     </Label>
                     <span className="text-[10px] text-[#5A6D5A] font-mono">
-                      ex: 4x5L, 20KG saco
+                      ex.: 20KG, 4x5L, 20 L
                     </span>
                   </div>
                   <Input
@@ -799,22 +748,23 @@ export function Validar() {
                     onChange={(e) => {
                       const val = e.target.value
                       setEmbalagem(val)
-                      consultarNcmMestre(registroMapa, val)
+                      atualizarResolucaoNcmMestre(codigoMapa, val)
                     }}
-                    placeholder="Ex.: 4x5L, 20KG saco, Bombona 20 L, 12X1L..."
+                    placeholder="Ex.: 20KG, 4x5L, Bombona 20 L, Frasco 1 L..."
                     className="h-9 text-xs border-[#DCE5DC] focus-visible:ring-[#1B5E20]"
                   />
+                  {/* Atalhos rápidos de embalagem */}
                   <div className="flex items-center justify-between text-[10px] text-[#5A6D5A] pt-0.5">
-                    <span>Atalhos canônicos:</span>
+                    <span>Atalhos:</span>
                     <div className="flex gap-1 flex-wrap">
-                      {['4x5L', '20KG saco', '20 L Bombona', 'Frasco 1 L', 'Tambor 200 L'].map(
+                      {['20KG', '4x5L', '20 L Bombona', '1 L Frasco', 'Tambor 200 L'].map(
                         (item) => (
                           <button
                             key={item}
                             type="button"
                             onClick={() => {
                               setEmbalagem(item)
-                              consultarNcmMestre(registroMapa, item)
+                              atualizarResolucaoNcmMestre(codigoMapa, item)
                             }}
                             className="px-1.5 py-0.5 rounded text-[10px] font-semibold bg-emerald-50 text-[#1B5E20] hover:bg-emerald-100 transition-colors border border-emerald-200/60"
                           >
@@ -826,108 +776,119 @@ export function Validar() {
                   </div>
                 </div>
 
-                {/* PREVIEW DA NCM RESOLVIDA DA BASE MESTRE */}
-                <div className="p-3 rounded-xl bg-[#FAFBF8] border border-[#DCE5DC] space-y-1">
+                {/* CAMPO 4: CÓDIGO MAPA */}
+                <div className="space-y-1">
                   <div className="flex items-center justify-between">
-                    <span className="text-[11px] font-semibold text-[#1C2B1C] flex items-center gap-1">
-                      <Database className="w-3.5 h-3.5 text-[#1B5E20]" />
-                      <span>NCM Resolvida na Base Mestre</span>
+                    <Label htmlFor="codigo_mapa" className="text-xs font-semibold text-[#1C2B1C]">
+                      4. Código MAPA (Registro Oficial) *
+                    </Label>
+                    <span className="text-[10px] text-[#1B5E20] font-medium bg-emerald-50 px-1.5 py-0.5 rounded">
+                      Chave Oficial MAPA
                     </span>
-                    {buscandoNcmMestre && (
-                      <Loader2 className="w-3 h-3 animate-spin text-[#1B5E20]" />
-                    )}
                   </div>
-                  {ncmResolvidaMestre ? (
-                    <div className="flex items-center justify-between pt-1">
-                      <div className="flex items-center gap-2">
-                        <Badge className="bg-emerald-700 text-white font-mono text-xs font-bold px-2.5 py-0.5 shadow-sm">
-                          {ncmResolvidaMestre.ncmEspecifica}
-                        </Badge>
-                        <span className="text-[11px] text-[#5A6D5A]">
-                          {ncmResolvidaMestre.quantidade} {ncmResolvidaMestre.unidade} (
-                          {ncmResolvidaMestre.acondicionamento})
-                        </span>
+                  <Input
+                    id="codigo_mapa"
+                    value={codigoMapa}
+                    onChange={(e) => {
+                      const val = e.target.value
+                      setCodigoMapa(val)
+                      atualizarResolucaoNcmMestre(val, embalagem)
+                    }}
+                    placeholder="Ex.: 002094, 01119, 001209, 0315..."
+                    className="h-9 text-xs font-mono font-bold border-[#DCE5DC] text-[#1B5E20] focus-visible:ring-[#1B5E20]"
+                  />
+                  <span className="text-[10px] text-[#5A6D5A] block leading-tight">
+                    Preserva o número oficial de registro do defensivo no Ministério da Agricultura.
+                  </span>
+                </div>
+
+                {/* BOTÃO PRINCIPAL DE BUSCA EM DADOS OFICIAIS */}
+                <div className="pt-1">
+                  <Button
+                    type="submit"
+                    disabled={buscandoOficiais}
+                    className="w-full h-11 bg-[#1B5E20] hover:bg-[#2E7D32] text-white font-semibold rounded-xl flex items-center justify-center gap-2 shadow-md transition-all active:scale-[0.98]"
+                  >
+                    {buscandoOficiais ? (
+                      <>
+                        <Loader2 className="w-4 h-4 animate-spin" />
+                        <span>Buscando na Bula e Base Mestre...</span>
+                      </>
+                    ) : (
+                      <>
+                        <Search className="w-4 h-4" />
+                        <span>Buscar em Dados Oficiais</span>
+                      </>
+                    )}
+                  </Button>
+                </div>
+
+                {/* CAMPOS EXTRAS OPCIONAIS (COLAPSADOS) */}
+                <div className="pt-2 border-t border-[#DCE5DC]">
+                  <button
+                    type="button"
+                    onClick={() => setExibirCamposOpcionais(!exibirCamposOpcionais)}
+                    className="flex items-center justify-between w-full text-xs font-semibold text-[#5A6D5A] hover:text-[#1C2B1C] py-1"
+                  >
+                    <span className="flex items-center gap-1.5">
+                      <Info className="w-3.5 h-3.5 text-[#1B5E20]" />
+                      <span>Campos Complementares (Opcionais)</span>
+                    </span>
+                    {exibirCamposOpcionais ? (
+                      <ChevronUp className="w-4 h-4" />
+                    ) : (
+                      <ChevronDown className="w-4 h-4" />
+                    )}
+                  </button>
+
+                  {exibirCamposOpcionais && (
+                    <div className="mt-2.5 space-y-2.5 p-3 rounded-xl bg-[#FAFBF8] border border-[#DCE5DC] animate-in fade-in">
+                      <div className="space-y-1">
+                        <Label
+                          htmlFor="fabricante_opcional"
+                          className="text-xs font-semibold text-[#1C2B1C]"
+                        >
+                          Fabricante Declarado
+                        </Label>
+                        <Input
+                          id="fabricante_opcional"
+                          value={fabricanteOpcional}
+                          onChange={(e) => setFabricanteOpcional(e.target.value)}
+                          placeholder="Ex.: BAYER S/A, BASF, MONSANTO..."
+                          className="h-8 text-xs border-[#DCE5DC]"
+                        />
                       </div>
-                      <Badge
-                        variant="outline"
-                        className="text-[10px] text-emerald-800 border-emerald-300 bg-emerald-50"
-                      >
-                        Base Mestre
-                      </Badge>
+                      <div className="space-y-1">
+                        <Label
+                          htmlFor="concentracao_opcional"
+                          className="text-xs font-semibold text-[#1C2B1C]"
+                        >
+                          Concentração (g/L ou g/kg)
+                        </Label>
+                        <Input
+                          id="concentracao_opcional"
+                          value={concentracaoOpcional}
+                          onChange={(e) => setConcentracaoOpcional(e.target.value)}
+                          placeholder="Ex.: 480, 720, 250..."
+                          className="h-8 text-xs border-[#DCE5DC]"
+                        />
+                      </div>
+                      <p className="text-[10px] text-[#5A6D5A] italic">
+                        * O Princípio Ativo, Fabricante Oficial e NCM são resolvidos automaticamente
+                        a partir da Bula e da Base Mestre.
+                      </p>
                     </div>
-                  ) : registroMapa.trim() ? (
-                    <p className="text-[11px] text-amber-800 italic pt-0.5">
-                      Produto sem classificação tributária na Base Mestre para esta embalagem.
-                    </p>
-                  ) : (
-                    <p className="text-[11px] text-[#5A6D5A] italic pt-0.5">
-                      A classificação tributária vem da Base Mestre por embalagem (a bula não
-                      carrega NCM).
-                    </p>
                   )}
                 </div>
 
-                {/* CAMPO 4: PRINCÍPIO ATIVO */}
-                <div className="space-y-1">
-                  <div className="flex items-center justify-between">
-                    <Label
-                      htmlFor="principio_ativo"
-                      className="text-xs font-semibold text-[#1C2B1C]"
-                    >
-                      Princípio Ativo
-                    </Label>
-                    <span className="text-[10px] text-[#5A6D5A] italic">Opcional</span>
-                  </div>
-                  <Input
-                    id="principio_ativo"
-                    value={principioAtivo}
-                    onChange={(e) => setPrincipioAtivo(e.target.value)}
-                    placeholder="Ex.: Glifosato, Fipronil, Bifentrina..."
-                    className="h-9 text-xs border-[#DCE5DC] focus-visible:ring-[#1B5E20]"
-                  />
-                </div>
-
-                {/* GRID: FABRICANTE E CONCENTRAÇÃO */}
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
-                  {/* CAMPO 5: FABRICANTE */}
-                  <div className="space-y-1">
-                    <Label htmlFor="fabricante" className="text-xs font-semibold text-[#1C2B1C]">
-                      Fabricante / Titular
-                    </Label>
-                    <Input
-                      id="fabricante"
-                      value={fabricante}
-                      onChange={(e) => setFabricante(e.target.value)}
-                      placeholder="Ex.: BAYER S/A, BASF..."
-                      className="h-9 text-xs border-[#DCE5DC] focus-visible:ring-[#1B5E20]"
-                    />
-                  </div>
-
-                  {/* CAMPO 6: CONCENTRAÇÃO */}
-                  <div className="space-y-1">
-                    <Label htmlFor="concentracao" className="text-xs font-semibold text-[#1C2B1C]">
-                      Concentração (g/L ou g/kg)
-                    </Label>
-                    <Input
-                      id="concentracao"
-                      value={concentracao}
-                      onChange={(e) => setConcentracao(e.target.value)}
-                      placeholder="Ex.: 480, 720, 250..."
-                      className="h-9 text-xs border-[#DCE5DC] focus-visible:ring-[#1B5E20]"
-                    />
-                  </div>
-                </div>
-
-                {/* Toggle de Auto-Cadastrar / Atualizar na Base Mestre (Somente Admin) */}
+                {/* Auto-cadastrar na Base Mestre (apenas Admin) */}
                 <div className="pt-2 border-t border-[#DCE5DC]">
                   <div className="flex items-center justify-between p-3 rounded-xl bg-emerald-50/50 border border-emerald-200/60">
                     <div className="space-y-0.5 pr-2">
                       <div className="flex items-center gap-1.5">
                         <Database className="w-3.5 h-3.5 text-[#1B5E20]" />
                         <span className="text-xs font-bold text-[#1C2B1C]">
-                          {modo === 'novo'
-                            ? 'Gravar na Base Mestre se Aprovado'
-                            : 'Atualizar Base Mestre se Aprovado'}
+                          Gravar na Base Mestre ao Validar
                         </span>
                         {!isAdmin && (
                           <Badge
@@ -940,10 +901,8 @@ export function Validar() {
                       </div>
                       <p className="text-[11px] text-[#5A6D5A] leading-tight">
                         {isAdmin
-                          ? modo === 'novo'
-                            ? 'Insere automaticamente o produto no Padrão Canônico de 28 Campos.'
-                            : 'Sincroniza os dados do cadastro existente com o que foi achado na bula.'
-                          : 'Analistas executam validação e consulta em modo somente leitura (sem gravação na base).'}
+                          ? 'Insere automaticamente o produto no Padrão Canônico se for aprovado sem duplicidade.'
+                          : 'Modo auditoria: somente leitura para perfil analista.'}
                       </p>
                     </div>
                     <Switch
@@ -954,60 +913,14 @@ export function Validar() {
                     />
                   </div>
                 </div>
-
-                {/* BOTÕES DE AÇÃO DO FORMULÁRIO */}
-                <div className="pt-1">
-                  <Button
-                    type="submit"
-                    disabled={loading}
-                    className="w-full h-11 bg-[#1B5E20] hover:bg-[#2E7D32] text-white font-semibold rounded-xl flex items-center justify-center gap-2 shadow-md transition-all active:scale-[0.98]"
-                  >
-                    {loading ? (
-                      <>
-                        <Loader2 className="w-4 h-4 animate-spin" />
-                        <span>Buscando Bula Oficial no AGROFIT...</span>
-                      </>
-                    ) : (
-                      <>
-                        <ShieldCheck className="w-4 h-4" />
-                        <span>
-                          {modo === 'novo' ? 'Validar Produto' : 'Validar Cadastro Existente'}
-                        </span>
-                      </>
-                    )}
-                  </Button>
-                </div>
               </form>
-
-              {/* Barra de Progresso Dinâmico das Etapas */}
-              {loading && (
-                <div className="mt-3 p-3 rounded-xl bg-emerald-50 border border-emerald-200 animate-in fade-in duration-300">
-                  <div className="flex items-center gap-2 text-xs font-semibold text-[#1B5E20]">
-                    <Loader2 className="w-4 h-4 animate-spin text-[#1B5E20]" />
-                    <span>{ETAPAS_PROGRESSO[progressoIndice].texto}</span>
-                  </div>
-                  <div className="w-full bg-emerald-200/50 h-1.5 rounded-full mt-2 overflow-hidden">
-                    <div
-                      className="bg-[#1B5E20] h-full transition-all duration-500 rounded-full"
-                      style={{
-                        width: `${((progressoIndice + 1) / ETAPAS_PROGRESSO.length) * 100}%`,
-                      }}
-                    />
-                  </div>
-                  <span className="text-[10px] text-[#5A6D5A] block mt-1 text-right">
-                    Etapa {progressoIndice + 1} de {ETAPAS_PROGRESSO.length}
-                  </span>
-                </div>
-              )}
             </CardContent>
           </Card>
         </div>
 
-        {/* ------------------------------------------------------------------ */}
-        {/* COLUNA DIREITA: PAINEL DE VALIDAÇÃO (7 COLUNAS) */}
-        {/* ------------------------------------------------------------------ */}
+        {/* COLUNA DIREITA: RESOLUÇÃO DO REGISTRO OFICIAL + VALIDAÇÃO DAS TRAVAS */}
         <div className="lg:col-span-7 space-y-4">
-          {/* Mensagem de Erro de Conexão/Backend em Destaque */}
+          {/* Mensagem de Erro */}
           {erroValidacao && (
             <div className="p-4 rounded-2xl border border-red-300 bg-red-50/90 text-xs shadow-sm animate-in fade-in duration-300">
               <div className="flex items-start gap-3">
@@ -1015,51 +928,33 @@ export function Validar() {
                   <XCircle className="w-5 h-5" />
                 </div>
                 <div className="flex-1 min-w-0">
-                  <div className="flex items-center justify-between">
-                    <strong className="text-sm font-bold text-red-950">
-                      Falha ao Realizar Consulta
-                    </strong>
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => setErroValidacao(null)}
-                      className="h-6 px-2 text-[10px] text-red-700 hover:bg-red-100"
-                    >
-                      Fechar
-                    </Button>
-                  </div>
+                  <strong className="text-sm font-bold text-red-950 block">
+                    Falha na Operação
+                  </strong>
                   <p className="text-red-900 mt-1 leading-relaxed">{erroValidacao}</p>
-                  <div className="mt-3 flex items-center gap-2">
-                    <Button
-                      type="button"
-                      size="sm"
-                      onClick={(e) => handleValidar(e)}
-                      className="h-7 text-xs bg-red-700 hover:bg-red-800 text-white font-medium rounded-lg"
-                    >
-                      <RefreshCw className="w-3 h-3 mr-1" />
-                      Tentar Novamente
-                    </Button>
-                    <span className="text-[11px] text-red-700">
-                      O botão "Validar" foi reabilitado e seus dados preenchidos foram preservados.
-                    </span>
-                  </div>
                 </div>
               </div>
             </div>
           )}
 
-          {!resultado ? (
-            <div className="bg-white rounded-2xl border border-dashed border-[#DCE5DC] p-12 text-center flex flex-col items-center justify-center min-h-[460px]">
+          {/* ---------------------------------------------------------------- */}
+          {/* ETAPA 1: SE AINDA NÃO FEZ BUSCA OFICIAL */}
+          {/* ---------------------------------------------------------------- */}
+          {!buscaOficialRealizada && !produtoOficialConfirmado && (
+            <div className="bg-white rounded-2xl border border-dashed border-[#DCE5DC] p-10 text-center flex flex-col items-center justify-center min-h-[460px]">
               <div className="w-14 h-14 rounded-2xl bg-emerald-50 text-[#1B5E20] flex items-center justify-center mb-3">
-                <FileText className="w-7 h-7" />
+                <Search className="w-7 h-7" />
               </div>
-              <h3 className="font-bold text-base text-[#1C2B1C]">Aguardando Validação</h3>
-              <p className="text-xs text-[#5A6D5A] max-w-sm mt-1">
-                Preencha o Nome Comercial e NCM ao lado. O sistema localizará a bula oficial no
-                AGROFIT, validará campo a campo e detalhará a NCM por faixa de embalagem.
+              <h3 className="font-bold text-base text-[#1C2B1C]">
+                Pronto para Consultar Dados Oficiais
+              </h3>
+              <p className="text-xs text-[#5A6D5A] max-w-md mt-1 leading-relaxed">
+                Preencha os 4 campos fundamentais ao lado (Nome Comercial, NCM, Embalagem e Código
+                MAPA) e clique em <strong>"Buscar em Dados Oficiais"</strong>. O sistema
+                identificará a bula correspondente, resolverá o Princípio Ativo e apresentará a
+                origem de cada informação antes de disparar a validação das 6 travas.
               </p>
-              <div className="mt-4 flex gap-2">
+              <div className="mt-4 flex gap-2 flex-wrap justify-center">
                 <Button
                   variant="outline"
                   size="sm"
@@ -1067,7 +962,7 @@ export function Validar() {
                   className="text-xs h-8 text-[#1B5E20] border-emerald-300"
                 >
                   <Sparkles className="w-3.5 h-3.5 mr-1 text-[#F57F17]" />
-                  Carregar Exemplo Roundup WG
+                  Exemplo Roundup WG
                 </Button>
                 <Button
                   variant="outline"
@@ -1080,11 +975,261 @@ export function Validar() {
                 </Button>
               </div>
             </div>
-          ) : (
-            <>
-              {/* ------------------------------------------------------------------ */}
-              {/* 1. CARD DE VEREDITO GERAL COM BADGE COLORIDA */}
-              {/* ------------------------------------------------------------------ */}
+          )}
+
+          {/* ---------------------------------------------------------------- */}
+          {/* ETAPA 2: REGISTRO OFICIAL RESOLVIDO (ORIGEM DE CADA DADO) */}
+          {/* ---------------------------------------------------------------- */}
+          {buscaOficialRealizada && (
+            <Card className="rounded-2xl border-emerald-300 bg-white shadow-sm overflow-hidden">
+              <CardHeader className="pb-3 bg-gradient-to-r from-emerald-50/80 to-white border-b border-emerald-100">
+                <div className="flex items-center justify-between flex-wrap gap-2">
+                  <div className="flex items-center gap-2">
+                    <ShieldCheck className="w-5 h-5 text-[#1B5E20]" />
+                    <div>
+                      <CardTitle className="text-sm font-bold text-[#1C2B1C]">
+                        Passo 2 & 3: Registro Oficial Identificado & Princípio Ativo
+                      </CardTitle>
+                      <CardDescription className="text-xs text-[#5A6D5A]">
+                        Rastreabilidade de onde veio cada dado oficial do produto
+                      </CardDescription>
+                    </div>
+                  </div>
+                  {produtoOficialConfirmado && (
+                    <Badge className="bg-emerald-700 text-white font-semibold text-xs px-2.5 py-0.5">
+                      {produtoOficialConfirmado.origemRotulo}
+                    </Badge>
+                  )}
+                </div>
+              </CardHeader>
+              <CardContent className="p-4 space-y-4">
+                {produtoOficialConfirmado ? (
+                  <>
+                    {/* CARD PRINCIPAL DO REGISTRO IDENTIFICADO */}
+                    <div className="p-4 rounded-xl bg-[#FAFBF8] border border-[#DCE5DC] space-y-3">
+                      <div className="flex items-start justify-between gap-3 flex-wrap">
+                        <div>
+                          <span className="text-[10px] font-bold uppercase tracking-wider text-[#5A6D5A]">
+                            Produto Identificado Oficialmente
+                          </span>
+                          <h3 className="text-base font-bold text-[#1C2B1C] mt-0.5">
+                            {produtoOficialConfirmado.nomeComercial}
+                          </h3>
+                          <p className="text-xs text-[#5A6D5A] mt-0.5">
+                            {produtoOficialConfirmado.motivoCorrespondencia}
+                          </p>
+                        </div>
+                        <Badge
+                          variant="outline"
+                          className="bg-emerald-50 text-[#1B5E20] border-emerald-300 text-xs font-mono font-bold"
+                        >
+                          Correspondência: {produtoOficialConfirmado.scoreCorrespondencia}%
+                        </Badge>
+                      </div>
+
+                      {/* MATRIZ DE ORIGEM DOS DADOS (PRINCÍPIO ATIVO, REGISTRO MAPA, NCM, FABRICANTE) */}
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 pt-2 border-t border-[#DCE5DC]">
+                        {/* PRINCÍPIO ATIVO */}
+                        <div className="p-2.5 rounded-lg bg-white border border-[#DCE5DC] space-y-1">
+                          <div className="flex items-center justify-between">
+                            <span className="text-[10px] font-bold text-[#5A6D5A] uppercase tracking-wider">
+                              Princípio Ativo Resolvido
+                            </span>
+                            <Badge className="text-[9px] bg-emerald-100 text-emerald-900 border-0">
+                              {produtoOficialConfirmado.principioAtivoFonte}
+                            </Badge>
+                          </div>
+                          <strong className="text-xs text-[#1C2B1C] block font-mono">
+                            {produtoOficialConfirmado.principioAtivo}
+                          </strong>
+                        </div>
+
+                        {/* REGISTRO MAPA */}
+                        <div className="p-2.5 rounded-lg bg-white border border-[#DCE5DC] space-y-1">
+                          <div className="flex items-center justify-between">
+                            <span className="text-[10px] font-bold text-[#5A6D5A] uppercase tracking-wider">
+                              Registro MAPA Oficial
+                            </span>
+                            <Badge className="text-[9px] bg-emerald-100 text-emerald-900 border-0">
+                              Bula / MAPA
+                            </Badge>
+                          </div>
+                          <strong className="text-xs text-[#1B5E20] block font-mono">
+                            {produtoOficialConfirmado.registroMapa || codigoMapa || 'Não informado'}
+                          </strong>
+                        </div>
+
+                        {/* NCM RESOLVIDA */}
+                        <div className="p-2.5 rounded-lg bg-white border border-[#DCE5DC] space-y-1">
+                          <div className="flex items-center justify-between">
+                            <span className="text-[10px] font-bold text-[#5A6D5A] uppercase tracking-wider">
+                              NCM Aplicável
+                            </span>
+                            <Badge className="text-[9px] bg-emerald-100 text-emerald-900 border-0">
+                              {ncmResolvidaMestre
+                                ? 'Base Mestre por Embalagem'
+                                : produtoOficialConfirmado.ncmFonte}
+                            </Badge>
+                          </div>
+                          <strong className="text-xs text-[#1C2B1C] block font-mono">
+                            {ncmResolvidaMestre?.ncmEspecifica ||
+                              produtoOficialConfirmado.ncmOficial ||
+                              ncm ||
+                              'A definir pela faixa TIPI'}
+                          </strong>
+                        </div>
+
+                        {/* FABRICANTE / TITULAR */}
+                        <div className="p-2.5 rounded-lg bg-white border border-[#DCE5DC] space-y-1">
+                          <div className="flex items-center justify-between">
+                            <span className="text-[10px] font-bold text-[#5A6D5A] uppercase tracking-wider">
+                              Fabricante / Titular
+                            </span>
+                            <Badge className="text-[9px] bg-emerald-100 text-emerald-900 border-0">
+                              {produtoOficialConfirmado.fabricanteFonte}
+                            </Badge>
+                          </div>
+                          <strong className="text-xs text-[#1C2B1C] block truncate">
+                            {produtoOficialConfirmado.fabricante}
+                          </strong>
+                        </div>
+                      </div>
+
+                      {/* BOTÃO PARA DISPARAR A VALIDAÇÃO FINAL */}
+                      <div className="pt-2">
+                        <Button
+                          type="button"
+                          onClick={handleExecutarValidacao}
+                          disabled={validando}
+                          className="w-full h-11 bg-[#1B5E20] hover:bg-[#2E7D32] text-white font-bold rounded-xl flex items-center justify-center gap-2 shadow-md transition-all"
+                        >
+                          {validando ? (
+                            <>
+                              <Loader2 className="w-4 h-4 animate-spin" />
+                              <span>Executando Auditoria das 6 Travas...</span>
+                            </>
+                          ) : (
+                            <>
+                              <ShieldCheck className="w-4 h-4" />
+                              <span>
+                                Confirmar Produto e Validar Cadastro (6 Travas & Tributação)
+                              </span>
+                            </>
+                          )}
+                        </Button>
+                      </div>
+                    </div>
+
+                    {/* SE HOUVER OUTROS CANDIDATOS PRÓXIMOS, PERMITE CONFIRMAR OUTRO */}
+                    {candidatosOficiais.length > 0 && (
+                      <div className="space-y-2 pt-2">
+                        <span className="text-xs font-bold text-[#1C2B1C] flex items-center gap-1.5">
+                          <Package className="w-3.5 h-3.5 text-[#1B5E20]" />
+                          <span>
+                            Outros Registros Oficiais Candidatos (Mesmo Nome / MAPA / NCM):
+                          </span>
+                        </span>
+                        <div className="grid grid-cols-1 gap-2 max-h-48 overflow-y-auto pr-1">
+                          {candidatosOficiais.map((cand) => (
+                            <div
+                              key={cand.id}
+                              className="p-2.5 rounded-lg bg-white border border-[#DCE5DC] hover:border-emerald-400 transition-colors flex items-center justify-between gap-3 text-xs"
+                            >
+                              <div className="min-w-0 flex-1">
+                                <div className="flex items-center gap-2">
+                                  <strong className="text-[#1C2B1C] truncate font-bold">
+                                    {cand.nomeComercial}
+                                  </strong>
+                                  <Badge variant="outline" className="text-[9px] text-[#5A6D5A]">
+                                    {cand.origemRotulo}
+                                  </Badge>
+                                </div>
+                                <div className="text-[11px] text-[#5A6D5A] mt-0.5 flex items-center gap-3 flex-wrap">
+                                  <span>
+                                    <strong>P.A.:</strong> {cand.principioAtivo}
+                                  </span>
+                                  <span>
+                                    <strong>MAPA:</strong> {cand.registroMapa || 'N/D'}
+                                  </span>
+                                  {cand.ncmOficial && (
+                                    <span>
+                                      <strong>NCM:</strong> {cand.ncmOficial}
+                                    </span>
+                                  )}
+                                </div>
+                              </div>
+                              <Button
+                                type="button"
+                                size="sm"
+                                variant="outline"
+                                onClick={() => handleSelecionarCandidato(cand)}
+                                className="h-7 text-xs border-emerald-300 text-[#1B5E20] hover:bg-emerald-50 shrink-0"
+                              >
+                                Selecionar Este
+                              </Button>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </>
+                ) : (
+                  <div className="p-4 rounded-xl bg-amber-50 border border-amber-200 text-xs text-amber-900 space-y-3">
+                    <div className="flex items-center gap-2 font-bold">
+                      <AlertTriangle className="w-4 h-4 text-amber-700" />
+                      <span>Nenhum registro oficial correspondente encontrado no aplicativo</span>
+                    </div>
+                    <p className="leading-relaxed">
+                      Não encontramos bulas oficiais nem registros na Base Mestre com os termos
+                      informados. Você pode tentar ajustar o Código MAPA ou o Nome Comercial, ou
+                      disparar a validação com os dados informados.
+                    </p>
+                    <Button
+                      type="button"
+                      onClick={handleExecutarValidacao}
+                      disabled={validando}
+                      className="bg-amber-700 hover:bg-amber-800 text-white font-semibold text-xs h-9 rounded-lg"
+                    >
+                      {validando ? (
+                        <Loader2 className="w-3.5 h-3.5 animate-spin mr-1.5" />
+                      ) : (
+                        <ShieldCheck className="w-3.5 h-3.5 mr-1.5" />
+                      )}
+                      Validar com Dados Informados
+                    </Button>
+                  </div>
+                )}
+
+                {/* Barra de Progresso das Etapas da Validação */}
+                {validando && (
+                  <div className="p-3 rounded-xl bg-emerald-50 border border-emerald-200 animate-in fade-in duration-300">
+                    <div className="flex items-center gap-2 text-xs font-semibold text-[#1B5E20]">
+                      <Loader2 className="w-4 h-4 animate-spin text-[#1B5E20]" />
+                      <span>{ETAPAS_PROGRESSO[progressoIndice].texto}</span>
+                    </div>
+                    <div className="w-full bg-emerald-200/50 h-1.5 rounded-full mt-2 overflow-hidden">
+                      <div
+                        className="bg-[#1B5E20] h-full transition-all duration-500 rounded-full"
+                        style={{
+                          width: `${((progressoIndice + 1) / ETAPAS_PROGRESSO.length) * 100}%`,
+                        }}
+                      />
+                    </div>
+                    <span className="text-[10px] text-[#5A6D5A] block mt-1 text-right">
+                      Etapa {progressoIndice + 1} de {ETAPAS_PROGRESSO.length}
+                    </span>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          )}
+
+          {/* ---------------------------------------------------------------- */}
+          {/* ETAPA 3: PARECER DA VALIDAÇÃO DO CADASTRO (TRAVAS + FUNDAMENTAÇÃO) */}
+          {/* ---------------------------------------------------------------- */}
+          {resultado && (
+            <div className="space-y-4 animate-in fade-in duration-300">
+              {/* CARD DE VEREDITO GERAL */}
               <Card
                 className={`rounded-2xl border transition-all duration-300 shadow-md ${
                   resultado.veredito_geral === 'APROVADO'
@@ -1094,11 +1239,11 @@ export function Validar() {
                       : 'border-red-300 bg-gradient-to-br from-red-50/80 to-white'
                 }`}
               >
-                <CardContent className="p-6">
+                <CardContent className="p-5">
                   <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
                     <div className="flex items-center gap-3">
                       <div
-                        className={`w-14 h-14 rounded-2xl flex items-center justify-center text-white shadow-md ${
+                        className={`w-12 h-12 rounded-2xl flex items-center justify-center text-white shadow-md ${
                           resultado.veredito_geral === 'APROVADO'
                             ? 'bg-[#2E7D32]'
                             : resultado.veredito_geral === 'APROVADO COM RESSALVAS'
@@ -1107,11 +1252,11 @@ export function Validar() {
                         }`}
                       >
                         {resultado.veredito_geral === 'APROVADO' ? (
-                          <CheckCircle2 className="w-8 h-8" />
+                          <CheckCircle2 className="w-7 h-7" />
                         ) : resultado.veredito_geral === 'APROVADO COM RESSALVAS' ? (
-                          <AlertTriangle className="w-8 h-8" />
+                          <AlertTriangle className="w-7 h-7" />
                         ) : (
-                          <XCircle className="w-8 h-8" />
+                          <XCircle className="w-7 h-7" />
                         )}
                       </div>
                       <div>
@@ -1131,14 +1276,14 @@ export function Validar() {
                             {resultado.veredito_geral}
                           </Badge>
                         </div>
-                        <h3 className="text-xl font-bold text-[#1C2B1C] mt-0.5">
+                        <h3 className="text-lg font-bold text-[#1C2B1C] mt-0.5">
                           Conformidade Cadastral: {resultado.score}%
                         </h3>
                         <p className="text-xs text-[#5A6D5A]">{resultado.veredito_motivo}</p>
                       </div>
                     </div>
 
-                    {/* Botões de Ação: Exportar Parecer (CSV/JSON) e Gravar */}
+                    {/* Botões de Ação: Exportar e Gravar */}
                     <div className="flex items-center gap-2 flex-wrap">
                       <Button
                         type="button"
@@ -1149,7 +1294,7 @@ export function Validar() {
                         title="Exportar Parecer Unificado em planilha CSV"
                       >
                         <FileSpreadsheet className="w-3.5 h-3.5 mr-1 text-[#1B5E20]" />
-                        <span>Exportar CSV</span>
+                        <span>CSV</span>
                       </Button>
                       <Button
                         type="button"
@@ -1160,12 +1305,12 @@ export function Validar() {
                         title="Exportar Estrutura Técnica em JSON"
                       >
                         <FileCode className="w-3.5 h-3.5 mr-1 text-[#1B5E20]" />
-                        <span>Exportar JSON</span>
+                        <span>JSON</span>
                       </Button>
 
-                      {/* Ação de Gravar / Salvar na Base Mestre (Apenas Admin) */}
+                      {/* Gravar na Base Mestre */}
                       {resultado.veredito_geral !== 'REPROVADO' && (
-                        <div className="flex-shrink-0">
+                        <div className="shrink-0">
                           {salvoComSucesso || resultado.gravacao_base_mestre?.executada ? (
                             <Badge className="bg-emerald-700 text-white px-3 py-2 text-xs flex items-center gap-1.5 shadow-sm">
                               <Check className="w-4 h-4" />
@@ -1182,11 +1327,7 @@ export function Validar() {
                               ) : (
                                 <Save className="w-4 h-4" />
                               )}
-                              <span>
-                                {modo === 'existente'
-                                  ? 'Atualizar na Base Mestre'
-                                  : 'Gravar na Base Mestre'}
-                              </span>
+                              <span>Gravar na Base Mestre</span>
                             </Button>
                           ) : (
                             <Badge
@@ -1200,39 +1341,85 @@ export function Validar() {
                       )}
                     </div>
                   </div>
-
-                  {/* Resumo Bula Extraída */}
-                  {resultado.bula_extraida && (
-                    <div className="mt-4 pt-3 border-t border-[#DCE5DC]/80 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-[#5A6D5A]">
-                      <span className="flex items-center gap-1">
-                        <Building className="w-3.5 h-3.5 text-[#1B5E20]" />
-                        <span>Fabricante Oficial:</span>
-                        <strong className="text-[#1C2B1C]">
-                          {resultado.bula_extraida.fabricante || 'Localizado'}
-                        </strong>
-                      </span>
-                      <span className="flex items-center gap-1">
-                        <FileText className="w-3.5 h-3.5 text-[#1B5E20]" />
-                        <span>Registro MAPA:</span>
-                        <strong className="text-[#1C2B1C]">
-                          {resultado.bula_extraida.registro_mapa || 'N/D'}
-                        </strong>
-                      </span>
-                      <span className="flex items-center gap-1">
-                        <Package className="w-3.5 h-3.5 text-[#1B5E20]" />
-                        <span>Embalagem Recomendada:</span>
-                        <strong className="text-[#1C2B1C]">
-                          {resultado.bula_extraida.embalagem_principal || '20 L'}
-                        </strong>
-                      </span>
-                    </div>
-                  )}
                 </CardContent>
               </Card>
 
-              {/* ------------------------------------------------------------------ */}
-              {/* 2. TABELA DE VALIDAÇÃO POR CAMPO (Informado vs Bula/Base) */}
-              {/* ------------------------------------------------------------------ */}
+              {/* AS 6 TRAVAS DE AUDITORIA REGULATÓRIA */}
+              <Card className="rounded-2xl border-[#DCE5DC] bg-white shadow-sm p-4">
+                <div className="flex items-center justify-between mb-3">
+                  <div className="flex items-center gap-2">
+                    <ShieldCheck className="w-4 h-4 text-[#1B5E20]" />
+                    <h4 className="text-xs font-bold text-[#1C2B1C] uppercase tracking-wider">
+                      As 6 Travas de Auditoria Regulatória
+                    </h4>
+                  </div>
+                  <Badge variant="outline" className="text-[10px] text-[#5A6D5A]">
+                    {resultado.total_aprovadas} de {resultado.total_travas} Conformes
+                  </Badge>
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                  {resultado.travas.map((t) => (
+                    <div
+                      key={t.id_trava}
+                      className={`p-3 rounded-xl border text-xs flex items-start gap-2.5 ${
+                        t.aprovado
+                          ? 'border-emerald-200 bg-emerald-50/40'
+                          : 'border-red-200 bg-red-50/40'
+                      }`}
+                    >
+                      <div
+                        className={`w-6 h-6 rounded-lg flex items-center justify-center shrink-0 mt-0.5 text-white ${
+                          t.aprovado ? 'bg-emerald-600' : 'bg-red-600'
+                        }`}
+                      >
+                        {t.aprovado ? (
+                          <Check className="w-3.5 h-3.5" />
+                        ) : (
+                          <AlertTriangle className="w-3.5 h-3.5" />
+                        )}
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <strong className="text-[#1C2B1C] block font-bold">
+                          Trava {t.id_trava}: {t.trava_nome}
+                        </strong>
+                        <p className="text-[11px] text-[#5A6D5A] mt-0.5 leading-snug">
+                          {t.mensagem}
+                        </p>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </Card>
+
+              {/* PAINEL FUNDAMENTAÇÃO LEGAL TRIBUTÁRIA (5 TRIBUTOS) */}
+              {produtoParaFundamentacao && (
+                <Card className="rounded-2xl border-[#DCE5DC] bg-white shadow-sm p-4 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <Scale className="w-4 h-4 text-[#1B5E20]" />
+                      <div>
+                        <h4 className="text-xs font-bold text-[#1C2B1C] uppercase tracking-wider">
+                          Fundamentação Legal Tributária
+                        </h4>
+                        <p className="text-[11px] text-[#5A6D5A]">
+                          Citações normativas oficiais dos 5 tributos aplicáveis ao registro oficial
+                          encontrado
+                        </p>
+                      </div>
+                    </div>
+                    <Badge
+                      variant="outline"
+                      className="text-[10px] text-[#1B5E20] border-emerald-300 bg-emerald-50"
+                    >
+                      5 Tributos Auditados
+                    </Badge>
+                  </div>
+
+                  <PainelEnquadramentoTributario produto={produtoParaFundamentacao} />
+                </Card>
+              )}
+
+              {/* VALIDAÇÃO CRUZADA CAMPO A CAMPO */}
               <Card className="rounded-2xl border-[#DCE5DC] bg-white shadow-sm overflow-hidden">
                 <CardHeader className="pb-2 pt-4 px-4 bg-[#FAFBF8] border-b border-[#DCE5DC]">
                   <CardTitle className="text-xs font-bold text-[#1C2B1C] uppercase tracking-wider flex items-center justify-between">
@@ -1241,17 +1428,17 @@ export function Validar() {
                       <span>Validação Cruzada Campo a Campo</span>
                     </span>
                     <span className="text-[10px] text-[#5A6D5A] font-normal">
-                      Informado vs. Oficial na Bula
+                      Informado vs. Bula Oficial / Base Mestre
                     </span>
                   </CardTitle>
                 </CardHeader>
-                <ScrollableTable autoFitHeight={false} maxHeight="380px">
+                <ScrollableTable autoFitHeight={false} maxHeight="340px">
                   <table className="w-full text-xs">
                     <thead className="sticky top-0 z-20 bg-[#F5F7F1] shadow-[0_1px_0_0_#DCE5DC]">
                       <tr className="border-b border-[#DCE5DC] bg-[#F5F7F1] text-[#5A6D5A] font-semibold text-left">
                         <th className="py-2.5 px-3">Campo</th>
                         <th className="py-2.5 px-3">Informado</th>
-                        <th className="py-2.5 px-3">Encontrado na Bula / Base</th>
+                        <th className="py-2.5 px-3">Encontrado Oficial</th>
                         <th className="py-2.5 px-3">Status</th>
                         <th className="py-2.5 px-3">Análise / Explicação</th>
                       </tr>
@@ -1313,286 +1500,117 @@ export function Validar() {
                 </ScrollableTable>
               </Card>
 
-              {/* ------------------------------------------------------------------ */}
-              {/* 3. SEÇÃO NCM POR EMBALAGEM EM LINHAS DIFERENTES (Requisito Explícito) */}
-              {/* ------------------------------------------------------------------ */}
-              <Card className="rounded-2xl border-[#DCE5DC] bg-white shadow-sm overflow-hidden">
-                <CardHeader className="pb-2 pt-4 px-4 bg-[#FAFBF8] border-b border-[#DCE5DC]">
-                  <div className="flex items-center justify-between">
-                    <CardTitle className="text-xs font-bold text-[#1C2B1C] uppercase tracking-wider flex items-center gap-1.5">
-                      <Layers2 className="w-4 h-4 text-[#1B5E20]" />
-                      <span>NCM Aplicável por Faixa de Embalagem (Tabela TIPI)</span>
-                    </CardTitle>
-                    {resultado.possui_diferenca_ncm_embalagem ? (
-                      <Badge className="bg-amber-100 text-amber-900 border-amber-300 text-[10px] font-bold">
-                        Variação de NCM por Embalagem Identificada
-                      </Badge>
-                    ) : (
-                      <Badge className="bg-emerald-50 text-emerald-800 border-emerald-200 text-[10px]">
-                        NCM Homogêneo nas Faixas
-                      </Badge>
-                    )}
-                  </div>
-                  <CardDescription className="text-xs text-[#5A6D5A]">
-                    Conforme as 4 faixas da TIPI (Nota de Subposições 2 do Cap. 38 ou Nota 1 do Cap.
-                    31). Cada embalagem comercial autorizada deve adotar a NCM da sua respectiva
-                    faixa.
-                  </CardDescription>
-                </CardHeader>
-                <ScrollableTable autoFitHeight={false} maxHeight="320px">
-                  <table className="w-full text-xs">
-                    <thead className="sticky top-0 z-20 bg-[#F5F7F1] shadow-[0_1px_0_0_#DCE5DC]">
-                      <tr className="border-b border-[#DCE5DC] bg-[#F5F7F1] text-[#5A6D5A] font-semibold text-left">
-                        <th className="py-2 px-3">Faixa de Embalagem</th>
-                        <th className="py-2 px-3">Exemplos / Quantidade</th>
-                        <th className="py-2 px-3">NCM Correta da Faixa</th>
-                        <th className="py-2 px-3">NCM Base Mestre</th>
-                        <th className="py-2 px-3">Enquadramento</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-[#DCE5DC]">
-                      {resultado.linhas_ncm_embalagem.map((linha: LinhaNcmEmbalagem) => {
-                        const aplica = linha.ncm_informada_se_aplica
-                        const ncmExibida =
-                          ncmResolvidaMestre?.ncmEspecifica ||
-                          resultado.produto_canonico?.ncm_padrao ||
-                          '—'
-                        return (
-                          <tr
-                            key={linha.faixa_id}
-                            className={`transition-colors ${
-                              aplica ? 'bg-emerald-50/50 font-semibold' : 'hover:bg-gray-50'
-                            }`}
-                          >
-                            <td className="py-2.5 px-3">
-                              <div className="font-bold text-[#1C2B1C]">{linha.faixa_nome}</div>
-                              <span className="text-[10px] text-[#5A6D5A]">
-                                {linha.faixa_rotulo}
-                              </span>
-                            </td>
-                            <td className="py-2.5 px-3 text-[#5A6D5A] text-[11px]">
-                              {linha.exemplo_embalagem}
-                            </td>
-                            <td className="py-2.5 px-3 font-mono font-bold text-emerald-800">
-                              {linha.ncm_correta}
-                            </td>
-                            <td className="py-2.5 px-3 font-mono text-[11px] text-[#1C2B1C]">
-                              {ncmExibida}
-                            </td>
-                            <td className="py-2.5 px-3 whitespace-nowrap">
-                              <Badge
-                                className={`text-[10px] font-bold border-0 ${
-                                  aplica ? 'bg-emerald-600 text-white' : 'bg-gray-100 text-gray-600'
-                                }`}
-                              >
-                                {aplica ? 'Aplica-se à Informada' : 'NCM Distinta'}
-                              </Badge>
-                            </td>
-                          </tr>
-                        )
-                      })}
-                    </tbody>
-                  </table>
-                </ScrollableTable>
-              </Card>
+              {/* ENQUADRAMENTO TIPI POR FAIXA DE EMBALAGEM */}
+              {resultado.linhas_ncm_embalagem && resultado.linhas_ncm_embalagem.length > 0 && (
+                <Card className="rounded-2xl border-[#DCE5DC] bg-white shadow-sm overflow-hidden">
+                  <CardHeader className="pb-2 pt-4 px-4 bg-[#FAFBF8] border-b border-[#DCE5DC]">
+                    <div className="flex items-center justify-between">
+                      <CardTitle className="text-xs font-bold text-[#1C2B1C] uppercase tracking-wider flex items-center gap-1.5">
+                        <Layers2 className="w-4 h-4 text-[#1B5E20]" />
+                        <span>NCM Aplicável por Faixa de Embalagem (Tabela TIPI)</span>
+                      </CardTitle>
+                      {resultado.possui_diferenca_ncm_embalagem ? (
+                        <Badge className="bg-amber-100 text-amber-900 border-amber-300 text-[10px] font-bold">
+                          Variação por Embalagem
+                        </Badge>
+                      ) : (
+                        <Badge className="bg-emerald-50 text-emerald-800 border-emerald-200 text-[10px]">
+                          NCM Homogêneo
+                        </Badge>
+                      )}
+                    </div>
+                  </CardHeader>
+                  <ScrollableTable autoFitHeight={false} maxHeight="280px">
+                    <table className="w-full text-xs">
+                      <thead className="sticky top-0 z-20 bg-[#F5F7F1] shadow-[0_1px_0_0_#DCE5DC]">
+                        <tr className="border-b border-[#DCE5DC] bg-[#F5F7F1] text-[#5A6D5A] font-semibold text-left">
+                          <th className="py-2 px-3">Faixa</th>
+                          <th className="py-2 px-3">Quantidade / Exemplo</th>
+                          <th className="py-2 px-3">NCM TIPI</th>
+                          <th className="py-2 px-3">NCM Aplicada</th>
+                          <th className="py-2 px-3">Enquadramento</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-[#DCE5DC]">
+                        {resultado.linhas_ncm_embalagem.map((linha: LinhaNcmEmbalagem) => {
+                          const aplica = linha.ncm_informada_se_aplica
+                          const ncmExibida =
+                            ncmResolvidaMestre?.ncmEspecifica ||
+                            ncm ||
+                            resultado.produto_canonico?.ncm_padrao ||
+                            '—'
+                          return (
+                            <tr
+                              key={linha.faixa_id}
+                              className={`transition-colors ${
+                                aplica ? 'bg-emerald-50/50 font-semibold' : 'hover:bg-gray-50'
+                              }`}
+                            >
+                              <td className="py-2.5 px-3">
+                                <div className="font-bold text-[#1C2B1C]">{linha.faixa_nome}</div>
+                                <span className="text-[10px] text-[#5A6D5A]">
+                                  {linha.faixa_rotulo}
+                                </span>
+                              </td>
+                              <td className="py-2.5 px-3 text-[#5A6D5A] text-[11px]">
+                                {linha.exemplo_embalagem}
+                              </td>
+                              <td className="py-2.5 px-3 font-mono font-bold text-emerald-800">
+                                {linha.ncm_correta}
+                              </td>
+                              <td className="py-2.5 px-3 font-mono text-[11px] text-[#1C2B1C]">
+                                {ncmExibida}
+                              </td>
+                              <td className="py-2.5 px-3 whitespace-nowrap">
+                                <Badge
+                                  className={`text-[10px] font-bold border-0 ${
+                                    aplica
+                                      ? 'bg-emerald-600 text-white'
+                                      : 'bg-gray-100 text-gray-600'
+                                  }`}
+                                >
+                                  {aplica ? 'Aplica-se à Embalagem' : 'Faixa Distinta'}
+                                </Badge>
+                              </td>
+                            </tr>
+                          )
+                        })}
+                      </tbody>
+                    </table>
+                  </ScrollableTable>
+                </Card>
+              )}
 
-              {/* ------------------------------------------------------------------ */}
-              {/* 4. SEÇÃO DE DIVERGÊNCIAS (MODO VALIDAR EXISTENTE) */}
-              {/* ------------------------------------------------------------------ */}
-              {resultado.comparacao_existente && (
-                <Card className="rounded-2xl border-purple-200 bg-gradient-to-br from-purple-50/40 to-white shadow-sm p-4">
+              {/* RASTREABILIDADE DAS FONTES OFICIAIS */}
+              {resultado.fontes_consultadas && resultado.fontes_consultadas.length > 0 && (
+                <Card className="rounded-2xl border-[#DCE5DC] bg-white shadow-sm p-4">
                   <div className="flex items-center justify-between mb-3">
                     <div className="flex items-center gap-2">
-                      <RefreshCw className="w-4 h-4 text-purple-700" />
-                      <h4 className="text-xs font-bold text-purple-950 uppercase tracking-wider">
-                        Conferência com a Base Mestre (Cadastro Existente)
+                      <Globe className="w-4 h-4 text-[#1B5E20]" />
+                      <h4 className="text-xs font-bold text-[#1C2B1C] uppercase tracking-wider">
+                        Rastreabilidade das Fontes Oficiais Auditadas
                       </h4>
                     </div>
-                    <Badge
-                      className={`text-[10px] border-0 font-bold ${
-                        resultado.comparacao_existente.necessita_atualizacao
-                          ? 'bg-amber-100 text-amber-900'
-                          : 'bg-emerald-100 text-emerald-800'
-                      }`}
-                    >
-                      {resultado.comparacao_existente.necessita_atualizacao
-                        ? `${resultado.comparacao_existente.divergencias.length} Divergência(s) Encontrada(s)`
-                        : 'Dados 100% Sincronizados com a Bula'}
+                    <Badge variant="outline" className="text-[10px] text-[#5A6D5A]">
+                      Fontes Internas e Regulatórias
                     </Badge>
                   </div>
-
-                  {resultado.comparacao_existente.divergencias.length > 0 ? (
-                    <div className="space-y-2">
-                      <p className="text-xs text-purple-900">
-                        O cadastro gravado na Base Mestre diverge da bula oficial nos seguintes
-                        pontos:
-                      </p>
-                      <div className="space-y-2">
-                        {resultado.comparacao_existente.divergencias.map((div, i) => (
-                          <div
-                            key={i}
-                            className="p-2.5 rounded-xl border border-purple-200 bg-white text-xs space-y-1"
-                          >
-                            <div className="flex items-center justify-between">
-                              <strong className="text-purple-900 font-bold">{div.campo}</strong>
-                              <span className="text-[10px] text-[#5A6D5A]">
-                                Gravado hoje: <strong>{div.valor_gravado}</strong>
-                              </span>
-                            </div>
-                            <div className="flex items-center gap-1.5 text-emerald-800 font-semibold text-[11px]">
-                              <ArrowRight className="w-3.5 h-3.5 text-emerald-600" />
-                              <span>Valor Correto na Bula: {div.valor_correto_bula}</span>
-                            </div>
-                            <p className="text-[11px] text-[#5A6D5A] italic">{div.sugestao}</p>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  ) : (
-                    <div className="p-3 bg-emerald-50 rounded-xl border border-emerald-200 text-xs text-emerald-900 flex items-center gap-2">
-                      <CheckCircle2 className="w-4 h-4 text-emerald-600 flex-shrink-0" />
-                      <span>
-                        Parabéns! O cadastro gravado na Base Mestre confere com todas as
-                        especificações da bula oficial e vigência regulatória do MAPA.
-                      </span>
-                    </div>
-                  )}
-                </Card>
-              )}
-
-              {/* ------------------------------------------------------------------ */}
-              {/* 5. TRAVAS DE AUDITORIA APLICADAS */}
-              {/* ------------------------------------------------------------------ */}
-              <Card className="rounded-2xl border-[#DCE5DC] bg-white shadow-sm p-4">
-                <div className="flex items-center justify-between mb-3">
-                  <div className="flex items-center gap-2">
-                    <ShieldCheck className="w-4 h-4 text-[#1B5E20]" />
-                    <h4 className="text-xs font-bold text-[#1C2B1C] uppercase tracking-wider">
-                      Travas de Auditoria Regulatória Aplicadas
-                    </h4>
-                  </div>
-                  <Badge variant="outline" className="text-[10px] text-[#5A6D5A]">
-                    {resultado.total_aprovadas} de {resultado.total_travas} Conformes
-                  </Badge>
-                </div>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
-                  {resultado.travas.map((t) => (
-                    <div
-                      key={t.id_trava}
-                      className={`p-3 rounded-xl border text-xs flex items-start gap-2.5 ${
-                        t.aprovado
-                          ? 'border-emerald-200 bg-emerald-50/40'
-                          : 'border-red-200 bg-red-50/40'
-                      }`}
-                    >
-                      <div
-                        className={`w-6 h-6 rounded-lg flex items-center justify-center flex-shrink-0 mt-0.5 text-white ${
-                          t.aprovado ? 'bg-emerald-600' : 'bg-red-600'
-                        }`}
-                      >
-                        {t.aprovado ? (
-                          <Check className="w-3.5 h-3.5" />
-                        ) : (
-                          <AlertTriangle className="w-3.5 h-3.5" />
-                        )}
-                      </div>
-                      <div className="min-w-0 flex-1">
-                        <strong className="text-[#1C2B1C] block font-bold">
-                          Trava {t.id_trava}: {t.trava_nome}
-                        </strong>
-                        <p className="text-[11px] text-[#5A6D5A] mt-0.5 leading-snug">
-                          {t.mensagem}
-                        </p>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </Card>
-
-              {/* ------------------------------------------------------------------ */}
-              {/* 6. FUNDAMENTAÇÃO LEGAL TRIBUTÁRIA (5 TRIBUTOS) */}
-              {/* ------------------------------------------------------------------ */}
-              {produtoParaFundamentacao && (
-                <Card className="rounded-2xl border-[#DCE5DC] bg-white shadow-sm p-4 space-y-3">
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                      <Scale className="w-4 h-4 text-[#1B5E20]" />
-                      <div>
-                        <h4 className="text-xs font-bold text-[#1C2B1C] uppercase tracking-wider">
-                          Fundamentação Legal Tributária
-                        </h4>
-                        <p className="text-[11px] text-[#5A6D5A]">
-                          Citações normativas canônicas (ICMS Convênio 100/97, PIS/COFINS Lei
-                          10.925/04 e LC 224/25, IBS/CBS LC 214/25)
-                        </p>
-                      </div>
-                    </div>
-                    <Badge
-                      variant="outline"
-                      className="text-[10px] text-[#1B5E20] border-emerald-300 bg-emerald-50"
-                    >
-                      5 Tributos Auditados
-                    </Badge>
-                  </div>
-
-                  <PainelEnquadramentoTributario produto={produtoParaFundamentacao} />
-                </Card>
-              )}
-
-              {/* ------------------------------------------------------------------ */}
-              {/* 7. FONTES CONSULTADAS */}
-              {/* ------------------------------------------------------------------ */}
-              <Card className="rounded-2xl border-[#DCE5DC] bg-white shadow-sm p-4">
-                <div className="flex items-center justify-between mb-3">
-                  <div className="flex items-center gap-2">
-                    <Globe className="w-4 h-4 text-[#1B5E20]" />
-                    <h4 className="text-xs font-bold text-[#1C2B1C] uppercase tracking-wider">
-                      Rastreabilidade das Fontes Oficiais
-                    </h4>
-                  </div>
-                  <Badge variant="outline" className="text-[10px] text-[#5A6D5A]">
-                    Auditoria Rastreável
-                  </Badge>
-                </div>
-                <div className="space-y-2">
-                  {resultado.fontes_consultadas.map((fonte, idx) => {
-                    const isIndisponivel = fonte.status === 'indisponivel'
-                    const isNaoEncontrado = fonte.status === 'nao_encontrado'
-                    return (
+                  <div className="space-y-2">
+                    {resultado.fontes_consultadas.map((fonte, idx) => (
                       <div
                         key={idx}
-                        className={`p-2.5 rounded-xl border flex items-start justify-between gap-2 text-xs transition-colors ${
-                          isIndisponivel
-                            ? 'border-amber-300 bg-amber-50/60'
-                            : isNaoEncontrado
-                              ? 'border-gray-200 bg-gray-50/60'
-                              : 'border-[#DCE5DC] bg-[#FAFBF8]'
-                        }`}
+                        className="p-2.5 rounded-xl border border-[#DCE5DC] bg-[#FAFBF8] flex items-start justify-between gap-2 text-xs"
                       >
                         <div className="flex-1">
                           <div className="flex items-center gap-2">
                             <strong className="text-[#1C2B1C] font-bold">{fonte.fonte}</strong>
-                            {isIndisponivel && (
-                              <Badge className="bg-amber-200 text-amber-900 border-0 text-[10px] font-semibold">
-                                Fonte Indisponível (Modo Contingência)
-                              </Badge>
-                            )}
-                            {isNaoEncontrado && (
-                              <Badge className="bg-gray-200 text-gray-700 border-0 text-[10px]">
-                                Não Localizado
-                              </Badge>
-                            )}
                             {fonte.status === 'sucesso' && (
                               <Badge className="bg-emerald-100 text-emerald-800 border-0 text-[10px]">
                                 Conectado
                               </Badge>
                             )}
                           </div>
-                          <p
-                            className={`text-[11px] mt-0.5 leading-relaxed ${
-                              isIndisponivel ? 'text-amber-950' : 'text-[#5A6D5A]'
-                            }`}
-                          >
+                          <p className="text-[11px] mt-0.5 text-[#5A6D5A] leading-relaxed">
                             {fonte.detalhes}
                           </p>
                         </div>
@@ -1601,18 +1619,18 @@ export function Validar() {
                             href={fonte.url}
                             target="_blank"
                             rel="noreferrer"
-                            className="text-[11px] text-[#1B5E20] hover:underline flex items-center gap-1 flex-shrink-0"
+                            className="text-[11px] text-[#1B5E20] hover:underline flex items-center gap-1 shrink-0"
                           >
-                            <span>Portal</span>
+                            <span>Link</span>
                             <ExternalLink className="w-3 h-3" />
                           </a>
                         )}
                       </div>
-                    )
-                  })}
-                </div>
-              </Card>
-            </>
+                    ))}
+                  </div>
+                </Card>
+              )}
+            </div>
           )}
         </div>
       </div>

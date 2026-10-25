@@ -104,6 +104,273 @@ export async function validarCadastroProduto(
 }
 
 // -----------------------------------------------------------------------------
+// Busca Canônica em Dados Oficiais do Aplicativo (Bula + Base Mestre)
+// -----------------------------------------------------------------------------
+
+export interface CandidatoOficialProduto {
+  id: string
+  origem: 'bula' | 'base_mestre'
+  origemRotulo: string
+  nomeComercial: string
+  marcaPadronizada: string
+  registroMapa: string
+  registroMapaLimpo: string
+  principioAtivo: string
+  principioAtivoFonte: string
+  fabricante: string
+  fabricanteFonte: string
+  ncmOficial: string
+  ncmFonte: string
+  embalagem: string
+  formulacao?: string
+  classeUso?: string
+  scoreCorrespondencia: number
+  motivoCorrespondencia: string
+  dadosOriginais: Record<string, unknown>
+}
+
+export interface ResultadoBuscaOficial {
+  termoBuscado: {
+    nomeComercial: string
+    ncm: string
+    embalagem: string
+    codigoMapa: string
+  }
+  totalEncontrados: number
+  candidatoPrincipal: CandidatoOficialProduto | null
+  outrosCandidatos: CandidatoOficialProduto[]
+}
+
+/**
+ * Realiza busca unificada nos dados oficiais internos do sistema (bula_produtos e base_mestre)
+ * a partir das 4 informações fundamentais: Nome Comercial, NCM, Quantidade da Embalagem e Código MAPA.
+ */
+export async function buscarDadosOficiaisProduto(params: {
+  nomeComercial?: string
+  ncm?: string
+  embalagem?: string
+  codigoMapa?: string
+}): Promise<ResultadoBuscaOficial> {
+  const nome = (params.nomeComercial || '').trim()
+  const mapa = (params.codigoMapa || '').trim()
+  const ncm = (params.ncm || '').replace(/\D/g, '')
+  const emb = (params.embalagem || '').trim()
+  const mapaDigitos = mapa.replace(/\D/g, '')
+
+  const candidatos: CandidatoOficialProduto[] = []
+  const jaVistos = new Set<string>()
+
+  // 1. Busca na coleção de bulas oficiais (bula_produtos)
+  try {
+    const filtrosBula: string[] = []
+    if (mapaDigitos) {
+      filtrosBula.push(`registro_mapa ~ '${mapaDigitos}' || mapa_oficial_limpo ~ '${mapaDigitos}'`)
+    }
+    if (nome) {
+      const escNome = nome.replace(/'/g, "\\'")
+      filtrosBula.push(`nome_comercial ~ '${escNome}' || marca_padronizada ~ '${escNome}'`)
+    }
+
+    if (filtrosBula.length > 0) {
+      const respBula = await pb.collection('bula_produtos').getList<BulaProdutoItem>(1, 15, {
+        filter: filtrosBula.join(' || '),
+        sort: '-created',
+      })
+
+      for (const item of respBula.items) {
+        const itemMapaLimpo = (item.mapa_oficial_limpo || item.registro_mapa || '').replace(
+          /\D/g,
+          '',
+        )
+        const itemNome = item.nome_comercial || item.marca_padronizada || ''
+        const chaveDedupe = `bula_${item.id}_${itemMapaLimpo}`
+        if (jaVistos.has(chaveDedupe)) continue
+        jaVistos.add(chaveDedupe)
+
+        let principioAtivo = item.pa_oficial_correto || item.principio_ativo || ''
+        let principioAtivoFonte = 'Bula Oficial (bula_produtos)'
+
+        // Se não tiver princípio ativo na bula_produtos, tenta composição
+        if (!principioAtivo && item.registro_mapa) {
+          try {
+            const comp = await pb.collection('bula_composicao').getList(1, 5, {
+              filter: `registro_mapa ~ '${itemMapaLimpo}'`,
+            })
+            if (comp.items.length > 0) {
+              const paList = comp.items
+                .map((c) => String(c.ingrediente_ativo || c.nome_produto || '').trim())
+                .filter(Boolean)
+              if (paList.length > 0) {
+                principioAtivo = Array.from(new Set(paList)).join(' + ')
+                principioAtivoFonte = 'Bula Oficial (bula_composicao)'
+              }
+            }
+          } catch {
+            /* continua com o que tiver */
+          }
+        }
+
+        // Tenta resolver NCM na Base Mestre ou Regras
+        let ncmOficial = (item.ncm_oficial_exata || item.ncm_padrao || '').replace(/\D/g, '')
+        let ncmFonte = ncmOficial ? 'Bula Oficial' : 'A definir'
+
+        // Calcular pontuação de correspondência
+        let score = 0
+        const motivos: string[] = []
+
+        if (mapaDigitos && itemMapaLimpo.includes(mapaDigitos)) {
+          score += 50
+          motivos.push(`Registro MAPA coincide (${item.registro_mapa})`)
+        }
+
+        const nomeNormalizado = nome.toUpperCase()
+        const itemNomeNormalizado = itemNome.toUpperCase()
+        if (nomeNormalizado && itemNomeNormalizado.includes(nomeNormalizado)) {
+          score += 35
+          motivos.push('Nome Comercial confere com o título da Bula')
+        } else if (
+          nomeNormalizado &&
+          itemNomeNormalizado.split(' ')[0] === nomeNormalizado.split(' ')[0]
+        ) {
+          score += 20
+          motivos.push('Prefixo da marca coincide com a Bula')
+        }
+
+        if (emb && item.embalagem && item.embalagem.toUpperCase().includes(emb.toUpperCase())) {
+          score += 15
+          motivos.push('Embalagem compatível com a Bula')
+        }
+
+        candidatos.push({
+          id: item.id,
+          origem: 'bula',
+          origemRotulo: 'Bula Oficial (AGROFIT / Registro MAPA)',
+          nomeComercial: item.nome_comercial || item.marca_padronizada,
+          marcaPadronizada: item.marca_padronizada || item.nome_comercial,
+          registroMapa: item.registro_mapa,
+          registroMapaLimpo: itemMapaLimpo,
+          principioAtivo: principioAtivo || 'P.A. da Bula Oficial',
+          principioAtivoFonte,
+          fabricante:
+            item.titular_registro || item.fabricante_formulador || 'Fabricante Oficial MAPA',
+          fabricanteFonte: 'Bula Oficial (Registro MAPA)',
+          ncmOficial,
+          ncmFonte,
+          embalagem: item.embalagem || emb || 'Padrão Bula',
+          formulacao: item.tipo_formulacao || item.modo_acao,
+          classeUso: item.sub_grupo || item.macro_grupo,
+          scoreCorrespondencia: Math.min(score, 100),
+          motivoCorrespondencia: motivos.join(' • ') || 'Correspondência parcial em dados da Bula',
+          dadosOriginais: item as unknown as Record<string, unknown>,
+        })
+      }
+    }
+  } catch (err) {
+    console.warn('Erro ao consultar bula_produtos:', err)
+  }
+
+  // 2. Busca na Base Mestre (base_mestre)
+  try {
+    const filtrosMestre: string[] = []
+    if (mapaDigitos) {
+      filtrosMestre.push(`registro_mapa ~ '${mapaDigitos}'`)
+    }
+    if (nome) {
+      const escNome = nome.replace(/'/g, "\\'")
+      filtrosMestre.push(
+        `marca_padronizada ~ '${escNome}' || nome_produto ~ '${escNome}' || nome_completo ~ '${escNome}'`,
+      )
+    }
+    if (ncm) {
+      filtrosMestre.push(`ncm ~ '${ncm}' || ncm_padrao ~ '${ncm}'`)
+    }
+
+    if (filtrosMestre.length > 0) {
+      const respMestre = await pb.collection('base_mestre').getList<BaseMestreProduto>(1, 15, {
+        filter: filtrosMestre.join(' || '),
+        sort: '-created',
+      })
+
+      for (const item of respMestre.items) {
+        const itemMapaLimpo = (item.registro_mapa || '').replace(/\D/g, '')
+        const itemNome = item.marca_padronizada || item.nome_produto || item.nome_completo || ''
+        const chaveDedupe = `mestre_${item.id}_${itemMapaLimpo}`
+        if (jaVistos.has(chaveDedupe)) continue
+        jaVistos.add(chaveDedupe)
+
+        let score = 0
+        const motivos: string[] = []
+
+        if (mapaDigitos && itemMapaLimpo.includes(mapaDigitos)) {
+          score += 45
+          motivos.push(`Registro MAPA coincide na Base Mestre (${item.registro_mapa})`)
+        }
+
+        const nomeNormalizado = nome.toUpperCase()
+        const itemNomeNormalizado = itemNome.toUpperCase()
+        if (nomeNormalizado && itemNomeNormalizado.includes(nomeNormalizado)) {
+          score += 35
+          motivos.push('Marca/Produto localizado na Base Mestre')
+        }
+
+        const itemNcmLimpo = (item.ncm_padrao || item.ncm || '').replace(/\D/g, '')
+        if (ncm && itemNcmLimpo.startsWith(ncm.substring(0, 4))) {
+          score += 15
+          motivos.push(`NCM compatível (${item.ncm_especifica || item.ncm_padrao || item.ncm})`)
+        }
+
+        if (emb && item.embalagem && item.embalagem.toUpperCase().includes(emb.toUpperCase())) {
+          score += 10
+          motivos.push('Embalagem cadastrada coincide')
+        }
+
+        candidatos.push({
+          id: item.id,
+          origem: 'base_mestre',
+          origemRotulo: 'Base Mestre (Cadastro Canônico)',
+          nomeComercial: item.nome_completo || item.nome_produto || item.marca_padronizada,
+          marcaPadronizada: item.marca_padronizada || item.nome_produto,
+          registroMapa: item.registro_mapa,
+          registroMapaLimpo: itemMapaLimpo,
+          principioAtivo: item.principio_ativo || 'P.A. Cadastrado',
+          principioAtivoFonte: 'Base Mestre Tributária',
+          fabricante: item.titular_fabricante || item.fabricante || 'Fabricante Base Mestre',
+          fabricanteFonte: 'Base Mestre',
+          ncmOficial: item.ncm_especifica || item.ncm_padrao || item.ncm || '',
+          ncmFonte: 'Base Mestre (Tributação Resolvida)',
+          embalagem: item.embalagem || emb || '1x20L',
+          formulacao: item.tipo_produto,
+          classeUso: item.sub_grupo || item.macro_grupo,
+          scoreCorrespondencia: Math.min(score, 100),
+          motivoCorrespondencia: motivos.join(' • ') || 'Correspondência na Base Mestre',
+          dadosOriginais: item as unknown as Record<string, unknown>,
+        })
+      }
+    }
+  } catch (err) {
+    console.warn('Erro ao consultar base_mestre:', err)
+  }
+
+  // Ordenar candidatos pelo score decrescente
+  candidatos.sort((a, b) => b.scoreCorrespondencia - a.scoreCorrespondencia)
+
+  const candidatoPrincipal = candidatos.length > 0 ? candidatos[0] : null
+  const outrosCandidatos = candidatos.slice(1)
+
+  return {
+    termoBuscado: {
+      nomeComercial: nome,
+      ncm,
+      embalagem: emb,
+      codigoMapa: mapa,
+    },
+    totalEncontrados: candidatos.length,
+    candidatoPrincipal,
+    outrosCandidatos,
+  }
+}
+
+// -----------------------------------------------------------------------------
 // Base Mestre
 // -----------------------------------------------------------------------------
 export async function listarBaseMestre(params?: {
