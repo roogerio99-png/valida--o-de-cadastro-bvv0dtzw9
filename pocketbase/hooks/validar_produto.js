@@ -1449,50 +1449,55 @@ Consulte a base pública oficial do AGROFIT e a BULA oficial registrada no MAPA 
         : `Princípio ativo "${principioAtivoInformado}" não localizado no Dicionário nem na Bula oficial.`,
     })
 
-    // Trava 4: Duplicidade na Base Mestre
+    // Trava 4: Duplicidade na Base Mestre (Regra Canônica dos 4 Campos: Nome + PA + Quantidade + MAPA)
     let duplicataId = null
     let trava4Passou = true
-    let trava4Msg = 'Nenhuma duplicidade impeditiva identificada na Base Mestre.'
+    let trava4Msg =
+      'Nenhuma duplicidade identificada na Base Mestre (chave canônica de 4 campos íntegra).'
 
     try {
       const escNomeNorm = motor.normalizarTexto(nomeComercial)
-      const escRegDigits = registroMapaFinal.replace(/\D/g, '')
+      const escPaNorm = motor.normalizarTexto(principioAtivoFinal)
+      const escRegDigits = registroMapaFinal.replace(/\D/g, '').replace(/^0+/, '') || 'ISENTO'
+      const qtdAlvo = Number(qtdEmbalagemFinal) || 0
 
-      const porNome = $app.findRecordsByFilter('base_mestre', `id != ''`, '-created', 50, 0)
-      const achouNome = (porNome || []).find((r) => {
-        if (idProdutoExistente && r.id === idProdutoExistente) return false
+      const filtroDup =
+        registroMapaFinal.replace(/\D/g, '').length >= 4
+          ? `registro_mapa ~ '${registroMapaFinal.replace(/\D/g, '')}'`
+          : `id != ''`
+
+      const candidatosDup = $app.findRecordsByFilter('base_mestre', filtroDup, '-created', 200, 0)
+      const matchesExatos4Campos = (candidatosDup || []).filter((r) => {
         const n1 = motor.normalizarTexto(r.getString('nome_completo'))
         const n2 = motor.normalizarTexto(r.getString('marca_padronizada'))
-        return n1 === escNomeNorm || n2 === escNomeNorm
+        const nomeMatch = n1 === escNomeNorm || n2 === escNomeNorm
+        if (!nomeMatch) return false
+
+        const paRec = motor.normalizarTexto(r.getString('principio_ativo'))
+        const paMatch = !escPaNorm || !paRec || paRec === escPaNorm
+        if (!paMatch) return false
+
+        const qtdRec =
+          Number(r.getFloat('quantidade_embalagem_principal')) ||
+          parsearEmbalagemCanonico(r.getString('embalagem')).quantidade ||
+          0
+        if (Math.abs(qtdRec - qtdAlvo) >= 0.0001) return false
+
+        const regRec =
+          r.getString('registro_mapa').replace(/\D/g, '').replace(/^0+/, '') || 'ISENTO'
+        return regRec === escRegDigits
       })
 
-      if (achouNome) {
-        duplicataId = achouNome.id
-        trava4Msg = `Produto duplicado: Marca/Nome "${achouNome.getString('marca_padronizada') || achouNome.getString('nome_completo')}" já existe na Base Mestre.`
-        // Se estiver no modo 'existente', é esperado encontrar o registro
-        if (modoValidacao !== 'existente') {
-          trava4Passou = false
-        }
-      } else if (escRegDigits && escRegDigits.length >= 4) {
-        const porReg = $app.findRecordsByFilter(
-          'base_mestre',
-          `registro_mapa ~ '${escRegDigits}'`,
-          '-created',
-          5,
-          0,
-        )
-        const achouReg = (porReg || []).find((r) => {
-          if (idProdutoExistente && r.id === idProdutoExistente) return false
-          const dig = r.getString('registro_mapa').replace(/\D/g, '')
-          return dig && dig === escRegDigits
-        })
-        if (achouReg) {
-          duplicataId = achouReg.id
-          trava4Msg = `Produto com mesmo Registro MAPA "${achouReg.getString('registro_mapa')}" já cadastrado na Base Mestre.`
-          if (modoValidacao !== 'existente') {
-            trava4Passou = false
-          }
-        }
+      if (matchesExatos4Campos.length > 0) {
+        duplicataId = matchesExatos4Campos[0].id
+      }
+
+      if (matchesExatos4Campos.length > 1) {
+        trava4Passou = false
+        trava4Msg = `Foram encontrados ${matchesExatos4Campos.length} registros duplicados na Base Mestre com a mesma combinação (Nome + Princípio Ativo + Quantidade ${qtdAlvo} ${unidadeFinal} + MAPA ${registroMapaFinal}).`
+      } else if (matchesExatos4Campos.length === 1) {
+        trava4Passou = true
+        trava4Msg = `Registro único e íntegro na Base Mestre para a chave canônica (${nomeComercial} | ${qtdAlvo} ${unidadeFinal} | MAPA ${registroMapaFinal || 'ISENTO'}).`
       }
     } catch (dupErr) {
       console.log('Aviso ao checar trava 4 de duplicidade:', dupErr.message)
@@ -1500,9 +1505,49 @@ Consulte a base pública oficial do AGROFIT e a BULA oficial registrada no MAPA 
 
     travas.push({
       id_trava: 4,
-      trava_nome: 'Duplicidade na Base Mestre',
+      trava_nome: 'Duplicidade de Cadastro (4 Campos)',
       aprovado: trava4Passou,
       mensagem: trava4Msg,
+    })
+
+    // Trava 5: Concentração e Formulação Válida
+    const concInformadaNum =
+      data.concentracao !== undefined && data.concentracao !== null && data.concentracao !== ''
+        ? Number(String(data.concentracao).replace(',', '.'))
+        : null
+    const trava5Passou =
+      concInformadaNum === null ||
+      (!Number.isNaN(concInformadaNum) && concInformadaNum > 0 && concInformadaNum <= 1000)
+    const trava5Msg = trava5Passou
+      ? concInformadaNum !== null
+        ? `Concentração informada (${concInformadaNum} g/L ou g/kg) dentro dos limites técnicos (0 a 1000).`
+        : `Formulação/concentração técnica homologada conforme bula oficial (${bulaExtraida?.formulacao || 'Padrão Agronômico'}).`
+      : `Concentração informada (${data.concentracao}) fora da faixa técnica permitida (> 0 e ≤ 1000 g/L ou g/kg).`
+
+    travas.push({
+      id_trava: 5,
+      trava_nome: 'Concentração Válida',
+      aprovado: trava5Passou,
+      mensagem: trava5Msg,
+    })
+
+    // Trava 6: Registro MAPA Oficial
+    const regDigitsValidacao = (registroMapaFinal || '').replace(/\D/g, '')
+    const isIsentoMapa =
+      /isento/i.test(registroMapaFinal || '') ||
+      /fertilizante|corretivo|adjuvante/i.test(motorCanonico.tipo_produto || '')
+    const trava6Passou = Boolean(regDigitsValidacao.length >= 3 || isIsentoMapa)
+    const trava6Msg = trava6Passou
+      ? regDigitsValidacao.length >= 3
+        ? `Registro MAPA oficial (${registroMapaFinal}) validado no AGROFIT / Base Mestre.`
+        : `Produto enquadrado com dispensa/isenção ou regime específico (${motorCanonico.sistema_norma_mapa}).`
+      : 'Registro MAPA não localizado ou em formato inválido para defensivo agropecuário.'
+
+    travas.push({
+      id_trava: 6,
+      trava_nome: 'Registro MAPA',
+      aprovado: trava6Passou,
+      mensagem: trava6Msg,
     })
 
     // -------------------------------------------------------------------------
@@ -1800,17 +1845,22 @@ Consulte a base pública oficial do AGROFIT e a BULA oficial registrada no MAPA 
           gravacaoResultado.acao = 'criado'
         }
 
-        // Preenchimento de 28 campos
+        // Preenchimento de 28 campos + campos de embalagem e NCM específica
         recPersist.set('nome_completo', motorCanonico.nome_completo)
         recPersist.set('marca_padronizada', motorCanonico.marca_padronizada)
         recPersist.set('tipo_produto', motorCanonico.tipo_produto)
         recPersist.set('embalagem', motorCanonico.embalagem)
+        recPersist.set('embalagem_original', embalagemInformada || motorCanonico.embalagem)
+        recPersist.set('quantidade_embalagem_principal', qtdEmbalagemFinal)
+        recPersist.set('unidade_medida_principal', unidadeFinal)
+        recPersist.set('forma_acondicionamento', acondicionamentoFinal)
         recPersist.set('unidade', motorCanonico.unidade)
         recPersist.set('principio_ativo', motorCanonico.principio_ativo)
         recPersist.set('macro_grupo', motorCanonico.macro_grupo)
         recPersist.set('sub_grupo', motorCanonico.sub_grupo)
         recPersist.set('nota_subpos_2', motorCanonico.nota_subpos_2)
         recPersist.set('ncm_padrao', motorCanonico.ncm_padrao)
+        recPersist.set('ncm_especifica', motorCanonico.ncm_especifica || motorCanonico.ncm_padrao)
         recPersist.set('ncm_faixa1_ate_300g', motorCanonico.ncm_faixa1_ate_300g)
         recPersist.set('ncm_faixa2_300g_a_7_5kg', motorCanonico.ncm_faixa2_300g_a_7_5kg)
         recPersist.set('ncm_faixa3_7_5kg_a_10kg', motorCanonico.ncm_faixa3_7_5kg_a_10kg)

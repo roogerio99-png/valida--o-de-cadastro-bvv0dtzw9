@@ -151,9 +151,10 @@ function identificarCategoriaTributaria(input: DadosEntradaProdutoEnquadramento)
     }
   }
 
-  // 4. Inoculantes agricolas de bacterias fixadoras de nitrogenio (3002.90.99)
+  // 4. Inoculantes agricolas de bacterias fixadoras de nitrogenio (3002.90.99 / 3002.49.99)
   if (
     ncm.startsWith('300290') ||
+    ncm.startsWith('300249') ||
     macro.includes('inocul') ||
     tipo.includes('inoculante') ||
     tipo.includes('biologico') ||
@@ -161,7 +162,7 @@ function identificarCategoriaTributaria(input: DadosEntradaProdutoEnquadramento)
   ) {
     return {
       categoria: 'INOCULANTE_BIO',
-      rotulo: 'Inoculante Agrícola / Biológico (Código 3002.90.99)',
+      rotulo: 'Inoculante Agrícola / Biológico (Código 3002.90.99 / 3002.49.99)',
     }
   }
 
@@ -244,7 +245,7 @@ export function determinarEnquadramentoTributario(
           artigo: 'Art. 1º',
           inciso: 'Inciso II',
           paragrafo:
-            'c/c Lei Complementar nº 224/2025, Art. 4º, § 1º, inciso I, § 2º, inciso II, alínea "e", § 3º, inciso III e § 4º, inciso I',
+            'c/c Lei Complementar nº 224/2025 (LC nº 224/2025), Art. 4º, § 1º, inciso I, § 2º, inciso II, alínea "e", § 3º, inciso III e § 4º, inciso I',
           textoArtigo:
             'Lei nº 10.925/2004, Art. 1º, Inciso II: Ficam reduzidas a 0 (zero) as alíquotas da contribuição para o PIS/PASEP incidentes na importação e sobre a receita bruta de venda no mercado interno de defensivos agropecuários classificados na posição 38.08 da TIPI e suas matérias-primas. LC nº 224/2025, Art. 4º, § 4º, Inciso I: reoneração residual a 10% da alíquota padrão a partir de 01/04/2026.',
         },
@@ -266,7 +267,7 @@ export function determinarEnquadramentoTributario(
           artigo: 'Art. 1º',
           inciso: 'Inciso II',
           paragrafo:
-            'c/c Lei Complementar nº 224/2025, Art. 4º, § 1º, inciso II, § 2º, inciso II, alínea "e", § 3º, inciso III e § 4º, inciso I',
+            'c/c Lei Complementar nº 224/2025 (LC nº 224/2025), Art. 4º, § 1º, inciso II, § 2º, inciso II, alínea "e", § 3º, inciso III e § 4º, inciso I',
           textoArtigo:
             'Lei nº 10.925/2004, Art. 1º, Inciso II: Ficam reduzidas a 0 (zero) as alíquotas da COFINS incidentes na importação e sobre a receita bruta de venda no mercado interno de defensivos agropecuários classificados na posição 38.08 da TIPI e suas matérias-primas. LC nº 224/2025, Art. 4º, § 4º, Inciso I: reoneração residual de 10% da alíquota padrão.',
         },
