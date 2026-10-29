@@ -389,6 +389,7 @@ export function Parametrizacao() {
                       <Input
                         type="number"
                         step="0.01"
+                        disabled={!isAdmin}
                         value={item.aliquota_pis}
                         onChange={(e) =>
                           handleUpdateItemField(
@@ -404,6 +405,7 @@ export function Parametrizacao() {
                       <Input
                         type="number"
                         step="0.01"
+                        disabled={!isAdmin}
                         value={item.aliquota_cofins}
                         onChange={(e) =>
                           handleUpdateItemField(
@@ -417,6 +419,7 @@ export function Parametrizacao() {
                     </td>
                     <td className="py-2 px-3 w-36">
                       <Select
+                        disabled={!isAdmin}
                         value={item.regime}
                         onValueChange={(val: 'cumulativo' | 'nao_cumulativo') =>
                           handleUpdateItemField(item.id, 'regime', val)
@@ -435,6 +438,7 @@ export function Parametrizacao() {
                       <Input
                         type="number"
                         step="0.01"
+                        disabled={!isAdmin}
                         value={item.aliquota_ibs}
                         onChange={(e) =>
                           handleUpdateItemField(
@@ -450,6 +454,7 @@ export function Parametrizacao() {
                       <Input
                         type="number"
                         step="0.01"
+                        disabled={!isAdmin}
                         value={item.aliquota_cbs}
                         onChange={(e) =>
                           handleUpdateItemField(

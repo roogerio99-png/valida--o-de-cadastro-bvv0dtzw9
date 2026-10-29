@@ -428,18 +428,20 @@ export function CadastroBula() {
             </Button>
           )}
 
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => {
-              setConfirmacaoTexto('')
-              setModalLimparOpen(true)
-            }}
-            className="text-xs h-9 rounded-xl border-red-200 text-red-700 bg-red-50/50 hover:bg-red-100/70 hover:text-red-800 hover:border-red-300 flex items-center gap-1.5 transition-colors"
-          >
-            <Trash2 className="w-3.5 h-3.5" />
-            <span>Limpar Base</span>
-          </Button>
+          {isAdmin && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => {
+                setConfirmacaoTexto('')
+                setModalLimparOpen(true)
+              }}
+              className="text-xs h-9 rounded-xl border-red-200 text-red-700 bg-red-50/50 hover:bg-red-100/70 hover:text-red-800 hover:border-red-300 flex items-center gap-1.5 transition-colors"
+            >
+              <Trash2 className="w-3.5 h-3.5" />
+              <span>Limpar Base</span>
+            </Button>
+          )}
 
           <Button
             size="sm"

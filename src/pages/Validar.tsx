@@ -345,6 +345,10 @@ export function Validar() {
       const ncmCalculada =
         ncmResolvidaMestre?.ncmEspecifica || canon.ncm_especifica || canon.ncm_padrao || ncm || ''
 
+      const embParseada = parsearEmbalagemComercial(
+        canon.embalagem || embalagem || '1X20L (20 L)',
+      )
+
       const payload = {
         nome_completo: canon.nome_completo || nomeComercial,
         marca_padronizada: canon.marca_padronizada || nomeComercial,
@@ -359,6 +363,22 @@ export function Validar() {
         fabricante:
           canon.titular_fabricante || fabricanteOpcional || produtoOficialConfirmado?.fabricante,
         embalagem: canon.embalagem || embalagem || '1X20L (20 L)',
+        embalagem_original: embalagem || canon.embalagem || '1X20L (20 L)',
+        quantidade_embalagem_principal:
+          canon.quantidade_embalagem_principal ||
+          ncmResolvidaMestre?.quantidade ||
+          embParseada.quantidade ||
+          20,
+        unidade_medida_principal:
+          canon.unidade_medida_principal ||
+          ncmResolvidaMestre?.unidade ||
+          embParseada.unidade ||
+          'L',
+        forma_acondicionamento:
+          canon.forma_acondicionamento ||
+          ncmResolvidaMestre?.acondicionamento ||
+          embParseada.acondicionamento ||
+          'Bombona',
         concentracao: concentracaoOpcional ? Number(concentracaoOpcional.replace(',', '.')) : 0,
         tipo_produto: canon.tipo_produto,
         unidade: canon.unidade,

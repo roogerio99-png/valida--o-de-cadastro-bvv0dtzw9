@@ -423,11 +423,11 @@ export function parsearTextoBula(markdown: string, pdfFileName?: string, _trunca
         lcomp.includes('%') ||
         lcomp.toLowerCase().includes('ingredientes')
       ) {
-        const concMatch = lcomp.match(/(\d+[.,]\d+)\s*(g\/[Ll]|g\/kg|%|mg\/[Ll])/i)
-        const percMatch = lcomp.match(/\((\d+[.,]\d+%\s*[mv/gLl]*)\)/i)
+        const concMatch = lcomp.match(/(\d+(?:[.,]\d+)?)\s*(g\/[Ll]|g\/kg|%|mg\/[Ll])/i)
+        const percMatch = lcomp.match(/\((\d+(?:[.,]\d+)?%\s*[mv/gLl]*)\)/i)
 
         let nomeIngrediente = lcomp
-          .replace(/[.\s]+(\d+[.,]\d+)\s*(g\/[Ll]|g\/kg|%|mg\/[Ll]).*$/i, '')
+          .replace(/[.\s]+(\d+(?:[.,]\d+)?)\s*(g\/[Ll]|g\/kg|%|mg\/[Ll]).*$/i, '')
           .replace(/\.{2,}/g, '')
           .trim()
         nomeIngrediente = limparMarkdown(nomeIngrediente)
