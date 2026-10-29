@@ -10,6 +10,12 @@ export default defineConfig(({ mode }) => ({
   server: {
     host: '0.0.0.0',
     port: 3000,
+    allowedHosts: true,
+  },
+  preview: {
+    host: '0.0.0.0',
+    port: 3000,
+    allowedHosts: true,
   },
   build: {
     outDir: mode === 'development' ? 'dev-dist' : 'dist',
